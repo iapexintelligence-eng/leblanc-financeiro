@@ -24,6 +24,8 @@ const TITLES = {
   '/saidas': ['Financeiro', 'Saídas'],
   '/dre': ['Financeiro', 'DRE Mensal'],
   '/bancos': ['Financeiro', 'Bancos'],
+  '/pro-labore': ['Financeiro', 'Pró-labore'],
+  '/faturas-cartao': ['Financeiro', 'Faturas de cartão'],
   '/gratificacao': ['Financeiro', 'Gratificação'],
   '/assistencias': ['Pós-venda', 'Assistências'],
   '/aot': ['Pós-venda', 'AOT'],

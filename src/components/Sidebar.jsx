@@ -32,6 +32,8 @@ const GROUPS = [
     { to: '/saidas', icon: IcoPay, txt: 'Saídas' },
     { to: '/dre', icon: IcoDre, txt: 'DRE Mensal' },
     { to: '/bancos', icon: IcoBank, txt: 'Bancos' },
+    { to: '/pro-labore', icon: IcoPay, txt: 'Pró-labore' },
+    { to: '/faturas-cartao', icon: IcoBank, txt: 'Faturas de cartão' },
     { to: '/gratificacao', icon: IcoGift, txt: 'Gratificação' },
   ]},
   { label: 'Pós-venda & Cadastros', items: [

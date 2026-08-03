@@ -11,9 +11,10 @@ export default function Saidas() {
   const [rows, setRows] = useState(null)
   const [erro, setErro] = useState('')
   const [busca, setBusca] = useState('')
-  const [mesF, setMesF] = useState('')
+  const [mesF, setMesF] = useState('todos')
   const [origemF, setOrigemF] = useState('todas')
   const [catF, setCatF] = useState('todas')
+  const [fornF, setFornF] = useState('todos')
 
   useEffect(() => {
     (async () => {
@@ -31,16 +32,17 @@ export default function Saidas() {
   }, [])
 
   const meses = useMemo(() => [...new Set((rows || []).map((r) => (r.data || '').slice(0, 7)).filter(Boolean))].sort().reverse(), [rows])
-  useEffect(() => { if (rows && mesF === '' && meses.length) setMesF(meses[0]) }, [rows, meses]) // eslint-disable-line
   const cats = useMemo(() => [...new Set((rows || []).map((r) => r.categoria).filter(Boolean))].sort(), [rows])
+  const fornecedores = useMemo(() => [...new Set((rows || []).map((r) => r.fornecedor).filter((x) => x && x !== '—'))].sort(), [rows])
 
   const lista = useMemo(() => (rows || []).filter((r) => {
     if (mesF && mesF !== 'todos' && (r.data || '').slice(0, 7) !== mesF) return false
     if (origemF !== 'todas' && r.origem !== origemF) return false
     if (catF !== 'todas' && r.categoria !== catF) return false
+    if (fornF !== 'todos' && r.fornecedor !== fornF) return false
     if (busca) { const q = busca.toLowerCase(); if (!((r.fornecedor || '').toLowerCase().includes(q) || (r.categoria || '').toLowerCase().includes(q) || (r.projeto_uid || '').toLowerCase().includes(q))) return false }
     return true
-  }), [rows, mesF, origemF, catF, busca])
+  }), [rows, mesF, origemF, catF, fornF, busca])
 
   const total = lista.reduce((s, r) => s + r.valor, 0)
   const pago = lista.filter((r) => r.status === 'Pago').reduce((s, r) => s + r.valor, 0)
@@ -75,6 +77,9 @@ export default function Saidas() {
         </select>
         <select className="input" style={{ width: 160 }} value={catF} onChange={(e) => setCatF(e.target.value)}>
           <option value="todas">Todas as categorias</option>{cats.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select className="input" style={{ width: 180 }} value={fornF} onChange={(e) => setFornF(e.target.value)}>
+          <option value="todos">Todas as indústrias/fornec.</option>{fornecedores.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
 
