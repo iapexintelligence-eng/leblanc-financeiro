@@ -5,7 +5,8 @@ import { IcoReport } from '../components/Icons.jsx'
 
 const CAT_LABEL = {
   fixos: 'Fixos', impostos: 'Impostos', salarios: 'Salários', pro_labore: 'Pró-labore',
-  operacional: 'Operacional', marketing: 'Marketing', industria: 'Indústria', montagem: 'Montagem', outros: 'Outros',
+  operacional: 'Operacional', marketing: 'Marketing', industria: 'Indústria', montagem: 'Montagem',
+  frete: 'Frete', rafex: 'RAFEX', perfar: 'Perfar', vidracaria: 'Vidraçaria', outros: 'Outros',
 }
 const labelCat = (c) => CAT_LABEL[c] || c || '(sem categoria)'
 
