@@ -4,6 +4,7 @@ import { brl, fmtDate, today } from '../lib/format.js'
 import { registrarLog, montarDiff } from '../lib/log.js'
 import Modal from '../components/Modal.jsx'
 import { IcoPlus, IcoEdit, IcoSearch } from '../components/Icons.jsx'
+import { extrairTexto, parseContrato } from '../lib/pdfLer.js'
 
 const CAMPOS = ['cliente_nome', 'vendedor', 'funcionario_id', 'valor_vendido', 'valor_promob', 'desconto_percentual', 'data_venda', 'observacoes']
 
@@ -22,6 +23,25 @@ export default function Vendas() {
   const [erro, setErro] = useState('')
   const [arquivo, setArquivo] = useState(null)
   const [enviando, setEnviando] = useState(false)
+  const [lido, setLido] = useState('')
+
+  const aoAnexar = async (file) => {
+    setArquivo(file || null); setLido('')
+    if (!file) return
+    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+      try {
+        const p = parseContrato(await extrairTexto(file))
+        setModal((m) => m && ({ ...m, form: { ...m.form,
+          cliente_nome: m.form.cliente_nome || p.cliente || '',
+          valor_vendido: m.form.valor_vendido || (p.valor ?? ''),
+          data_venda: p.data || m.form.data_venda,
+          vendedor: m.form.vendedor || p.vendedor || '',
+        } }))
+        const achou = [p.cliente && 'cliente', p.valor && 'valor', p.data && 'data', p.vendedor && 'vendedor'].filter(Boolean)
+        setLido(achou.length ? `Li do contrato: ${achou.join(', ')}. Confira antes de salvar.` : 'Não consegui ler os dados automaticamente — preencha à mão.')
+      } catch (_) { setLido('Não consegui ler o PDF — preencha à mão.') }
+    }
+  }
 
   const carregar = async () => {
     const [v, f] = await Promise.all([
@@ -191,9 +211,10 @@ export default function Vendas() {
           </div>
           <div className="field">
             <label>Contrato vendido (anexar PDF/imagem)</label>
-            <input className="input" type="file" accept=".pdf,image/*" onChange={(e) => setArquivo(e.target.files?.[0] || null)} />
+            <input className="input" type="file" accept=".pdf,image/*" onChange={(e) => aoAnexar(e.target.files?.[0] || null)} />
             {modal.form.contrato_nome && !arquivo && <div className="sub" style={{ marginTop: 4 }}>Anexado: {modal.form.contrato_nome} — escolha um novo arquivo para substituir.</div>}
-            <div className="sub" style={{ marginTop: 4 }}>A venda é lançada com a <b>data do contrato</b> informada acima.</div>
+            {lido && <div className="badge ok" style={{ display: 'inline-block', marginTop: 6 }}>{lido}</div>}
+            <div className="sub" style={{ marginTop: 4 }}>Se for um PDF de contrato Le Blanc, tento preencher cliente, valor e data automaticamente. A venda é lançada com a <b>data do contrato</b>.</div>
           </div>
           <div className="field">
             <label>Observações</label>

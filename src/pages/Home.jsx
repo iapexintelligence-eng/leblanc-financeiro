@@ -21,8 +21,8 @@ export default function Home() {
     (async () => {
       const [vendas, receber, pagamentos, contas, cfg, hist] = await Promise.all([
         supabase.from('vendas').select('valor_vendido, data_venda, vendedor').limit(2000),
-        supabase.from('a_receber').select('cliente_nome, descricao, valor_parcela, data_prevista, data_recebimento, status').limit(5000),
-        supabase.from('pagamentos').select('descricao, fornecedor, categoria, valor, data, data_vencimento, status').limit(5000),
+        supabase.from('a_receber').select('id, cliente_nome, descricao, valor_parcela, data_prevista, data_recebimento, status').limit(5000),
+        supabase.from('pagamentos').select('id, descricao, fornecedor, categoria, valor, data, data_vencimento, status').limit(5000),
         supabase.from('contas_bancarias').select('saldo, ativo'),
         supabase.from('config_loja').select('chave, valor').eq('chave', 'meta_mensal').maybeSingle(),
         supabase.from('vw_historico_mensal').select('mes, faturamento').order('mes', { ascending: false }).limit(6),
@@ -79,18 +79,37 @@ export default function Home() {
     if (!d) return null
     const hoje = today()
     const pend = (s) => s !== 'Pago' && s !== 'Cancelado'
-    const mapP = (p) => ({ quem: p.descricao || p.fornecedor || '—', venc: p.data_vencimento || p.data, valor: n(p.valor) })
+    const mapP = (p) => ({ id: p.id, quem: p.descricao || p.fornecedor || '—', venc: p.data_vencimento || p.data, valor: n(p.valor) })
     const ordena = (a, b) => (a.venc || '').localeCompare(b.venc || '')
     const pgs = d.pagamentos.filter((p) => pend(p.status) && (p.data_vencimento || p.data))
     const pagar = pgs.filter((p) => (p.data_vencimento || p.data) < hoje).map(mapP).sort(ordena)
     const aVencer = pgs.filter((p) => (p.data_vencimento || p.data) >= hoje).map(mapP).sort(ordena)
     const receber = d.receber.filter((r) => pend(r.status) && r.status !== 'Recebido' && r.data_prevista && r.data_prevista < hoje)
-      .map((r) => ({ quem: r.cliente_nome || r.descricao || '—', venc: r.data_prevista, valor: n(r.valor_parcela) })).sort(ordena)
+      .map((r) => ({ id: r.id, quem: r.cliente_nome || r.descricao || '—', venc: r.data_prevista, valor: n(r.valor_parcela) })).sort(ordena)
     return { pagar, aVencer, receber,
       totalPagar: pagar.reduce((s, x) => s + x.valor, 0),
       totalAVencer: aVencer.reduce((s, x) => s + x.valor, 0),
       totalReceber: receber.reduce((s, x) => s + x.valor, 0) }
   }, [d])
+
+  const marcarPago = async (id) => {
+    setD((s) => ({ ...s, pagamentos: s.pagamentos.map((p) => p.id === id ? { ...p, status: 'Pago', data_pagamento: today() } : p) }))
+    await supabase.from('pagamentos').update({ status: 'Pago', data_pagamento: today() }).eq('id', id)
+  }
+  const remarcarPagar = async (id, novaData) => {
+    if (!novaData) return
+    setD((s) => ({ ...s, pagamentos: s.pagamentos.map((p) => p.id === id ? { ...p, data_vencimento: novaData } : p) }))
+    await supabase.from('pagamentos').update({ data_vencimento: novaData }).eq('id', id)
+  }
+  const marcarRecebido = async (id) => {
+    setD((s) => ({ ...s, receber: s.receber.map((r) => r.id === id ? { ...r, status: 'Recebido', data_recebimento: today() } : r) }))
+    await supabase.from('a_receber').update({ status: 'Recebido', data_recebimento: today() }).eq('id', id)
+  }
+  const remarcarReceber = async (id, novaData) => {
+    if (!novaData) return
+    setD((s) => ({ ...s, receber: s.receber.map((r) => r.id === id ? { ...r, data_prevista: novaData } : r) }))
+    await supabase.from('a_receber').update({ data_prevista: novaData }).eq('id', id)
+  }
 
   const chart = useMemo(() => {
     if (!d) return []
@@ -119,8 +138,14 @@ export default function Home() {
           </div>
           <div className="table-wrap" style={{ boxShadow: 'none', maxHeight: 240, overflow: 'auto', marginTop: 8 }}>
             <table><tbody>
-              {atraso.aVencer.map((x, i) => (
-                <tr key={i}><td>{x.quem}</td><td className="muted" style={{ whiteSpace: 'nowrap' }}>venc. {fmtDate(x.venc)}</td><td className="num">{brl(x.valor)}</td></tr>
+              {atraso.aVencer.map((x) => (
+                <tr key={x.id}>
+                  <td>{x.quem}</td>
+                  <td className="muted" style={{ whiteSpace: 'nowrap' }}>venc. {fmtDate(x.venc)}</td>
+                  <td className="num">{brl(x.valor)}</td>
+                  <td><input className="input" type="date" defaultValue={x.venc} style={{ height: 28, padding: '2px 4px', fontSize: 12 }} onChange={(e) => remarcarPagar(x.id, e.target.value)} title="Remarcar data" /></td>
+                  <td><button className="btn ghost sm" onClick={() => marcarPago(x.id)}>Pago</button></td>
+                </tr>
               ))}
             </tbody></table>
           </div>
@@ -139,8 +164,13 @@ export default function Home() {
               <div className="table-wrap" style={{ boxShadow: 'none', maxHeight: 220, overflow: 'auto' }}>
                 <table><tbody>
                   {atraso.pagar.length === 0 && <tr><td className="empty">Nada em atraso 🎉</td></tr>}
-                  {atraso.pagar.map((x, i) => (
-                    <tr key={i}><td>{x.quem}</td><td className="muted" style={{ whiteSpace: 'nowrap' }}>venc. {fmtDate(x.venc)}</td><td className="num" style={{ color: 'var(--danger)' }}>{brl(x.valor)}</td></tr>
+                  {atraso.pagar.map((x) => (
+                    <tr key={x.id}>
+                      <td>{x.quem}</td>
+                      <td className="num" style={{ color: 'var(--danger)' }}>{brl(x.valor)}</td>
+                      <td><input className="input" type="date" defaultValue={x.venc} style={{ height: 28, padding: '2px 4px', fontSize: 12 }} onChange={(e) => remarcarPagar(x.id, e.target.value)} title="Remarcar data" /></td>
+                      <td><button className="btn ghost sm" onClick={() => marcarPago(x.id)}>Pago</button></td>
+                    </tr>
                   ))}
                 </tbody></table>
               </div>
@@ -150,8 +180,13 @@ export default function Home() {
               <div className="table-wrap" style={{ boxShadow: 'none', maxHeight: 220, overflow: 'auto' }}>
                 <table><tbody>
                   {atraso.receber.length === 0 && <tr><td className="empty">Nada em atraso</td></tr>}
-                  {atraso.receber.map((x, i) => (
-                    <tr key={i}><td>{x.quem}</td><td className="muted" style={{ whiteSpace: 'nowrap' }}>venc. {fmtDate(x.venc)}</td><td className="num" style={{ color: 'var(--warn)' }}>{brl(x.valor)}</td></tr>
+                  {atraso.receber.map((x) => (
+                    <tr key={x.id}>
+                      <td>{x.quem}</td>
+                      <td className="num" style={{ color: 'var(--warn)' }}>{brl(x.valor)}</td>
+                      <td><input className="input" type="date" defaultValue={x.venc} style={{ height: 28, padding: '2px 4px', fontSize: 12 }} onChange={(e) => remarcarReceber(x.id, e.target.value)} title="Remarcar data" /></td>
+                      <td><button className="btn ghost sm" onClick={() => marcarRecebido(x.id)}>Recebido</button></td>
+                    </tr>
                   ))}
                 </tbody></table>
               </div>
