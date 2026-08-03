@@ -76,6 +76,17 @@ export default function Vendas() {
     if (!error && data?.signedUrl) window.open(data.signedUrl, '_blank')
     else setErro('Não foi possível abrir o contrato.')
   }
+  const trocarContrato = async (r, file) => {
+    if (!file) return
+    setErro('')
+    const safe = file.name.replace(/[^\w.\-]/g, '_')
+    const path = `vendas/${r.id}/${Date.now()}_${safe}`
+    const up = await supabase.storage.from('pasta-cliente').upload(path, file, { upsert: false })
+    if (up.error) { setErro('Contrato não subiu: ' + up.error.message); return }
+    const { error } = await supabase.from('vendas').update({ contrato_path: path, contrato_nome: file.name }).eq('id', r.id)
+    if (error) { setErro(error.message); return }
+    carregar()
+  }
   const setF = (k, v) => setModal((m) => ({ ...m, form: { ...m.form, [k]: v } }))
 
   // Ao escolher o vendedor no select, grava o nome (texto) e o funcionario_id juntos.
@@ -164,7 +175,13 @@ export default function Vendas() {
                 <td className="num">{r.valor_vendido ? brl(r.valor_vendido) : '—'}</td>
                 <td className="num muted">{r.desconto_percentual ? r.desconto_percentual + '%' : '—'}</td>
                 <td className="muted">{fmtDate(r.data_venda)}</td>
-                <td>{r.contrato_path ? <button className="btn ghost sm" onClick={() => baixarContrato(r)}>Ver</button> : <span className="faint">—</span>}</td>
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  {r.contrato_path && <button className="btn ghost sm" onClick={() => baixarContrato(r)}>Ver</button>}
+                  <label className="btn ghost sm" style={{ marginLeft: r.contrato_path ? 4 : 0, cursor: 'pointer' }}>
+                    {r.contrato_path ? 'Trocar' : 'Anexar'}
+                    <input type="file" accept=".pdf,image/*" style={{ display: 'none' }} onChange={(e) => { trocarContrato(r, e.target.files?.[0]); e.target.value = '' }} />
+                  </label>
+                </td>
                 <td className="right"><button className="icon-btn" onClick={() => abrirEdit(r)} title="Editar / corrigir"><IcoEdit /></button></td>
               </tr>
             ))}
