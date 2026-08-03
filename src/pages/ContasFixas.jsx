@@ -6,6 +6,15 @@ import { IcoSearch } from '../components/Icons.jsx'
 const n = (v) => Number(v) || 0
 const MESES_LONGO = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const nomeMes = (ym) => { const [a, m] = ym.split('-'); return `${MESES_LONGO[Number(m) - 1]}/${a}` }
+// 5º dia útil (seg–sex) do mês. mes = 1..12
+const quintoDiaUtil = (ano, mes) => {
+  let count = 0
+  for (let d = 1; d <= 28; d++) {
+    const wd = new Date(ano, mes - 1, d).getDay()
+    if (wd >= 1 && wd <= 5) { count++; if (count === 5) return d }
+  }
+  return 7
+}
 const CAT_LABEL = { fixos: 'Fixos', impostos: 'Impostos', salarios: 'Salários', pro_labore: 'Pró-labore', operacional: 'Operacional', marketing: 'Marketing', industria: 'Indústria', montagem: 'Montagem', frete: 'Frete', rafex: 'RAFEX', perfar: 'Perfar', vidracaria: 'Vidraçaria', metalon: 'Metalon', rudegon: 'Rudegon', assistencia: 'Assistência', outros: 'Outros' }
 const labelCat = (c) => CAT_LABEL[c] || c || '—'
 
@@ -52,9 +61,11 @@ export default function ContasFixas() {
     // já lançados neste mês
     const { data: exist } = await supabase.from('pagamentos').select('descricao').gte('data_vencimento', `${ym}-01`).lte('data_vencimento', `${ym}-31`)
     const jaTem = new Set((exist || []).map((e) => e.descricao))
+    const [ano, mes] = ym.split('-').map(Number)
     const novos = modelos.filter((m) => !jaTem.has(m.descricao)).map((m) => {
-      const dia = String(Math.min(28, Math.max(1, Number(m.dia_vencimento) || 1))).padStart(2, '0')
-      return { descricao: m.descricao, categoria: m.categoria || 'fixos', fornecedor: m.fornecedor || null, valor: n(m.valor), forma_pagamento: null, data: `${ym}-01`, data_vencimento: `${ym}-${dia}`, dia_vencimento: Number(m.dia_vencimento) || null, status: 'Pendente', recorrente: true }
+      const diaNum = m.categoria === 'salarios' ? quintoDiaUtil(ano, mes) : Math.min(28, Math.max(1, Number(m.dia_vencimento) || 1))
+      const dia = String(diaNum).padStart(2, '0')
+      return { descricao: m.descricao, categoria: m.categoria || 'fixos', fornecedor: m.fornecedor || null, valor: n(m.valor), forma_pagamento: null, data: `${ym}-01`, data_vencimento: `${ym}-${dia}`, dia_vencimento: diaNum, status: 'Pendente', recorrente: true }
     })
     if (!novos.length) { setLancando(false); setInfo(`Tudo certo — as fixas de ${nomeMes(ym)} já estavam lançadas.`); return }
     const { error } = await supabase.from('pagamentos').insert(novos)
