@@ -10,6 +10,8 @@ const CAT_LABEL = { fixos: 'Fixos', impostos: 'Impostos', salarios: 'Salários',
 const labelCat = (c) => CAT_LABEL[c] || c || '—'
 const CATS = ['industria', 'montagem', 'frete', 'rafex', 'perfar', 'vidracaria', 'metalon', 'rudegon', 'assistencia', 'operacional', 'fixos', 'salarios', 'pro_labore', 'marketing', 'impostos', 'outros']
 const normForn = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim()
+const CUSTO_CATS = ['industria', 'montagem', 'frete', 'assistencia', 'compra_extra', 'gratificacao']
+const CUSTO_LABEL = { industria: 'Indústria', montagem: 'Montagem', frete: 'Frete', assistencia: 'Assistência', compra_extra: 'Compra extra', gratificacao: 'Gratificação' }
 
 export default function Saidas() {
   const [rows, setRows] = useState(null)
@@ -26,7 +28,7 @@ export default function Saidas() {
     (async () => {
       const [pag, cus, prj] = await Promise.all([
         supabase.from('pagamentos').select('id, data, data_vencimento, categoria, fornecedor, descricao, valor, status, forma_pagamento, projeto_uid').order('data', { ascending: false }).limit(5000),
-        supabase.from('custos_operacionais').select('data, categoria, fornecedor, descricao, valor, projeto_uid').limit(5000),
+        supabase.from('custos_operacionais').select('id, data, categoria, fornecedor, descricao, valor, projeto_uid').limit(5000),
         supabase.from('projetos').select('projeto_uid, cliente_nome').order('created_at', { ascending: false }).limit(2000),
       ])
       if (pag.error) setErro(pag.error.message)
@@ -79,6 +81,11 @@ export default function Saidas() {
     setErro(''); setRows((s) => s.map((x) => x.id === id ? { ...x, projeto_uid } : x))
     const { error } = await supabase.from('pagamentos').update({ projeto_uid: projeto_uid || null }).eq('id', id)
     if (error) setErro('Não consegui salvar o contrato: ' + error.message)
+  }
+  const mudarCatCusto = async (id, categoria) => {
+    setErro(''); setCustos((s) => s.map((x) => x.id === id ? { ...x, categoria } : x))
+    const { error } = await supabase.from('custos_operacionais').update({ categoria }).eq('id', id)
+    if (error) setErro('Não consegui salvar a categoria do pedido: ' + error.message)
   }
 
   const total = lista.reduce((s, r) => s + r.valor, 0)
@@ -156,7 +163,7 @@ export default function Saidas() {
                             {pedidos.map((c, i) => (
                               <tr key={i}>
                                 <td className="muted">{fmtDate(c.data)}</td>
-                                <td>{c.categoria || '—'}</td>
+                                <td><select className="input" style={{ height: 28, padding: '2px 6px', fontSize: 12, minWidth: 120 }} value={c.categoria || ''} onChange={(e) => mudarCatCusto(c.id, e.target.value)}>{CUSTO_CATS.map((x) => <option key={x} value={x}>{CUSTO_LABEL[x]}</option>)}</select></td>
                                 <td>{c.projeto_uid ? `${c.projeto_uid}${clienteDe[c.projeto_uid] ? ' · ' + clienteDe[c.projeto_uid] : ''}` : '—'}</td>
                                 <td className="muted">{c.descricao || '—'}</td>
                                 <td className="num">{brl(c.valor)}</td>
