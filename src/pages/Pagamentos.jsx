@@ -40,6 +40,15 @@ export default function Pagamentos() {
   const [modal, setModal] = useState(null)
   const [saving, setSaving] = useState(false)
   const [erro, setErro] = useState('')
+  const [compFile, setCompFile] = useState(null)
+  const [boletoFile, setBoletoFile] = useState(null)
+
+  const baixar = async (path) => {
+    if (!path) return
+    const { data, error } = await supabase.storage.from('pasta-cliente').createSignedUrl(path, 60)
+    if (!error && data?.signedUrl) window.open(data.signedUrl, '_blank')
+    else setErro('Não foi possível abrir o arquivo.')
+  }
 
   const carregar = async () => {
     const [p, c] = await Promise.all([
@@ -55,8 +64,8 @@ export default function Pagamentos() {
     setProjetos(data || [])
   })() }, [])
 
-  const abrirNovo = () => setModal({ form: novo(), editId: null })
-  const abrirEdit = (r) => setModal({ form: { data: r.data || today(), descricao: r.descricao || '', categoria: r.categoria || 'operacional', tipo: r.tipo || 'Eventual', valor: r.valor ?? '', forma_pagamento: r.forma_pagamento || 'PIX', data_vencimento: r.data_vencimento || '', status: r.status || 'Pendente', fornecedor: r.fornecedor || '', conta_bancaria_id: r.conta_bancaria_id ?? '', observacao: r.observacao || '', recorrente: r.recorrente ?? false, dia_vencimento: r.dia_vencimento ?? '', projeto_uid: r.projeto_uid || '' }, editId: r.id })
+  const abrirNovo = () => { setCompFile(null); setBoletoFile(null); setModal({ form: novo(), editId: null }) }
+  const abrirEdit = (r) => { setCompFile(null); setBoletoFile(null); setModal({ form: { data: r.data || today(), descricao: r.descricao || '', categoria: r.categoria || 'operacional', tipo: r.tipo || 'Eventual', valor: r.valor ?? '', forma_pagamento: r.forma_pagamento || 'PIX', data_vencimento: r.data_vencimento || '', status: r.status || 'Pendente', fornecedor: r.fornecedor || '', conta_bancaria_id: r.conta_bancaria_id ?? '', observacao: r.observacao || '', recorrente: r.recorrente ?? false, dia_vencimento: r.dia_vencimento ?? '', projeto_uid: r.projeto_uid || '', comprovante_path: r.comprovante_path || '', comprovante_nome: r.comprovante_nome || '', boleto_path: r.boleto_path || '', boleto_nome: r.boleto_nome || '' }, editId: r.id }) }
   const setF = (k, v) => setModal((m) => ({ ...m, form: { ...m.form, [k]: v } }))
 
   const salvar = async () => {
@@ -66,9 +75,22 @@ export default function Pagamentos() {
     setSaving(true)
     const payload = { data: f.data || today(), descricao: f.descricao.trim(), categoria: f.categoria || null, tipo: f.tipo, valor: Number(f.valor), forma_pagamento: f.forma_pagamento || null, data_vencimento: f.data_vencimento || null, status: f.status, fornecedor: f.fornecedor || null, conta_bancaria_id: f.conta_bancaria_id ? Number(f.conta_bancaria_id) : null, observacao: f.observacao || null, recorrente: !!f.recorrente, dia_vencimento: f.dia_vencimento === '' ? null : Number(f.dia_vencimento), projeto_uid: f.projeto_uid || null }
     if (f.status === 'Pago') payload.data_pagamento = today()
-    let error
+    let error, id = modal.editId
     if (modal.editId) { ({ error } = await supabase.from('pagamentos').update(payload).eq('id', modal.editId)); if (!error) await registrarLog({ tabela: 'pagamentos', registroId: modal.editId, acao: 'edicao', descricao: `Pagamento: ${payload.descricao}` }) }
-    else { ({ error } = await supabase.from('pagamentos').insert(payload)) }
+    else { const ins = await supabase.from('pagamentos').insert(payload).select('id').single(); error = ins.error; id = ins.data?.id }
+    // anexos: comprovante e boleto
+    if (!error && id) {
+      const up = async (file, campoPath, campoNome) => {
+        if (!file) return
+        const safe = file.name.replace(/[^\w.\-]/g, '_')
+        const path = `pagamentos/${id}/${campoPath}_${Date.now()}_${safe}`
+        const r = await supabase.storage.from('pasta-cliente').upload(path, file, { upsert: false })
+        if (!r.error) await supabase.from('pagamentos').update({ [campoPath]: path, [campoNome]: file.name }).eq('id', id)
+        else setErro('Arquivo não subiu: ' + r.error.message)
+      }
+      await up(compFile, 'comprovante_path', 'comprovante_nome')
+      await up(boletoFile, 'boleto_path', 'boleto_nome')
+    }
     setSaving(false)
     if (error) { setErro(error.message); return }
     setModal(null); carregar()
@@ -101,10 +123,10 @@ export default function Pagamentos() {
       </div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th className="num">Valor</th><th>Vencimento</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th className="num">Valor</th><th>Vencimento</th><th>Status</th><th>Anexos</th><th></th></tr></thead>
           <tbody>
-            {rows === null && <tr><td colSpan="7" className="empty">Carregando…</td></tr>}
-            {rows && lista.length === 0 && <tr><td colSpan="7" className="empty">Nenhum pagamento.</td></tr>}
+            {rows === null && <tr><td colSpan="8" className="empty">Carregando…</td></tr>}
+            {rows && lista.length === 0 && <tr><td colSpan="8" className="empty">Nenhum pagamento.</td></tr>}
             {lista.map((r) => (
               <tr key={r.id}>
                 <td className="muted">{fmtDate(r.data)}</td>
@@ -113,6 +135,11 @@ export default function Pagamentos() {
                 <td className="num">{brl(r.valor)}</td>
                 <td className="muted">{fmtDate(r.data_vencimento)}</td>
                 <td>{r.status === 'Pago' ? <span className="badge ok">Pago</span> : <span className="badge warn">Pendente</span>}</td>
+                <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
+                  {r.comprovante_path && <button className="btn ghost sm" style={{ marginRight: 4 }} onClick={() => baixar(r.comprovante_path)} title="Comprovante">Compr.</button>}
+                  {r.boleto_path && <button className="btn ghost sm" onClick={() => baixar(r.boleto_path)} title="Boleto">Boleto</button>}
+                  {!r.comprovante_path && !r.boleto_path && <span className="faint">—</span>}
+                </td>
                 <td className="right"><button className="icon-btn" onClick={() => abrirEdit(r)}><IcoEdit /></button></td>
               </tr>
             ))}
@@ -148,6 +175,16 @@ export default function Pagamentos() {
             <div className="field"><label>Conta fixa mensal?</label>
               <select className="input" value={modal.form.recorrente ? 'sim' : 'nao'} onChange={(e) => setF('recorrente', e.target.value === 'sim')}><option value="nao">Não</option><option value="sim">Sim — entra nas Contas Fixas</option></select></div>
             <div className="field"><label>Dia do vencimento (fixa)</label><input className="input" type="number" min="1" max="31" value={modal.form.dia_vencimento} onChange={(e) => setF('dia_vencimento', e.target.value)} placeholder="ex.: 10" /></div>
+          </div>
+          <div className="row-2">
+            <div className="field"><label>Comprovante de pagamento</label>
+              <input className="input" type="file" accept=".pdf,image/*" onChange={(e) => setCompFile(e.target.files?.[0] || null)} />
+              {modal.form.comprovante_path && !compFile && <div className="sub" style={{ marginTop: 4 }}>Anexado: {modal.form.comprovante_nome || 'arquivo'} · <a onClick={() => baixar(modal.form.comprovante_path)} style={{ cursor: 'pointer', textDecoration: 'underline' }}>ver</a></div>}
+            </div>
+            <div className="field"><label>Boleto</label>
+              <input className="input" type="file" accept=".pdf,image/*" onChange={(e) => setBoletoFile(e.target.files?.[0] || null)} />
+              {modal.form.boleto_path && !boletoFile && <div className="sub" style={{ marginTop: 4 }}>Anexado: {modal.form.boleto_nome || 'arquivo'} · <a onClick={() => baixar(modal.form.boleto_path)} style={{ cursor: 'pointer', textDecoration: 'underline' }}>ver</a></div>}
+            </div>
           </div>
           <div className="field"><label>Observação</label><textarea className="input" value={modal.form.observacao} onChange={(e) => setF('observacao', e.target.value)} /></div>
         </Modal>
