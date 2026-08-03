@@ -17,6 +17,7 @@ const CATEGORIAS = [
   { v: 'rafex', t: 'RAFEX' },
   { v: 'perfar', t: 'Perfar' },
   { v: 'vidracaria', t: 'Vidraçaria' },
+  { v: 'metalon', t: 'Metalon' },
   { v: 'marketing', t: 'Marketing' },
   { v: 'impostos', t: 'Impostos' },
   { v: 'outros', t: 'Outros' },

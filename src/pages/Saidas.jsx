@@ -6,10 +6,10 @@ import { IcoSearch } from '../components/Icons.jsx'
 const n = (v) => Number(v) || 0
 const MESES_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 const rotuloMes = (ym) => { const [a, m] = ym.split('-'); return `${MESES_PT[Number(m) - 1]}/${a.slice(2)}` }
-const CAT_LABEL = { fixos: 'Fixos', impostos: 'Impostos', salarios: 'Salários', pro_labore: 'Pró-labore', operacional: 'Operacional', marketing: 'Marketing', industria: 'Indústria', montagem: 'Montagem', frete: 'Frete', rafex: 'RAFEX', perfar: 'Perfar', vidracaria: 'Vidraçaria', outros: 'Outros' }
+const CAT_LABEL = { fixos: 'Fixos', impostos: 'Impostos', salarios: 'Salários', pro_labore: 'Pró-labore', operacional: 'Operacional', marketing: 'Marketing', industria: 'Indústria', montagem: 'Montagem', frete: 'Frete', rafex: 'RAFEX', perfar: 'Perfar', vidracaria: 'Vidraçaria', metalon: 'Metalon', outros: 'Outros' }
 const labelCat = (c) => CAT_LABEL[c] || c || '—'
 // ordem das opções no seletor de categoria (edição inline)
-const CATS = ['industria', 'montagem', 'frete', 'rafex', 'perfar', 'vidracaria', 'operacional', 'fixos', 'salarios', 'pro_labore', 'marketing', 'impostos', 'outros']
+const CATS = ['industria', 'montagem', 'frete', 'rafex', 'perfar', 'vidracaria', 'metalon', 'operacional', 'fixos', 'salarios', 'pro_labore', 'marketing', 'impostos', 'outros']
 
 export default function Saidas() {
   const [rows, setRows] = useState(null)
@@ -27,7 +27,7 @@ export default function Saidas() {
       if (error) setErro(error.message)
       const norm = (data || []).map((p) => ({
         id: p.id, data: p.data || p.data_vencimento, categoria: p.categoria || 'outros',
-        fornecedor: p.fornecedor || p.descricao || '—', descricao: p.descricao || '',
+        fornecedor: p.fornecedor || '—', descricao: p.descricao || '',
         valor: n(p.valor), status: p.status || '—', forma: p.forma_pagamento || '',
       }))
       norm.sort((a, b) => (b.data || '').localeCompare(a.data || ''))
@@ -52,6 +52,12 @@ export default function Saidas() {
     setRows((s) => s.map((x) => x.id === id ? { ...x, categoria } : x))
     const { error } = await supabase.from('pagamentos').update({ categoria }).eq('id', id)
     if (error) setErro('Não consegui salvar a categoria: ' + error.message)
+  }
+  const salvarDescricao = async (id, descricao) => {
+    setErro('')
+    setRows((s) => s.map((x) => x.id === id ? { ...x, descricao } : x))
+    const { error } = await supabase.from('pagamentos').update({ descricao }).eq('id', id)
+    if (error) setErro('Não consegui salvar a descrição: ' + error.message)
   }
 
   const total = lista.reduce((s, r) => s + r.valor, 0)
@@ -99,21 +105,22 @@ export default function Saidas() {
 
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Data</th><th>Categoria</th><th>Fornecedor / descrição</th><th className="num">Valor</th><th>Status</th></tr></thead>
+          <thead><tr><th>Data</th><th>Categoria</th><th>Fornecedor</th><th>Descrição (o que é)</th><th className="num">Valor</th><th>Status</th></tr></thead>
           <tbody>
-            {rows === null && <tr><td colSpan="5" className="empty">Carregando…</td></tr>}
-            {rows && lista.length === 0 && <tr><td colSpan="5" className="empty">Nenhuma saída neste filtro.</td></tr>}
+            {rows === null && <tr><td colSpan="6" className="empty">Carregando…</td></tr>}
+            {rows && lista.length === 0 && <tr><td colSpan="6" className="empty">Nenhuma saída neste filtro.</td></tr>}
             {lista.map((r, i) => (
               <tr key={i}>
                 <td className="muted">{fmtDate(r.data)}</td>
                 <td><select className="input" style={{ height: 30, padding: '2px 6px', fontSize: 12.5, minWidth: 130 }} value={r.categoria} onChange={(e) => mudarCategoria(r.id, e.target.value)}>{CATS.map((c) => <option key={c} value={c}>{labelCat(c)}</option>)}</select></td>
                 <td>{r.fornecedor}</td>
+                <td><input className="input" style={{ height: 30, padding: '2px 8px', fontSize: 12.5, minWidth: 200 }} defaultValue={r.descricao} placeholder="descreva o que é…" onBlur={(e) => { if (e.target.value !== r.descricao) salvarDescricao(r.id, e.target.value) }} /></td>
                 <td className="num">{brl(r.valor)}</td>
                 <td>{r.status === 'Pago' ? <span className="badge ok">Pago</span> : <span className="badge warn">{r.status}</span>}</td>
               </tr>
             ))}
           </tbody>
-          {lista.length > 0 && <tfoot><tr><td colSpan="3"><b>TOTAL</b></td><td className="num"><b>{brl(total)}</b></td><td></td></tr></tfoot>}
+          {lista.length > 0 && <tfoot><tr><td colSpan="4"><b>TOTAL</b></td><td className="num"><b>{brl(total)}</b></td><td></td></tr></tfoot>}
         </table>
       </div>
     </div>
