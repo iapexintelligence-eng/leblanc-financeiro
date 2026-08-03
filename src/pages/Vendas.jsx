@@ -12,7 +12,10 @@ const novo = () => ({
   cliente_nome: '', vendedor: '', funcionario_id: '',
   valor_vendido: '', valor_promob: '', desconto_percentual: '',
   data_venda: today(), observacoes: '', contrato_path: '', contrato_nome: '',
+  rt_tipo: '', rt_beneficiario: '', rt_valor: '',
 })
+
+const RT_TIPOS = ['Indicação', 'Arquiteto parceiro', 'Catelli']
 
 export default function Vendas() {
   const [rows, setRows] = useState(null)
@@ -66,6 +69,7 @@ export default function Vendas() {
       desconto_percentual: r.desconto_percentual ?? '',
       data_venda: r.data_venda || today(), observacoes: r.observacoes || '',
       contrato_path: r.contrato_path || '', contrato_nome: r.contrato_nome || '',
+      rt_tipo: r.rt_tipo || '', rt_beneficiario: r.rt_beneficiario || '', rt_valor: r.rt_valor ?? '',
     },
     editId: r.id, original: r,
   }) }
@@ -128,6 +132,9 @@ export default function Vendas() {
       observacoes: f.observacoes || null,
       contrato_path: f.contrato_path || null,
       contrato_nome: f.contrato_nome || null,
+      rt_tipo: f.rt_tipo || null,
+      rt_beneficiario: f.rt_beneficiario || null,
+      rt_valor: f.rt_valor === '' ? null : Number(f.rt_valor),
     }
     let error, novoId
     if (modal.editId) {
@@ -244,6 +251,15 @@ export default function Vendas() {
               <input className="input" type="number" step="0.01" value={modal.form.desconto_percentual} onChange={(e) => setDesconto(e.target.value)} /></div>
           </div>
           <div className="sub" style={{ marginTop: -6 }}>Informe o Promob e o Vendido → calcula o desconto. Ou informe o desconto → calcula o vendido.</div>
+          <div className="row-3">
+            <div className="field"><label>RT para</label>
+              <select className="input" value={modal.form.rt_tipo} onChange={(e) => setF('rt_tipo', e.target.value)}>
+                <option value="">— sem RT —</option>
+                {RT_TIPOS.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select></div>
+            <div className="field"><label>Beneficiário do RT (nome)</label><input className="input" value={modal.form.rt_beneficiario} onChange={(e) => setF('rt_beneficiario', e.target.value)} placeholder="quem recebe o RT" /></div>
+            <div className="field"><label>Valor do RT (R$)</label><input className="input" type="number" step="0.01" value={modal.form.rt_valor} onChange={(e) => setF('rt_valor', e.target.value)} /></div>
+          </div>
           <div className="field">
             <label>Contrato vendido (anexar PDF/imagem)</label>
             <input className="input" type="file" accept=".pdf,image/*" onChange={(e) => aoAnexar(e.target.files?.[0] || null)} />
