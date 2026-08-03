@@ -35,6 +35,7 @@ const GROUPS = [
   ]},
   { label: 'Pós-venda & Cadastros', items: [
     { to: '/assistencias', icon: IcoTool, txt: 'Assistências', roles: ['qualidade'] },
+    { to: '/aot', icon: IcoTool, txt: 'AOT (Assist. Técnica)', roles: ['qualidade', 'montagem'] },
     { to: '/funcionarios', icon: IcoPeople, txt: 'Funcionários' },
     { to: '/usuarios', icon: IcoPeople, txt: 'Usuários & Acessos' },
     { to: '/relatorios', icon: IcoReport, txt: 'Relatórios' },
