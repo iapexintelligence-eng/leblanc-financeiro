@@ -89,6 +89,23 @@ export default function Vendas() {
   }
   const setF = (k, v) => setModal((m) => ({ ...m, form: { ...m.form, [k]: v } }))
 
+  const r2 = (x) => Math.round(x * 100) / 100
+  const setPromob = (v) => setModal((m) => {
+    const promob = Number(v) || 0, vend = Number(m.form.valor_vendido) || 0
+    const desc = promob > 0 && vend > 0 ? String(r2((1 - vend / promob) * 100)) : m.form.desconto_percentual
+    return { ...m, form: { ...m.form, valor_promob: v, desconto_percentual: desc } }
+  })
+  const setVendido = (v) => setModal((m) => {
+    const promob = Number(m.form.valor_promob) || 0, vend = Number(v)
+    const desc = promob > 0 && v !== '' && !isNaN(vend) ? String(r2((1 - vend / promob) * 100)) : m.form.desconto_percentual
+    return { ...m, form: { ...m.form, valor_vendido: v, desconto_percentual: desc } }
+  })
+  const setDesconto = (v) => setModal((m) => {
+    const promob = Number(m.form.valor_promob) || 0, d = Number(v)
+    const vend = promob > 0 && v !== '' && !isNaN(d) ? String(r2(promob * (1 - d / 100))) : m.form.valor_vendido
+    return { ...m, form: { ...m.form, desconto_percentual: v, valor_vendido: vend } }
+  })
+
   // Ao escolher o vendedor no select, grava o nome (texto) e o funcionario_id juntos.
   const escolherVendedor = (id) => {
     const f = vendedores.find((x) => String(x.id) === String(id))
@@ -219,13 +236,14 @@ export default function Vendas() {
             </div>
           </div>
           <div className="row-3">
+            <div className="field"><label>Valor Promob (fábrica)</label>
+              <input className="input" type="number" step="0.01" value={modal.form.valor_promob} onChange={(e) => setPromob(e.target.value)} /></div>
             <div className="field"><label>Valor vendido</label>
-              <input className="input" type="number" step="0.01" value={modal.form.valor_vendido} onChange={(e) => setF('valor_vendido', e.target.value)} /></div>
-            <div className="field"><label>Valor Promob</label>
-              <input className="input" type="number" step="0.01" value={modal.form.valor_promob} onChange={(e) => setF('valor_promob', e.target.value)} /></div>
+              <input className="input" type="number" step="0.01" value={modal.form.valor_vendido} onChange={(e) => setVendido(e.target.value)} /></div>
             <div className="field"><label>Desconto %</label>
-              <input className="input" type="number" step="0.01" value={modal.form.desconto_percentual} onChange={(e) => setF('desconto_percentual', e.target.value)} /></div>
+              <input className="input" type="number" step="0.01" value={modal.form.desconto_percentual} onChange={(e) => setDesconto(e.target.value)} /></div>
           </div>
+          <div className="sub" style={{ marginTop: -6 }}>Informe o Promob e o Vendido → calcula o desconto. Ou informe o desconto → calcula o vendido.</div>
           <div className="field">
             <label>Contrato vendido (anexar PDF/imagem)</label>
             <input className="input" type="file" accept=".pdf,image/*" onChange={(e) => aoAnexar(e.target.files?.[0] || null)} />
