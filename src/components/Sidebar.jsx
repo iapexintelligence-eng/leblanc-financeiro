@@ -31,6 +31,7 @@ const GROUPS = [
     { to: '/pagamentos', icon: IcoPay, txt: 'Pagamentos' },
     { to: '/saidas', icon: IcoPay, txt: 'Saídas' },
     { to: '/contas-fixas', icon: IcoPay, txt: 'Contas Fixas Mensais' },
+    { to: '/vincular', icon: IcoProject, txt: 'Vincular gastos a contratos' },
     { to: '/dre', icon: IcoDre, txt: 'DRE Mensal' },
     { to: '/bancos', icon: IcoBank, txt: 'Bancos' },
     { to: '/pro-labore', icon: IcoPay, txt: 'Pró-labore' },

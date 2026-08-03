@@ -31,6 +31,7 @@ import Saidas from './pages/Saidas.jsx'
 import ProLabore from './pages/ProLabore.jsx'
 import FaturasCartao from './pages/FaturasCartao.jsx'
 import ContasFixas from './pages/ContasFixas.jsx'
+import Vincular from './pages/Vincular.jsx'
 import EmBreve from './pages/EmBreve.jsx'
 
 export default function App() {
@@ -61,6 +62,7 @@ export default function App() {
         <Route path="/pagamentos" element={<Pagamentos />} />
         <Route path="/saidas" element={<Saidas />} />
         <Route path="/contas-fixas" element={<ContasFixas />} />
+        <Route path="/vincular" element={<Vincular />} />
         <Route path="/pro-labore" element={<ProLabore />} />
         <Route path="/faturas-cartao" element={<FaturasCartao />} />
         <Route path="/dre" element={<DRE />} />

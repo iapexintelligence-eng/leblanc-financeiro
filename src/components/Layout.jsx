@@ -23,6 +23,7 @@ const TITLES = {
   '/pagamentos': ['Financeiro', 'Pagamentos'],
   '/saidas': ['Financeiro', 'Saídas'],
   '/contas-fixas': ['Financeiro', 'Contas Fixas Mensais'],
+  '/vincular': ['Financeiro', 'Vincular gastos a contratos'],
   '/dre': ['Financeiro', 'DRE Mensal'],
   '/bancos': ['Financeiro', 'Bancos'],
   '/pro-labore': ['Financeiro', 'Pró-labore'],
