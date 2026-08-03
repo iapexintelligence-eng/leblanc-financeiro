@@ -18,6 +18,8 @@ const CATEGORIAS = [
   { v: 'perfar', t: 'Perfar' },
   { v: 'vidracaria', t: 'Vidraçaria' },
   { v: 'metalon', t: 'Metalon' },
+  { v: 'rudegon', t: 'Rudegon' },
+  { v: 'assistencia', t: 'Assistência' },
   { v: 'marketing', t: 'Marketing' },
   { v: 'impostos', t: 'Impostos' },
   { v: 'outros', t: 'Outros' },
@@ -27,11 +29,12 @@ const TIPOS = ['Eventual', 'Fixo', 'Recorrente']
 const FORMAS = ['PIX', 'Boleto', 'Transferência', 'Cartão', 'Dinheiro']
 const STATUS = ['Pendente', 'Pago']
 
-const novo = () => ({ data: today(), descricao: '', categoria: 'operacional', tipo: 'Eventual', valor: '', forma_pagamento: 'PIX', data_vencimento: '', status: 'Pendente', fornecedor: '', conta_bancaria_id: '', observacao: '' })
+const novo = () => ({ data: today(), descricao: '', categoria: 'operacional', tipo: 'Eventual', valor: '', forma_pagamento: 'PIX', data_vencimento: '', status: 'Pendente', fornecedor: '', conta_bancaria_id: '', observacao: '', recorrente: false, dia_vencimento: '', projeto_uid: '' })
 
 export default function Pagamentos() {
   const [rows, setRows] = useState(null)
   const [contas, setContas] = useState([])
+  const [projetos, setProjetos] = useState([])
   const [filtro, setFiltro] = useState('todos')
   const [busca, setBusca] = useState('')
   const [modal, setModal] = useState(null)
@@ -47,9 +50,13 @@ export default function Pagamentos() {
     setRows(p.data || []); setContas(c.data || [])
   }
   useEffect(() => { carregar() }, [])
+  useEffect(() => { (async () => {
+    const { data } = await supabase.from('projetos').select('projeto_uid, cliente_nome').order('created_at', { ascending: false }).limit(2000)
+    setProjetos(data || [])
+  })() }, [])
 
   const abrirNovo = () => setModal({ form: novo(), editId: null })
-  const abrirEdit = (r) => setModal({ form: { data: r.data || today(), descricao: r.descricao || '', categoria: r.categoria || 'operacional', tipo: r.tipo || 'Eventual', valor: r.valor ?? '', forma_pagamento: r.forma_pagamento || 'PIX', data_vencimento: r.data_vencimento || '', status: r.status || 'Pendente', fornecedor: r.fornecedor || '', conta_bancaria_id: r.conta_bancaria_id ?? '', observacao: r.observacao || '' }, editId: r.id })
+  const abrirEdit = (r) => setModal({ form: { data: r.data || today(), descricao: r.descricao || '', categoria: r.categoria || 'operacional', tipo: r.tipo || 'Eventual', valor: r.valor ?? '', forma_pagamento: r.forma_pagamento || 'PIX', data_vencimento: r.data_vencimento || '', status: r.status || 'Pendente', fornecedor: r.fornecedor || '', conta_bancaria_id: r.conta_bancaria_id ?? '', observacao: r.observacao || '', recorrente: r.recorrente ?? false, dia_vencimento: r.dia_vencimento ?? '', projeto_uid: r.projeto_uid || '' }, editId: r.id })
   const setF = (k, v) => setModal((m) => ({ ...m, form: { ...m.form, [k]: v } }))
 
   const salvar = async () => {
@@ -57,7 +64,7 @@ export default function Pagamentos() {
     if (!f.descricao.trim()) { setErro('Informe a descrição.'); return }
     if (f.valor === '' || Number(f.valor) <= 0) { setErro('Informe o valor.'); return }
     setSaving(true)
-    const payload = { data: f.data || today(), descricao: f.descricao.trim(), categoria: f.categoria || null, tipo: f.tipo, valor: Number(f.valor), forma_pagamento: f.forma_pagamento || null, data_vencimento: f.data_vencimento || null, status: f.status, fornecedor: f.fornecedor || null, conta_bancaria_id: f.conta_bancaria_id ? Number(f.conta_bancaria_id) : null, observacao: f.observacao || null }
+    const payload = { data: f.data || today(), descricao: f.descricao.trim(), categoria: f.categoria || null, tipo: f.tipo, valor: Number(f.valor), forma_pagamento: f.forma_pagamento || null, data_vencimento: f.data_vencimento || null, status: f.status, fornecedor: f.fornecedor || null, conta_bancaria_id: f.conta_bancaria_id ? Number(f.conta_bancaria_id) : null, observacao: f.observacao || null, recorrente: !!f.recorrente, dia_vencimento: f.dia_vencimento === '' ? null : Number(f.dia_vencimento), projeto_uid: f.projeto_uid || null }
     if (f.status === 'Pago') payload.data_pagamento = today()
     let error
     if (modal.editId) { ({ error } = await supabase.from('pagamentos').update(payload).eq('id', modal.editId)); if (!error) await registrarLog({ tabela: 'pagamentos', registroId: modal.editId, acao: 'edicao', descricao: `Pagamento: ${payload.descricao}` }) }
@@ -132,6 +139,16 @@ export default function Pagamentos() {
             <div className="field"><label>Conta bancária</label><select className="input" value={modal.form.conta_bancaria_id || ''} onChange={(e) => setF('conta_bancaria_id', e.target.value)}><option value="">— não definir —</option>{contas.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}</select></div>
           </div>
           <div className="field"><label>Fornecedor</label><input className="input" value={modal.form.fornecedor} onChange={(e) => setF('fornecedor', e.target.value)} /></div>
+          <div className="field"><label>Contrato / projeto (opcional)</label>
+            <select className="input" value={modal.form.projeto_uid} onChange={(e) => setF('projeto_uid', e.target.value)}>
+              <option value="">— sem vínculo —</option>
+              {projetos.map((p) => <option key={p.projeto_uid} value={p.projeto_uid}>{p.projeto_uid} · {p.cliente_nome}</option>)}
+            </select></div>
+          <div className="row-2" style={{ alignItems: 'end' }}>
+            <div className="field"><label>Conta fixa mensal?</label>
+              <select className="input" value={modal.form.recorrente ? 'sim' : 'nao'} onChange={(e) => setF('recorrente', e.target.value === 'sim')}><option value="nao">Não</option><option value="sim">Sim — entra nas Contas Fixas</option></select></div>
+            <div className="field"><label>Dia do vencimento (fixa)</label><input className="input" type="number" min="1" max="31" value={modal.form.dia_vencimento} onChange={(e) => setF('dia_vencimento', e.target.value)} placeholder="ex.: 10" /></div>
+          </div>
           <div className="field"><label>Observação</label><textarea className="input" value={modal.form.observacao} onChange={(e) => setF('observacao', e.target.value)} /></div>
         </Modal>
       )}

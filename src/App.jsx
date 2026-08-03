@@ -30,6 +30,7 @@ import AOT from './pages/AOT.jsx'
 import Saidas from './pages/Saidas.jsx'
 import ProLabore from './pages/ProLabore.jsx'
 import FaturasCartao from './pages/FaturasCartao.jsx'
+import ContasFixas from './pages/ContasFixas.jsx'
 import EmBreve from './pages/EmBreve.jsx'
 
 export default function App() {
@@ -59,6 +60,7 @@ export default function App() {
         <Route path="/custos" element={<Custos />} />
         <Route path="/pagamentos" element={<Pagamentos />} />
         <Route path="/saidas" element={<Saidas />} />
+        <Route path="/contas-fixas" element={<ContasFixas />} />
         <Route path="/pro-labore" element={<ProLabore />} />
         <Route path="/faturas-cartao" element={<FaturasCartao />} />
         <Route path="/dre" element={<DRE />} />
