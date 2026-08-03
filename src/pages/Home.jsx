@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine, Cell } from 'recharts'
 import { supabase } from '../lib/supabase.js'
-import { brl, brlShort, today } from '../lib/format.js'
+import { brl, brlShort, fmtDate, today } from '../lib/format.js'
+
+const n = (v) => Number(v) || 0
 
 const MESES_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 const MESES_LONGO = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -19,8 +21,8 @@ export default function Home() {
     (async () => {
       const [vendas, receber, pagamentos, contas, cfg, hist] = await Promise.all([
         supabase.from('vendas').select('valor_vendido, data_venda, vendedor').limit(2000),
-        supabase.from('a_receber').select('valor_parcela, data_prevista, data_recebimento, status').limit(5000),
-        supabase.from('pagamentos').select('valor, data, data_vencimento, status').limit(5000),
+        supabase.from('a_receber').select('cliente_nome, descricao, valor_parcela, data_prevista, data_recebimento, status').limit(5000),
+        supabase.from('pagamentos').select('descricao, fornecedor, categoria, valor, data, data_vencimento, status').limit(5000),
         supabase.from('contas_bancarias').select('saldo, ativo'),
         supabase.from('config_loja').select('chave, valor').eq('chave', 'meta_mensal').maybeSingle(),
         supabase.from('vw_historico_mensal').select('mes, faturamento').order('mes', { ascending: false }).limit(6),
@@ -73,6 +75,18 @@ export default function Home() {
       despPct: despTotal ? despPago / despTotal : 0, saldoMes, ranking }
   }, [d, mes])
 
+  const atraso = useMemo(() => {
+    if (!d) return null
+    const hoje = today()
+    const pagar = d.pagamentos.filter((p) => p.status !== 'Pago' && (p.data_vencimento || p.data) && (p.data_vencimento || p.data) < hoje)
+      .map((p) => ({ tipo: 'pagar', quem: p.descricao || p.fornecedor || '—', venc: p.data_vencimento || p.data, valor: n(p.valor) }))
+      .sort((a, b) => (a.venc || '').localeCompare(b.venc || ''))
+    const receber = d.receber.filter((r) => r.status !== 'Recebido' && r.data_prevista && r.data_prevista < hoje)
+      .map((r) => ({ tipo: 'receber', quem: r.cliente_nome || r.descricao || '—', venc: r.data_prevista, valor: n(r.valor_parcela) }))
+      .sort((a, b) => (a.venc || '').localeCompare(b.venc || ''))
+    return { pagar, receber, totalPagar: pagar.reduce((s, x) => s + x.valor, 0), totalReceber: receber.reduce((s, x) => s + x.valor, 0) }
+  }, [d])
+
   const chart = useMemo(() => {
     if (!d) return []
     return [...d.hist].reverse().map((h) => ({ mes: rotuloMes(h.mes.slice(0, 7)), ym: h.mes.slice(0, 7), vendido: Number(h.faturamento) || 0 }))
@@ -91,6 +105,39 @@ export default function Home() {
           <button className="btn ghost sm" onClick={() => setMes(addMes(mes, 1))}>▶</button>
         </div>
       </div>
+
+      {atraso && (atraso.pagar.length > 0 || atraso.receber.length > 0) && (
+        <div className="card" style={{ marginBottom: 20, border: '1px solid var(--danger)' }}>
+          <div className="between">
+            <h3 style={{ margin: 0, color: 'var(--danger)' }}>⚠ Em atraso</h3>
+            <span className="sub">A pagar vencido: <b style={{ color: 'var(--danger)' }}>{brl(atraso.totalPagar)}</b>{atraso.receber.length ? <> · A receber vencido: <b>{brl(atraso.totalReceber)}</b></> : null}</span>
+          </div>
+          <div className="grid cols-2" style={{ marginTop: 12 }}>
+            <div>
+              <div className="sub" style={{ marginBottom: 6 }}>Contas a pagar vencidas ({atraso.pagar.length})</div>
+              <div className="table-wrap" style={{ boxShadow: 'none', maxHeight: 220, overflow: 'auto' }}>
+                <table><tbody>
+                  {atraso.pagar.length === 0 && <tr><td className="empty">Nada em atraso 🎉</td></tr>}
+                  {atraso.pagar.map((x, i) => (
+                    <tr key={i}><td>{x.quem}</td><td className="muted" style={{ whiteSpace: 'nowrap' }}>venc. {fmtDate(x.venc)}</td><td className="num" style={{ color: 'var(--danger)' }}>{brl(x.valor)}</td></tr>
+                  ))}
+                </tbody></table>
+              </div>
+            </div>
+            <div>
+              <div className="sub" style={{ marginBottom: 6 }}>A receber vencido ({atraso.receber.length})</div>
+              <div className="table-wrap" style={{ boxShadow: 'none', maxHeight: 220, overflow: 'auto' }}>
+                <table><tbody>
+                  {atraso.receber.length === 0 && <tr><td className="empty">Nada em atraso</td></tr>}
+                  {atraso.receber.map((x, i) => (
+                    <tr key={i}><td>{x.quem}</td><td className="muted" style={{ whiteSpace: 'nowrap' }}>venc. {fmtDate(x.venc)}</td><td className="num" style={{ color: 'var(--warn)' }}>{brl(x.valor)}</td></tr>
+                  ))}
+                </tbody></table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid cols-4" style={{ marginBottom: 20 }}>
         <div className="card kpi"><div className="label">Vendido</div><div className="value">{brl(k.vendido)}</div><div className="delta">{k.qtd} contrato(s) no mês</div></div>

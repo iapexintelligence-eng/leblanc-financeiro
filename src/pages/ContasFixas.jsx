@@ -30,6 +30,14 @@ export default function ContasFixas() {
   }
   useEffect(() => { carregar() }, [])
 
+  const renomear = async (idAntigo, descAntiga, descNova) => {
+    const nova = (descNova || '').trim()
+    if (!nova || nova === descAntiga) return
+    setErro(''); setRows((s) => s.map((r) => r.descricao === descAntiga ? { ...r, descricao: nova } : r))
+    const { error } = await supabase.from('pagamentos').update({ descricao: nova }).eq('descricao', descAntiga).eq('recorrente', true)
+    if (error) setErro('Não consegui renomear: ' + error.message)
+  }
+
   const removerFixa = async (descricao) => {
     if (!window.confirm(`Remover "${descricao}" da lista de contas fixas? O histórico de pagamentos continua; ela só deixa de ser fixa mensal.`)) return
     setErro(''); setRows((s) => s.filter((r) => r.descricao !== descricao))
@@ -79,7 +87,7 @@ export default function ContasFixas() {
             {lista.map((r) => (
               <tr key={r.id}>
                 <td><span className="badge neutral">dia {r.dia_vencimento || '—'}</span></td>
-                <td><b>{r.descricao || '—'}</b></td>
+                <td><input className="input" style={{ height: 30, padding: '2px 8px', fontWeight: 600, minWidth: 220 }} defaultValue={r.descricao || ''} onBlur={(e) => renomear(r.id, r.descricao, e.target.value)} /></td>
                 <td>{labelCat(r.categoria)}</td>
                 <td className="muted">{r.fornecedor || '—'}</td>
                 <td className="num">{brl(r.valor)}</td>
