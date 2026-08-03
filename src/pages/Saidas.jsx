@@ -8,6 +8,8 @@ const MESES_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set',
 const rotuloMes = (ym) => { const [a, m] = ym.split('-'); return `${MESES_PT[Number(m) - 1]}/${a.slice(2)}` }
 const CAT_LABEL = { fixos: 'Fixos', impostos: 'Impostos', salarios: 'Salários', pro_labore: 'Pró-labore', operacional: 'Operacional', marketing: 'Marketing', industria: 'Indústria', montagem: 'Montagem', frete: 'Frete', rafex: 'RAFEX', perfar: 'Perfar', vidracaria: 'Vidraçaria', outros: 'Outros' }
 const labelCat = (c) => CAT_LABEL[c] || c || '—'
+// ordem das opções no seletor de categoria (edição inline)
+const CATS = ['industria', 'montagem', 'frete', 'rafex', 'perfar', 'vidracaria', 'operacional', 'fixos', 'salarios', 'pro_labore', 'marketing', 'impostos', 'outros']
 
 export default function Saidas() {
   const [rows, setRows] = useState(null)
@@ -20,11 +22,11 @@ export default function Saidas() {
   useEffect(() => {
     (async () => {
       const { data, error } = await supabase.from('pagamentos')
-        .select('data, data_vencimento, categoria, fornecedor, descricao, valor, status, forma_pagamento')
+        .select('id, data, data_vencimento, categoria, fornecedor, descricao, valor, status, forma_pagamento')
         .order('data', { ascending: false }).limit(5000)
       if (error) setErro(error.message)
       const norm = (data || []).map((p) => ({
-        data: p.data || p.data_vencimento, categoria: p.categoria || 'outros',
+        id: p.id, data: p.data || p.data_vencimento, categoria: p.categoria || 'outros',
         fornecedor: p.fornecedor || p.descricao || '—', descricao: p.descricao || '',
         valor: n(p.valor), status: p.status || '—', forma: p.forma_pagamento || '',
       }))
@@ -44,6 +46,13 @@ export default function Saidas() {
     if (busca) { const q = busca.toLowerCase(); if (!((r.fornecedor || '').toLowerCase().includes(q) || labelCat(r.categoria).toLowerCase().includes(q) || (r.descricao || '').toLowerCase().includes(q))) return false }
     return true
   }), [rows, mesF, catF, fornF, busca])
+
+  const mudarCategoria = async (id, categoria) => {
+    setErro('')
+    setRows((s) => s.map((x) => x.id === id ? { ...x, categoria } : x))
+    const { error } = await supabase.from('pagamentos').update({ categoria }).eq('id', id)
+    if (error) setErro('Não consegui salvar a categoria: ' + error.message)
+  }
 
   const total = lista.reduce((s, r) => s + r.valor, 0)
   const pago = lista.filter((r) => r.status === 'Pago').reduce((s, r) => s + r.valor, 0)
@@ -97,7 +106,7 @@ export default function Saidas() {
             {lista.map((r, i) => (
               <tr key={i}>
                 <td className="muted">{fmtDate(r.data)}</td>
-                <td><span className="badge neutral">{labelCat(r.categoria)}</span></td>
+                <td><select className="input" style={{ height: 30, padding: '2px 6px', fontSize: 12.5, minWidth: 130 }} value={r.categoria} onChange={(e) => mudarCategoria(r.id, e.target.value)}>{CATS.map((c) => <option key={c} value={c}>{labelCat(c)}</option>)}</select></td>
                 <td>{r.fornecedor}</td>
                 <td className="num">{brl(r.valor)}</td>
                 <td>{r.status === 'Pago' ? <span className="badge ok">Pago</span> : <span className="badge warn">{r.status}</span>}</td>
