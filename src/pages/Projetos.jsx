@@ -4,6 +4,8 @@ import { brl } from '../lib/format.js'
 import { IcoSearch } from '../components/Icons.jsx'
 
 const n = (v) => Number(v) || 0
+const MESES_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+const rotuloMes = (ym) => { const [a, m] = ym.split('-'); return `${MESES_PT[Number(m) - 1]}/${a.slice(2)}` }
 const corMargem = (status, pct) => {
   const s = (status || '').toLowerCase()
   if (s.includes('neg') || pct < 0) return 'var(--danger)'
@@ -19,6 +21,7 @@ export default function Projetos() {
   const [erro, setErro] = useState('')
   const [busca, setBusca] = useState('')
   const [filtro, setFiltro] = useState('todas')
+  const [mesF, setMesF] = useState('todos')
   const [aberto, setAberto] = useState(null)
 
   useEffect(() => {
@@ -51,12 +54,14 @@ export default function Projetos() {
   }), [projs, extra])
 
   const statusList = useMemo(() => [...new Set(projs.map((p) => p.status_margem).filter(Boolean))], [projs])
+  const mesesList = useMemo(() => [...new Set(projs.map((p) => (p.created_at || '').slice(0, 7)).filter(Boolean))].sort().reverse(), [projs])
 
   const filtradas = useMemo(() => linhas.filter((p) => {
     if (filtro !== 'todas' && p.status_margem !== filtro) return false
+    if (mesF !== 'todos' && (p.created_at || '').slice(0, 7) !== mesF) return false
     if (busca && !((p.cliente_nome || '').toLowerCase().includes(busca.toLowerCase()) || (p.projeto_uid || '').toLowerCase().includes(busca.toLowerCase()) || (p.vendedor || '').toLowerCase().includes(busca.toLowerCase()))) return false
     return true
-  }), [linhas, filtro, busca])
+  }), [linhas, filtro, busca, mesF])
 
   const kpi = useMemo(() => {
     const vend = filtradas.reduce((s, p) => s + n(p.valor_vendido), 0)
@@ -85,6 +90,10 @@ export default function Projetos() {
           <input className="input" placeholder="Buscar cliente, vendedor ou nº do projeto" value={busca} onChange={(e) => setBusca(e.target.value)} style={{ paddingLeft: 34 }} />
           <span style={{ position: 'absolute', left: 10, top: 9, opacity: .5 }}><IcoSearch /></span>
         </div>
+        <select className="input" style={{ width: 160 }} value={mesF} onChange={(e) => setMesF(e.target.value)}>
+          <option value="todos">Todos os meses</option>
+          {mesesList.map((m) => <option key={m} value={m}>{rotuloMes(m)}</option>)}
+        </select>
         <select className="input" style={{ width: 190 }} value={filtro} onChange={(e) => setFiltro(e.target.value)}>
           <option value="todas">Todas as margens</option>
           {statusList.map((s) => <option key={s} value={s}>{s}</option>)}
