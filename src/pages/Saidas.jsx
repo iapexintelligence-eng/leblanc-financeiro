@@ -9,7 +9,7 @@ const rotuloMes = (ym) => { const [a, m] = ym.split('-'); return `${MESES_PT[Num
 const CAT_LABEL = { fixos: 'Fixos', impostos: 'Impostos', salarios: 'Salários', pro_labore: 'Pró-labore', operacional: 'Operacional', marketing: 'Marketing', industria: 'Indústria', montagem: 'Montagem', frete: 'Frete', rafex: 'RAFEX', perfar: 'Perfar', vidracaria: 'Vidraçaria', metalon: 'Metalon', rudegon: 'Rudegon', assistencia: 'Assistência', outros: 'Outros' }
 const labelCat = (c) => CAT_LABEL[c] || c || '—'
 const CATS = ['industria', 'montagem', 'frete', 'rafex', 'perfar', 'vidracaria', 'metalon', 'rudegon', 'assistencia', 'operacional', 'fixos', 'salarios', 'pro_labore', 'marketing', 'impostos', 'outros']
-const token = (s) => (s || '').toLowerCase().trim().split(/\s+/)[0]
+const normForn = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim()
 
 export default function Saidas() {
   const [rows, setRows] = useState(null)
@@ -40,8 +40,16 @@ export default function Saidas() {
     })()
   }, [])
 
-  const custosByToken = useMemo(() => {
-    const m = {}; for (const c of custos) { const t = token(c.fornecedor); (m[t] = m[t] || []).push(c) } return m
+  const custosByForn = useMemo(() => {
+    const m = {}
+    for (const c of custos) {
+      const k = normForn(c.fornecedor)
+      if (!m[k]) m[k] = []
+      // evita duplicatas de digitação (mesma data + descrição + valor)
+      const dup = m[k].some((x) => x.data === c.data && (x.descricao || '') === (c.descricao || '') && n(x.valor) === n(c.valor))
+      if (!dup) m[k].push(c)
+    }
+    return m
   }, [custos])
   const clienteDe = useMemo(() => Object.fromEntries(projetos.map((p) => [p.projeto_uid, p.cliente_nome])), [projetos])
 
@@ -123,7 +131,7 @@ export default function Saidas() {
             {rows === null && <tr><td colSpan="8" className="empty">Carregando…</td></tr>}
             {rows && lista.length === 0 && <tr><td colSpan="8" className="empty">Nenhuma saída neste filtro.</td></tr>}
             {lista.map((r) => {
-              const pedidos = custosByToken[token(r.fornecedor)] || []
+              const pedidos = custosByForn[normForn(r.fornecedor)] || []
               const exp = aberto === r.id
               return (
                 <>
