@@ -11,6 +11,8 @@ const CATEGORIAS = [
   { v: 'salarios', t: 'Salários' },
   { v: 'pro_labore', t: 'Pró-labore' },
   { v: 'operacional', t: 'Operacional' },
+  { v: 'industria', t: 'Indústria' },
+  { v: 'montagem', t: 'Montagem' },
   { v: 'marketing', t: 'Marketing' },
   { v: 'impostos', t: 'Impostos' },
   { v: 'outros', t: 'Outros' },
