@@ -5,11 +5,11 @@ import { registrarLog } from '../lib/log.js'
 import Modal from '../components/Modal.jsx'
 import { IcoPlus, IcoEdit, IcoSearch } from '../components/Icons.jsx'
 
-const CATEGORIAS = ['Indústria', 'Frete', 'Material', 'Marketing', 'Aluguel', 'Água/Luz', 'Impostos', 'Manutenção', 'Serviços', 'Outros']
+const CATEGORIAS = ['Indústria', 'Montagem', 'Frete', 'Material', 'Marketing', 'Aluguel', 'Água/Luz', 'Impostos', 'Manutenção', 'Serviços', 'Outros']
 const FORMAS = ['PIX', 'Boleto', 'Transferência', 'Cartão', 'Dinheiro']
 const STATUS = ['Pendente', 'Pago']
 
-const novo = () => ({ data: today(), categoria: 'Material', fornecedor: '', descricao: '', valor: '', forma_pagamento: 'PIX', status: 'Pendente', projeto_relacionado: '', montador: '', observacao: '' })
+const novo = () => ({ data: today(), categoria: 'Material', fornecedor: '', descricao: '', valor: '', forma_pagamento: 'PIX', status: 'Pendente', projeto_uid: '', projeto_relacionado: '', montador: '', observacao: '' })
 
 export default function Custos() {
   const [rows, setRows] = useState(null)
@@ -17,6 +17,7 @@ export default function Custos() {
   const [modal, setModal] = useState(null)
   const [saving, setSaving] = useState(false)
   const [erro, setErro] = useState('')
+  const [projetos, setProjetos] = useState([])
 
   const carregar = async () => {
     const { data, error } = await supabase.from('custos_operacionais').select('*').order('data', { ascending: false }).limit(1000)
@@ -24,16 +25,23 @@ export default function Custos() {
     setRows(data || [])
   }
   useEffect(() => { carregar() }, [])
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from('projetos').select('projeto_uid, cliente_nome').order('created_at', { ascending: false }).limit(2000)
+      setProjetos(data || [])
+    })()
+  }, [])
 
   const abrirNovo = () => setModal({ form: novo(), editId: null })
-  const abrirEdit = (r) => setModal({ form: { data: r.data || today(), categoria: r.categoria || 'Material', fornecedor: r.fornecedor || '', descricao: r.descricao || '', valor: r.valor ?? '', forma_pagamento: r.forma_pagamento || 'PIX', status: r.status || 'Pendente', projeto_relacionado: r.projeto_relacionado || '', montador: r.montador || '', observacao: r.observacao || '' }, editId: r.id })
+  const abrirEdit = (r) => setModal({ form: { data: r.data || today(), categoria: r.categoria || 'Material', fornecedor: r.fornecedor || '', descricao: r.descricao || '', valor: r.valor ?? '', forma_pagamento: r.forma_pagamento || 'PIX', status: r.status || 'Pendente', projeto_uid: r.projeto_uid || '', projeto_relacionado: r.projeto_relacionado || '', montador: r.montador || '', observacao: r.observacao || '' }, editId: r.id })
   const setF = (k, v) => setModal((m) => ({ ...m, form: { ...m.form, [k]: v } }))
 
   const salvar = async () => {
     setErro(''); const f = modal.form
     if (!f.descricao.trim() && !f.fornecedor.trim()) { setErro('Informe ao menos fornecedor ou descrição.'); return }
     setSaving(true)
-    const payload = { data: f.data || today(), categoria: f.categoria, fornecedor: f.fornecedor || null, descricao: f.descricao || null, valor: f.valor === '' ? null : Number(f.valor), forma_pagamento: f.forma_pagamento || null, status: f.status, projeto_relacionado: f.projeto_relacionado || null, montador: f.montador || null, observacao: f.observacao || null }
+    const projLabel = f.projeto_uid ? (projetos.find((p) => p.projeto_uid === f.projeto_uid)?.cliente_nome || f.projeto_relacionado || null) : (f.projeto_relacionado || null)
+    const payload = { data: f.data || today(), categoria: f.categoria, fornecedor: f.fornecedor || null, descricao: f.descricao || null, valor: f.valor === '' ? null : Number(f.valor), forma_pagamento: f.forma_pagamento || null, status: f.status, projeto_uid: f.projeto_uid || null, projeto_relacionado: projLabel, montador: f.montador || null, observacao: f.observacao || null }
     let error
     if (modal.editId) { ({ error } = await supabase.from('custos_operacionais').update(payload).eq('id', modal.editId)); if (!error) await registrarLog({ tabela: 'custos_operacionais', registroId: modal.editId, acao: 'edicao', descricao: `Custo: ${payload.fornecedor || payload.descricao}` }) }
     else { ({ error } = await supabase.from('custos_operacionais').insert(payload)) }
@@ -59,7 +67,7 @@ export default function Custos() {
       </div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Data</th><th>Categoria</th><th>Fornecedor</th><th>Descrição</th><th className="num">Valor</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Data</th><th>Categoria</th><th>Fornecedor</th><th>Contrato</th><th className="num">Valor</th><th>Status</th><th></th></tr></thead>
           <tbody>
             {rows === null && <tr><td colSpan="7" className="empty">Carregando…</td></tr>}
             {rows && lista.length === 0 && <tr><td colSpan="7" className="empty">Nenhum custo.</td></tr>}
@@ -68,7 +76,7 @@ export default function Custos() {
                 <td className="muted">{fmtDate(r.data)}</td>
                 <td><span className="badge neutral">{r.categoria || '—'}</span></td>
                 <td>{r.fornecedor || '—'}</td>
-                <td className="muted">{r.descricao || '—'}</td>
+                <td className="muted">{r.projeto_uid ? <span className="badge neutral">{r.projeto_uid}</span> : (r.projeto_relacionado || '—')}</td>
                 <td className="num">{r.valor ? brl(r.valor) : '—'}</td>
                 <td>{r.status === 'Pago' ? <span className="badge ok">Pago</span> : <span className="badge warn">Pendente</span>}</td>
                 <td className="right"><button className="icon-btn" onClick={() => abrirEdit(r)}><IcoEdit /></button></td>
@@ -93,7 +101,13 @@ export default function Custos() {
           <div className="row-3">
             <div className="field"><label>Forma</label><select className="input" value={modal.form.forma_pagamento} onChange={(e) => setF('forma_pagamento', e.target.value)}>{FORMAS.map((c) => <option key={c}>{c}</option>)}</select></div>
             <div className="field"><label>Status</label><select className="input" value={modal.form.status} onChange={(e) => setF('status', e.target.value)}>{STATUS.map((c) => <option key={c}>{c}</option>)}</select></div>
-            <div className="field"><label>Projeto</label><input className="input" value={modal.form.projeto_relacionado} onChange={(e) => setF('projeto_relacionado', e.target.value)} /></div>
+            <div className="field"><label>Montador</label><input className="input" value={modal.form.montador} onChange={(e) => setF('montador', e.target.value)} placeholder="opcional" /></div>
+          </div>
+          <div className="field"><label>Contrato / projeto (para margem por contrato)</label>
+            <select className="input" value={modal.form.projeto_uid} onChange={(e) => setF('projeto_uid', e.target.value)}>
+              <option value="">— sem vínculo —</option>
+              {projetos.map((p) => <option key={p.projeto_uid} value={p.projeto_uid}>{p.projeto_uid} · {p.cliente_nome}</option>)}
+            </select>
           </div>
           <div className="field"><label>Observação</label><textarea className="input" value={modal.form.observacao} onChange={(e) => setF('observacao', e.target.value)} /></div>
         </Modal>

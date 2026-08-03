@@ -25,6 +25,7 @@ import Previsibilidade from './pages/Previsibilidade.jsx'
 import Assistencias from './pages/Assistencias.jsx'
 import Gratificacao from './pages/Gratificacao.jsx'
 import Relatorios from './pages/Relatorios.jsx'
+import Projetos from './pages/Projetos.jsx'
 import EmBreve from './pages/EmBreve.jsx'
 
 export default function App() {
@@ -57,7 +58,7 @@ export default function App() {
         <Route path="/previsibilidade" element={<Previsibilidade />} />
         <Route path="/assistencias" element={<Assistencias />} />
         <Route path="/gratificacao" element={<Gratificacao />} />
-        <Route path="/projetos" element={<EmBreve titulo="Projetos" />} />
+        <Route path="/projetos" element={<Projetos />} />
         <Route path="/relatorios" element={<Relatorios />} />
         <Route path="*" element={<EmBreve titulo="Página" />} />
       </Route>
