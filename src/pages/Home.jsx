@@ -1,99 +1,164 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine, Cell } from 'recharts'
 import { supabase } from '../lib/supabase.js'
-import { brl, fmtDate, today } from '../lib/format.js'
+import { brl, brlShort, today } from '../lib/format.js'
+
+const MESES_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+const MESES_LONGO = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+const rotuloMes = (ym) => { const [a, m] = ym.split('-'); return `${MESES_PT[Number(m) - 1]}/${a.slice(2)}` }
+const rotuloLongo = (ym) => { const [a, m] = ym.split('-'); return `${MESES_LONGO[Number(m) - 1]} ${a}` }
+const addMes = (ym, delta) => { const [a, m] = ym.split('-').map(Number); const dt = new Date(a, m - 1 + delta, 1); return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}` }
 
 export default function Home() {
   const [d, setD] = useState(null)
+  const [mes, setMes] = useState(today().slice(0, 7))
+  const ajustou = useRef(false)
 
   useEffect(() => {
     (async () => {
-      const [vendas, receber, contas] = await Promise.all([
-        supabase.from('vendas').select('*').order('data_venda', { ascending: false }).limit(500),
-        supabase.from('a_receber').select('valor_parcela, data_prevista, status').limit(2000),
+      const [vendas, receber, pagamentos, contas, cfg, hist] = await Promise.all([
+        supabase.from('vendas').select('valor_vendido, data_venda, vendedor').limit(2000),
+        supabase.from('a_receber').select('valor_parcela, data_prevista, data_recebimento, status').limit(5000),
+        supabase.from('pagamentos').select('valor, data, data_vencimento, status').limit(5000),
         supabase.from('contas_bancarias').select('saldo, ativo'),
+        supabase.from('config_loja').select('chave, valor').eq('chave', 'meta_mensal').maybeSingle(),
+        supabase.from('vw_historico_mensal').select('mes, faturamento').order('mes', { ascending: false }).limit(6),
       ])
       setD({
-        vendas: vendas.data || [],
-        receber: receber.data || [],
-        contas: contas.data || [],
-        erro: vendas.error?.message || receber.error?.message || contas.error?.message || null,
+        vendas: vendas.data || [], receber: receber.data || [], pagamentos: pagamentos.data || [],
+        contas: contas.data || [], meta: Number(cfg.data?.valor) || 0, hist: hist.data || [],
+        erro: vendas.error?.message || receber.error?.message || pagamentos.error?.message || null,
       })
     })()
   }, [])
 
+  // Ao carregar, se o mês atual não tiver movimento, cai pro último mês com dados.
+  useEffect(() => {
+    if (!d || ajustou.current) return
+    const temMov = (ym) => d.vendas.some((v) => (v.data_venda || '').slice(0, 7) === ym)
+      || d.pagamentos.some((p) => (p.data_vencimento || p.data || '').slice(0, 7) === ym)
+    if (!temMov(mes)) {
+      const meses = [...new Set(d.vendas.map((v) => (v.data_venda || '').slice(0, 7)).filter(Boolean))].sort().reverse()
+      if (meses.length) setMes(meses[0])
+    }
+    ajustou.current = true
+  }, [d]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const k = useMemo(() => {
+    if (!d) return null
+    const noMes = (dt) => (dt || '').slice(0, 7) === mes
+    const vendasMes = d.vendas.filter((v) => noMes(v.data_venda))
+    const vendido = vendasMes.reduce((s, v) => s + (Number(v.valor_vendido) || 0), 0)
+    const pct = d.meta ? vendido / d.meta : 0
+
+    const recMes = d.receber.filter((r) => noMes(r.data_prevista))
+    const recTotal = recMes.reduce((s, r) => s + (Number(r.valor_parcela) || 0), 0)
+    const recRecebido = recMes.filter((r) => r.status === 'Recebido').reduce((s, r) => s + (Number(r.valor_parcela) || 0), 0)
+    const recPendente = Math.max(0, recTotal - recRecebido)
+
+    const pagMes = d.pagamentos.filter((p) => noMes(p.data_vencimento || p.data))
+    const despTotal = pagMes.reduce((s, p) => s + (Number(p.valor) || 0), 0)
+    const despPago = pagMes.filter((p) => p.status === 'Pago').reduce((s, p) => s + (Number(p.valor) || 0), 0)
+    const despPendente = Math.max(0, despTotal - despPago)
+
+    const saldoMes = recRecebido - despPago
+
+    const porV = {}
+    vendasMes.forEach((v) => { const n = v.vendedor || '— sem vendedor —'; porV[n] = (porV[n] || 0) + (Number(v.valor_vendido) || 0) })
+    const ranking = Object.entries(porV).sort((a, b) => b[1] - a[1])
+
+    return { vendido, qtd: vendasMes.length, pct, recTotal, recRecebido, recPendente,
+      recPct: recTotal ? recRecebido / recTotal : 0, despTotal, despPago, despPendente,
+      despPct: despTotal ? despPago / despTotal : 0, saldoMes, ranking }
+  }, [d, mes])
+
+  const chart = useMemo(() => {
+    if (!d) return []
+    return [...d.hist].reverse().map((h) => ({ mes: rotuloMes(h.mes.slice(0, 7)), ym: h.mes.slice(0, 7), vendido: Number(h.faturamento) || 0 }))
+  }, [d])
+
   if (!d) return <div className="spinner-wrap">Carregando painel…</div>
   if (d.erro) return <div className="login-err">Erro ao carregar dados: {d.erro}</div>
 
-  const mesAtual = today().slice(0, 7)
-  const vendasMes = d.vendas.filter((v) => (v.data_venda || '').slice(0, 7) === mesAtual)
-  const totalVendasMes = vendasMes.reduce((s, v) => s + (Number(v.valor_vendido) || 0), 0)
-  const saldoTotal = d.contas.reduce((s, c) => s + (Number(c.saldo) || 0), 0)
-  const aberto = d.receber.filter((r) => r.status !== 'Recebido')
-  const totalAberto = aberto.reduce((s, r) => s + (Number(r.valor_parcela) || 0), 0)
-  const vencidos = aberto.filter((r) => r.data_prevista && r.data_prevista < today())
-  const totalVencido = vencidos.reduce((s, r) => s + (Number(r.valor_parcela) || 0), 0)
-
-  // Vendas por vendedor (mês)
-  const porVendedor = {}
-  vendasMes.forEach((v) => {
-    const k = v.vendedor || '— sem vendedor —'
-    porVendedor[k] = (porVendedor[k] || 0) + (Number(v.valor_vendido) || 0)
-  })
-  const ranking = Object.entries(porVendedor).sort((a, b) => b[1] - a[1])
-
   return (
     <>
-      <div className="grid cols-4" style={{ marginBottom: 22 }}>
-        <div className="card kpi"><div className="label">Saldo em caixa</div><div className="value">{brl(saldoTotal)}</div><div className="delta">{d.contas.filter(c=>c.ativo).length} conta(s) ativa(s)</div></div>
-        <div className="card kpi"><div className="label">Vendas do mês</div><div className="value">{brl(totalVendasMes)}</div><div className="delta">{vendasMes.length} venda(s)</div></div>
-        <div className="card kpi"><div className="label">A receber (aberto)</div><div className="value">{brl(totalAberto)}</div><div className="delta">{aberto.length} boleto(s)</div></div>
-        <div className="card kpi"><div className="label">Vencidos</div><div className="value" style={{ color: totalVencido ? 'var(--danger)' : 'inherit' }}>{brl(totalVencido)}</div><div className="delta">{vencidos.length} em atraso</div></div>
+      <div className="between" style={{ marginBottom: 18 }}>
+        <div className="sub" style={{ fontSize: 13 }}>Visão geral operacional</div>
+        <div className="tools" style={{ alignItems: 'center' }}>
+          <button className="btn ghost sm" onClick={() => setMes(addMes(mes, -1))}>◀</button>
+          <span style={{ minWidth: 140, textAlign: 'center', fontWeight: 600 }}>{rotuloLongo(mes)}</span>
+          <button className="btn ghost sm" onClick={() => setMes(addMes(mes, 1))}>▶</button>
+        </div>
       </div>
 
-      <div className="grid cols-2">
+      <div className="grid cols-4" style={{ marginBottom: 20 }}>
+        <div className="card kpi"><div className="label">Vendido</div><div className="value">{brl(k.vendido)}</div><div className="delta">{k.qtd} contrato(s) no mês</div></div>
+        <div className="card kpi"><div className="label">Meta da loja</div><div className="value">{brl(d.meta)}</div><div className="delta">meta mensal</div></div>
+        <div className="card kpi"><div className="label">% Realizado</div><div className="value" style={{ color: k.pct >= 1 ? 'var(--ok)' : 'inherit' }}>{(k.pct * 100).toFixed(0)}%</div><div className="delta">{(k.pct * 100).toFixed(1)}% da meta do mês</div></div>
+        <div className="card kpi"><div className="label">Saldo do mês</div><div className="value" style={{ color: k.saldoMes >= 0 ? 'var(--ok)' : 'var(--danger)' }}>{brl(k.saldoMes)}</div><div className="delta">{k.saldoMes >= 0 ? 'recebido acima do pago' : 'pago acima do recebido'}</div></div>
+      </div>
+
+      <div className="grid cols-3" style={{ marginBottom: 20 }}>
+        <PainelFinanceiro titulo="Receita" cor="var(--ok)" total={k.recTotal} feitoLabel="Recebido" feito={k.recRecebido} pendente={k.recPendente} pct={k.recPct} link="/recebiveis" />
+        <PainelFinanceiro titulo="Despesa" cor="var(--danger)" total={k.despTotal} feitoLabel="Pago" feito={k.despPago} pendente={k.despPendente} pct={k.despPct} link="/pagamentos" />
         <div className="card">
-          <h3>Últimas vendas</h3>
-          <div className="sub">Registros mais recentes</div>
-          <div className="table-wrap" style={{ boxShadow: 'none' }}>
-            <table>
-              <thead><tr><th>Cliente</th><th>Vendedor</th><th className="num">Valor</th><th>Data</th></tr></thead>
-              <tbody>
-                {d.vendas.slice(0, 8).map((v) => (
-                  <tr key={v.id}>
-                    <td>{v.cliente_nome}</td>
-                    <td className="muted">{v.vendedor || '—'}</td>
-                    <td className="num">{v.valor_vendido ? brl(v.valor_vendido) : '—'}</td>
-                    <td className="muted">{fmtDate(v.data_venda)}</td>
-                  </tr>
-                ))}
-                {d.vendas.length === 0 && <tr><td colSpan="4" className="empty">Sem vendas.</td></tr>}
-              </tbody>
-            </table>
+          <div className="between"><h3 style={{ margin: 0 }}>Vendido x Meta</h3></div>
+          <div className="sub">Últimos 6 meses</div>
+          <div style={{ height: 190, marginTop: 8 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chart} margin={{ top: 8, right: 6, left: -10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--line)" />
+                <XAxis dataKey="mes" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={(v) => brlShort(v)} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={54} />
+                <Tooltip formatter={(v) => brl(v)} labelStyle={{ fontWeight: 600 }} />
+                {d.meta > 0 && <ReferenceLine y={d.meta} stroke="var(--danger)" strokeDasharray="4 4" label={{ value: 'Meta', position: 'right', fontSize: 10, fill: 'var(--danger)' }} />}
+                <Bar dataKey="vendido" radius={[5, 5, 0, 0]}>
+                  {chart.map((c) => <Cell key={c.ym} fill={c.ym === mes ? 'var(--brand, #5b5bd6)' : '#c7c9f2'} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
+      </div>
 
-        <div className="card">
-          <h3>Vendas por vendedor · {mesAtual.split('-').reverse().join('/')}</h3>
-          <div className="sub">Desempenho no mês corrente</div>
-          {ranking.length === 0 ? <div className="empty">Sem vendas no mês.</div> : (
-            <div className="stack" style={{ gap: 14 }}>
-              {ranking.map(([nome, val]) => {
-                const pct = Math.round((val / (ranking[0][1] || 1)) * 100)
-                return (
-                  <div key={nome}>
-                    <div className="between" style={{ marginBottom: 5 }}>
-                      <span>{nome}</span><span className="mono">{brl(val)}</span>
-                    </div>
-                    <div style={{ height: 8, background: 'var(--surface-2)', borderRadius: 6 }}>
-                      <div style={{ width: pct + '%', height: '100%', background: 'var(--ink)', borderRadius: 6 }} />
-                    </div>
+      <div className="card">
+        <h3>Ranking de vendedores · {rotuloLongo(mes)}</h3>
+        <div className="sub">Valor vendido no mês selecionado</div>
+        {k.ranking.length === 0 ? <div className="empty">Sem vendas neste mês.</div> : (
+          <div className="stack" style={{ gap: 14, marginTop: 8 }}>
+            {k.ranking.map(([nome, val]) => {
+              const pct = Math.round((val / (k.ranking[0][1] || 1)) * 100)
+              return (
+                <div key={nome}>
+                  <div className="between" style={{ marginBottom: 5 }}><span>{nome}</span><span className="mono">{brl(val)}</span></div>
+                  <div style={{ height: 8, background: 'var(--surface-2, var(--line))', borderRadius: 6 }}>
+                    <div style={{ width: pct + '%', height: '100%', background: 'var(--brand, #5b5bd6)', borderRadius: 6 }} />
                   </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     </>
+  )
+}
+
+function PainelFinanceiro({ titulo, cor, total, feitoLabel, feito, pendente, pct, link }) {
+  return (
+    <div className="card">
+      <div className="between"><h3 style={{ margin: 0 }}>{titulo}</h3></div>
+      <div className="stack" style={{ gap: 6, marginTop: 10, fontSize: 13.5 }}>
+        <div className="between"><span className="muted">Total</span><span className="mono">{brl(total)}</span></div>
+        <div className="between"><span className="muted">{feitoLabel}</span><span className="mono" style={{ color: cor }}>{brl(feito)}</span></div>
+        <div className="between"><span className="muted">Pendente</span><span className="mono" style={{ color: 'var(--warn)' }}>{brl(pendente)}</span></div>
+        <div className="between"><span className="muted">% Realizado</span><span className="mono">{(pct * 100).toFixed(0)}%</span></div>
+      </div>
+      <div style={{ height: 8, background: 'var(--line)', borderRadius: 6, overflow: 'hidden', margin: '10px 0 12px' }}>
+        <div style={{ width: Math.min(100, pct * 100) + '%', height: '100%', background: cor }} />
+      </div>
+      <Link to={link} className="btn ghost sm" style={{ width: '100%', textAlign: 'center' }}>Ver no financeiro</Link>
+    </div>
   )
 }
