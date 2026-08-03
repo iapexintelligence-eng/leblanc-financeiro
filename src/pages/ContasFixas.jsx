@@ -1,17 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
-import { brl } from '../lib/format.js'
+import { brl, today } from '../lib/format.js'
 import { IcoSearch } from '../components/Icons.jsx'
 
 const n = (v) => Number(v) || 0
+const MESES_LONGO = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+const nomeMes = (ym) => { const [a, m] = ym.split('-'); return `${MESES_LONGO[Number(m) - 1]}/${a}` }
 const CAT_LABEL = { fixos: 'Fixos', impostos: 'Impostos', salarios: 'Salários', pro_labore: 'Pró-labore', operacional: 'Operacional', marketing: 'Marketing', industria: 'Indústria', montagem: 'Montagem', frete: 'Frete', rafex: 'RAFEX', perfar: 'Perfar', vidracaria: 'Vidraçaria', metalon: 'Metalon', rudegon: 'Rudegon', assistencia: 'Assistência', outros: 'Outros' }
 const labelCat = (c) => CAT_LABEL[c] || c || '—'
 
 export default function ContasFixas() {
   const [rows, setRows] = useState(null)
   const [erro, setErro] = useState('')
+  const [info, setInfo] = useState('')
   const [busca, setBusca] = useState('')
   const [catF, setCatF] = useState('todas')
+  const [lancando, setLancando] = useState(false)
 
   const carregar = async () => {
     setErro('')
@@ -38,6 +42,28 @@ export default function ContasFixas() {
     if (error) setErro('Não consegui renomear: ' + error.message)
   }
 
+  const lancarMes = async () => {
+    setErro(''); setInfo('')
+    const ym = today().slice(0, 7)
+    const modelos = rows || []
+    if (!modelos.length) { setErro('Nenhuma conta fixa para lançar.'); return }
+    if (!window.confirm(`Lançar as contas fixas de ${nomeMes(ym)}? Serão criados os pagamentos do mês (não duplica os que já existirem).`)) return
+    setLancando(true)
+    // já lançados neste mês
+    const { data: exist } = await supabase.from('pagamentos').select('descricao').gte('data_vencimento', `${ym}-01`).lte('data_vencimento', `${ym}-31`)
+    const jaTem = new Set((exist || []).map((e) => e.descricao))
+    const novos = modelos.filter((m) => !jaTem.has(m.descricao)).map((m) => {
+      const dia = String(Math.min(28, Math.max(1, Number(m.dia_vencimento) || 1))).padStart(2, '0')
+      return { descricao: m.descricao, categoria: m.categoria || 'fixos', fornecedor: m.fornecedor || null, valor: n(m.valor), forma_pagamento: null, data: `${ym}-01`, data_vencimento: `${ym}-${dia}`, dia_vencimento: Number(m.dia_vencimento) || null, status: 'Pendente', recorrente: true }
+    })
+    if (!novos.length) { setLancando(false); setInfo(`Tudo certo — as fixas de ${nomeMes(ym)} já estavam lançadas.`); return }
+    const { error } = await supabase.from('pagamentos').insert(novos)
+    setLancando(false)
+    if (error) { setErro('Erro ao lançar: ' + error.message); return }
+    setInfo(`${novos.length} conta(s) fixa(s) de ${nomeMes(ym)} lançadas. Já aparecem no Dashboard (a pagar).`)
+    carregar()
+  }
+
   const removerFixa = async (descricao) => {
     if (!window.confirm(`Remover "${descricao}" da lista de contas fixas? O histórico de pagamentos continua; ela só deixa de ser fixa mensal.`)) return
     setErro(''); setRows((s) => s.filter((r) => r.descricao !== descricao))
@@ -61,7 +87,9 @@ export default function ContasFixas() {
           <h3>Contas fixas mensais</h3>
           <div className="sub">O que a loja paga todo mês, por dia de vencimento. Use o × para tirar uma conta duplicada da lista (não apaga o histórico, só deixa de ser fixa).</div>
         </div>
+        <button className="btn" onClick={lancarMes} disabled={lancando}>{lancando ? 'Lançando…' : 'Lançar fixas do mês'}</button>
       </div>
+      {info && <div className="badge ok" style={{ display: 'inline-block', margin: '10px 0' }}>{info}</div>}
 
       <div className="grid cols-3" style={{ margin: '14px 0' }}>
         <div className="card kpi"><div className="label">Total fixo mensal</div><div className="value">{brl(total)}</div></div>
