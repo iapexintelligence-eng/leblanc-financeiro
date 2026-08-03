@@ -29,6 +29,7 @@ const GROUPS = [
   { label: 'Financeiro', items: [
     { to: '/custos', icon: IcoCost, txt: 'Custos Operacionais' },
     { to: '/pagamentos', icon: IcoPay, txt: 'Pagamentos' },
+    { to: '/saidas', icon: IcoPay, txt: 'Saídas' },
     { to: '/dre', icon: IcoDre, txt: 'DRE Mensal' },
     { to: '/bancos', icon: IcoBank, txt: 'Bancos' },
     { to: '/gratificacao', icon: IcoGift, txt: 'Gratificação' },
