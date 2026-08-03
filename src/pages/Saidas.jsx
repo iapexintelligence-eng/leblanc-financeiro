@@ -44,12 +44,15 @@ export default function Saidas() {
 
   const custosByForn = useMemo(() => {
     const m = {}
-    for (const c of custos) {
-      const k = normForn(c.fornecedor)
-      if (!m[k]) m[k] = []
-      // evita duplicatas de digitação (mesma data + descrição + valor)
-      const dup = m[k].some((x) => x.data === c.data && (x.descricao || '') === (c.descricao || '') && n(x.valor) === n(c.valor))
-      if (!dup) m[k].push(c)
+    for (const c of custos) { const k = normForn(c.fornecedor); (m[k] = m[k] || []).push(c) }
+    // marca possíveis duplicados (mesma data + descrição + valor) para destacar
+    for (const k of Object.keys(m)) {
+      const vistos = {}
+      m[k] = m[k].map((c) => {
+        const chave = `${c.data}|${c.descricao || ''}|${n(c.valor)}`
+        const dup = !!vistos[chave]; vistos[chave] = true
+        return { ...c, _dup: dup }
+      })
     }
     return m
   }, [custos])
@@ -86,6 +89,12 @@ export default function Saidas() {
     setErro(''); setCustos((s) => s.map((x) => x.id === id ? { ...x, categoria } : x))
     const { error } = await supabase.from('custos_operacionais').update({ categoria }).eq('id', id)
     if (error) setErro('Não consegui salvar a categoria do pedido: ' + error.message)
+  }
+  const excluirCusto = async (id) => {
+    if (!window.confirm('Excluir este pedido/custo? Essa ação não pode ser desfeita.')) return
+    setErro(''); setCustos((s) => s.filter((x) => x.id !== id))
+    const { error } = await supabase.from('custos_operacionais').delete().eq('id', id)
+    if (error) setErro('Não consegui excluir: ' + error.message)
   }
 
   const total = lista.reduce((s, r) => s + r.valor, 0)
@@ -158,19 +167,20 @@ export default function Saidas() {
                       <td colSpan="7" style={{ background: 'var(--surface)' }}>
                         <div className="sub" style={{ margin: '4px 0 6px' }}>Pedidos/itens de <b>{r.fornecedor}</b> (custos por projeto):</div>
                         <table style={{ marginBottom: 8 }}>
-                          <thead><tr><th>Data</th><th>Categoria</th><th>Projeto / cliente</th><th>Descrição</th><th className="num">Valor</th></tr></thead>
+                          <thead><tr><th>Data</th><th>Categoria</th><th>Projeto / cliente</th><th>Descrição</th><th className="num">Valor</th><th></th></tr></thead>
                           <tbody>
                             {pedidos.map((c, i) => (
-                              <tr key={i}>
-                                <td className="muted">{fmtDate(c.data)}</td>
+                              <tr key={i} style={c._dup ? { background: 'rgba(220,53,69,0.08)' } : undefined}>
+                                <td className="muted">{fmtDate(c.data)}{c._dup && <span className="badge warn" style={{ marginLeft: 6 }}>duplicado?</span>}</td>
                                 <td><select className="input" style={{ height: 28, padding: '2px 6px', fontSize: 12, minWidth: 120 }} value={c.categoria || ''} onChange={(e) => mudarCatCusto(c.id, e.target.value)}>{CUSTO_CATS.map((x) => <option key={x} value={x}>{CUSTO_LABEL[x]}</option>)}</select></td>
                                 <td>{c.projeto_uid ? `${c.projeto_uid}${clienteDe[c.projeto_uid] ? ' · ' + clienteDe[c.projeto_uid] : ''}` : '—'}</td>
                                 <td className="muted">{c.descricao || '—'}</td>
                                 <td className="num">{brl(c.valor)}</td>
+                                <td className="right"><button className="icon-btn" title="Excluir (duplicado)" onClick={() => excluirCusto(c.id)} style={{ color: 'var(--danger)' }}>×</button></td>
                               </tr>
                             ))}
                           </tbody>
-                          <tfoot><tr><td colSpan="4"><b>Total dos pedidos</b></td><td className="num"><b>{brl(pedidos.reduce((s, c) => s + n(c.valor), 0))}</b></td></tr></tfoot>
+                          <tfoot><tr><td colSpan="4"><b>Total dos pedidos</b></td><td className="num"><b>{brl(pedidos.reduce((s, c) => s + n(c.valor), 0))}</b></td><td></td></tr></tfoot>
                         </table>
                       </td>
                     </tr>
