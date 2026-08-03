@@ -78,13 +78,18 @@ export default function Home() {
   const atraso = useMemo(() => {
     if (!d) return null
     const hoje = today()
-    const pagar = d.pagamentos.filter((p) => p.status !== 'Pago' && (p.data_vencimento || p.data) && (p.data_vencimento || p.data) < hoje)
-      .map((p) => ({ tipo: 'pagar', quem: p.descricao || p.fornecedor || '—', venc: p.data_vencimento || p.data, valor: n(p.valor) }))
-      .sort((a, b) => (a.venc || '').localeCompare(b.venc || ''))
-    const receber = d.receber.filter((r) => r.status !== 'Recebido' && r.data_prevista && r.data_prevista < hoje)
-      .map((r) => ({ tipo: 'receber', quem: r.cliente_nome || r.descricao || '—', venc: r.data_prevista, valor: n(r.valor_parcela) }))
-      .sort((a, b) => (a.venc || '').localeCompare(b.venc || ''))
-    return { pagar, receber, totalPagar: pagar.reduce((s, x) => s + x.valor, 0), totalReceber: receber.reduce((s, x) => s + x.valor, 0) }
+    const pend = (s) => s !== 'Pago' && s !== 'Cancelado'
+    const mapP = (p) => ({ quem: p.descricao || p.fornecedor || '—', venc: p.data_vencimento || p.data, valor: n(p.valor) })
+    const ordena = (a, b) => (a.venc || '').localeCompare(b.venc || '')
+    const pgs = d.pagamentos.filter((p) => pend(p.status) && (p.data_vencimento || p.data))
+    const pagar = pgs.filter((p) => (p.data_vencimento || p.data) < hoje).map(mapP).sort(ordena)
+    const aVencer = pgs.filter((p) => (p.data_vencimento || p.data) >= hoje).map(mapP).sort(ordena)
+    const receber = d.receber.filter((r) => pend(r.status) && r.status !== 'Recebido' && r.data_prevista && r.data_prevista < hoje)
+      .map((r) => ({ quem: r.cliente_nome || r.descricao || '—', venc: r.data_prevista, valor: n(r.valor_parcela) })).sort(ordena)
+    return { pagar, aVencer, receber,
+      totalPagar: pagar.reduce((s, x) => s + x.valor, 0),
+      totalAVencer: aVencer.reduce((s, x) => s + x.valor, 0),
+      totalReceber: receber.reduce((s, x) => s + x.valor, 0) }
   }, [d])
 
   const chart = useMemo(() => {
@@ -105,6 +110,22 @@ export default function Home() {
           <button className="btn ghost sm" onClick={() => setMes(addMes(mes, 1))}>▶</button>
         </div>
       </div>
+
+      {atraso && atraso.aVencer.length > 0 && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="between">
+            <h3 style={{ margin: 0 }}>A pagar em aberto (a vencer)</h3>
+            <span className="sub">Total em aberto: <b>{brl(atraso.totalAVencer)}</b></span>
+          </div>
+          <div className="table-wrap" style={{ boxShadow: 'none', maxHeight: 240, overflow: 'auto', marginTop: 8 }}>
+            <table><tbody>
+              {atraso.aVencer.map((x, i) => (
+                <tr key={i}><td>{x.quem}</td><td className="muted" style={{ whiteSpace: 'nowrap' }}>venc. {fmtDate(x.venc)}</td><td className="num">{brl(x.valor)}</td></tr>
+              ))}
+            </tbody></table>
+          </div>
+        </div>
+      )}
 
       {atraso && (atraso.pagar.length > 0 || atraso.receber.length > 0) && (
         <div className="card" style={{ marginBottom: 20, border: '1px solid var(--danger)' }}>
