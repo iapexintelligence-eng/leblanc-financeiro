@@ -101,6 +101,16 @@ export default function Home() {
     setD((s) => ({ ...s, pagamentos: s.pagamentos.map((p) => p.id === id ? { ...p, data_vencimento: novaData } : p) }))
     await supabase.from('pagamentos').update({ data_vencimento: novaData }).eq('id', id)
   }
+  const editarValorPagar = async (id, valor) => {
+    const v = Number(valor) || 0
+    setD((s) => ({ ...s, pagamentos: s.pagamentos.map((p) => p.id === id ? { ...p, valor: v } : p) }))
+    await supabase.from('pagamentos').update({ valor: v }).eq('id', id)
+  }
+  const editarValorReceber = async (id, valor) => {
+    const v = Number(valor) || 0
+    setD((s) => ({ ...s, receber: s.receber.map((r) => r.id === id ? { ...r, valor_parcela: v } : r) }))
+    await supabase.from('a_receber').update({ valor_parcela: v }).eq('id', id)
+  }
   const marcarRecebido = async (id) => {
     setD((s) => ({ ...s, receber: s.receber.map((r) => r.id === id ? { ...r, status: 'Recebido', data_recebimento: today() } : r) }))
     await supabase.from('a_receber').update({ status: 'Recebido', data_recebimento: today() }).eq('id', id)
@@ -141,8 +151,7 @@ export default function Home() {
               {atraso.aVencer.map((x) => (
                 <tr key={x.id}>
                   <td>{x.quem}</td>
-                  <td className="muted" style={{ whiteSpace: 'nowrap' }}>venc. {fmtDate(x.venc)}</td>
-                  <td className="num">{brl(x.valor)}</td>
+                  <td><input className="input" type="number" step="0.01" defaultValue={x.valor} style={{ height: 28, padding: '2px 6px', fontSize: 12, width: 100, textAlign: 'right' }} onBlur={(e) => { if (Number(e.target.value) !== x.valor) editarValorPagar(x.id, e.target.value) }} title="Editar valor" /></td>
                   <td><input className="input" type="date" defaultValue={x.venc} style={{ height: 28, padding: '2px 4px', fontSize: 12 }} onChange={(e) => remarcarPagar(x.id, e.target.value)} title="Remarcar data" /></td>
                   <td><button className="btn ghost sm" onClick={() => marcarPago(x.id)}>Pago</button></td>
                 </tr>
@@ -167,7 +176,7 @@ export default function Home() {
                   {atraso.pagar.map((x) => (
                     <tr key={x.id}>
                       <td>{x.quem}</td>
-                      <td className="num" style={{ color: 'var(--danger)' }}>{brl(x.valor)}</td>
+                      <td><input className="input" type="number" step="0.01" defaultValue={x.valor} style={{ height: 28, padding: '2px 6px', fontSize: 12, width: 100, textAlign: 'right', color: 'var(--danger)' }} onBlur={(e) => { if (Number(e.target.value) !== x.valor) editarValorPagar(x.id, e.target.value) }} title="Editar valor" /></td>
                       <td><input className="input" type="date" defaultValue={x.venc} style={{ height: 28, padding: '2px 4px', fontSize: 12 }} onChange={(e) => remarcarPagar(x.id, e.target.value)} title="Remarcar data" /></td>
                       <td><button className="btn ghost sm" onClick={() => marcarPago(x.id)}>Pago</button></td>
                     </tr>
@@ -183,7 +192,7 @@ export default function Home() {
                   {atraso.receber.map((x) => (
                     <tr key={x.id}>
                       <td>{x.quem}</td>
-                      <td className="num" style={{ color: 'var(--warn)' }}>{brl(x.valor)}</td>
+                      <td><input className="input" type="number" step="0.01" defaultValue={x.valor} style={{ height: 28, padding: '2px 6px', fontSize: 12, width: 100, textAlign: 'right', color: 'var(--warn)' }} onBlur={(e) => { if (Number(e.target.value) !== x.valor) editarValorReceber(x.id, e.target.value) }} title="Editar valor" /></td>
                       <td><input className="input" type="date" defaultValue={x.venc} style={{ height: 28, padding: '2px 4px', fontSize: 12 }} onChange={(e) => remarcarReceber(x.id, e.target.value)} title="Remarcar data" /></td>
                       <td><button className="btn ghost sm" onClick={() => marcarRecebido(x.id)}>Recebido</button></td>
                     </tr>
