@@ -9,8 +9,8 @@ import { parseFaturaCartao, sugerirBucket } from '../lib/faturaCartao.js'
 const n = (v) => Number(v) || 0
 const MESES_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 const rotuloMes = (ym) => { if (!ym) return '—'; const p = String(ym).slice(0, 7).split('-'); return `${MESES_PT[Number(p[1]) - 1]}/${p[0].slice(2)}` }
-const BUCKETS = ['loja', 'catelli', 'outros']
-const bktLabel = (b) => ({ loja: 'Loja', catelli: 'Catelli', outros: 'Outros' }[b] || b || '—')
+const BUCKETS = ['loja', 'catelli', 'marketing', 'priscila', 'andressa', 'outros']
+const bktLabel = (b) => ({ loja: 'Loja', catelli: 'Catelli', marketing: 'Marketing', priscila: 'Priscila', andressa: 'Andressa', outros: 'Outros' }[b] || b || '—')
 
 export default function FaturasCartao() {
   const [rows, setRows] = useState(null)
