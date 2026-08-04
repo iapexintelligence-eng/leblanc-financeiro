@@ -4,11 +4,19 @@ import { brl, fmtDate } from '../lib/format.js'
 import Modal from '../components/Modal.jsx'
 import { IcoPlus, IcoEdit, IcoSearch } from '../components/Icons.jsx'
 
-const TIPOS = ['Vendedor', 'Administrativo', 'Montador', 'Gerência', 'Assistência', 'Outro']
+// valores aceitos pelo banco (funcionarios_tipo_check)
+const TIPOS = [
+  { v: 'vendedor', t: 'Vendedor' },
+  { v: 'admin', t: 'Administrativo' },
+  { v: 'montador', t: 'Montador' },
+  { v: 'socia', t: 'Sócia / Diretoria' },
+  { v: 'terceiro', t: 'Terceiro / Outro' },
+]
+const TIPO_LABEL = Object.fromEntries(TIPOS.map((x) => [x.v, x.t]))
 const SETORES = ['Vendas', 'Administrativo', 'Financeiro', 'Montagem', 'Assistência Técnica', 'Diretoria']
 
 const vazio = {
-  nome_completo: '', cpf: '', cargo: '', tipo: 'Vendedor', setor: 'Vendas',
+  nome_completo: '', cpf: '', cargo: '', tipo: 'vendedor', setor: 'Vendas',
   salario_fixo: '', dia_pagamento: 5, data_admissao: '', ativo: true, observacoes: '',
 }
 
@@ -31,7 +39,7 @@ export default function Funcionarios() {
   const abrirEdit = (r) => setModal({
     form: {
       nome_completo: r.nome_completo || '', cpf: r.cpf || '', cargo: r.cargo || '',
-      tipo: r.tipo || 'Vendedor', setor: r.setor || 'Vendas',
+      tipo: r.tipo || 'vendedor', setor: r.setor || 'Vendas',
       salario_fixo: r.salario_fixo ?? '', dia_pagamento: r.dia_pagamento ?? 5,
       data_admissao: r.data_admissao || '', ativo: r.ativo ?? true, observacoes: r.observacoes || '',
     },
@@ -96,7 +104,7 @@ export default function Funcionarios() {
             {lista.map((r) => (
               <tr key={r.id}>
                 <td>{r.nome_completo}</td>
-                <td><span className="badge neutral">{r.tipo || '—'}</span></td>
+                <td><span className="badge neutral">{TIPO_LABEL[r.tipo] || r.tipo || '—'}</span></td>
                 <td className="muted">{r.setor || '—'}</td>
                 <td className="muted">{r.cargo || '—'}</td>
                 <td className="num">{r.salario_fixo ? brl(r.salario_fixo) : '—'}</td>
@@ -127,7 +135,7 @@ export default function Funcionarios() {
             <div className="field">
               <label>Tipo</label>
               <select className="input" value={modal.form.tipo} onChange={(e) => setF('tipo', e.target.value)}>
-                {TIPOS.map((t) => <option key={t}>{t}</option>)}
+                {TIPOS.map((t) => <option key={t.v} value={t.v}>{t.t}</option>)}
               </select>
             </div>
             <div className="field">
