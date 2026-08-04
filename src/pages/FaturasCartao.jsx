@@ -168,7 +168,7 @@ export default function FaturasCartao() {
                 <td className="muted">{rotuloMes(r.mes_ref)}</td>
                 <td className="muted">{r.data_compra ? fmtDate(r.data_compra) : '—'}</td>
                 <td>
-                  <select className="input" style={{ height: 30 }} value={BUCKETS.includes(r.bucket) ? r.bucket : 'outros'} onChange={(e) => mudarBucket(r, e.target.value)}>
+                  <select className="input" style={{ padding: '6px 10px', minWidth: 128 }} value={BUCKETS.includes(r.bucket) ? r.bucket : 'outros'} onChange={(e) => mudarBucket(r, e.target.value)}>
                     {BUCKETS.map((b) => <option key={b} value={b}>{bktLabel(b)}</option>)}
                   </select>
                 </td>
@@ -212,7 +212,7 @@ export default function FaturasCartao() {
                     <td className="muted">{it.data_compra ? fmtDate(it.data_compra) : '—'}</td>
                     <td>{it.descricao}{it.parcela ? <span className="faint" style={{ fontSize: 11 }}> · {it.parcela}</span> : null}{it.credito ? <span className="badge" style={{ marginLeft: 6, fontSize: 10 }}>crédito/pagto</span> : null}</td>
                     <td>
-                      <select className="input" style={{ height: 30, minWidth: 110 }} value={it.bucket} onChange={(e) => setItem(idx, { bucket: e.target.value })}>
+                      <select className="input" style={{ padding: '6px 10px', minWidth: 128 }} value={it.bucket} onChange={(e) => setItem(idx, { bucket: e.target.value })}>
                         {BUCKETS.map((b) => <option key={b} value={b}>{bktLabel(b)}</option>)}
                       </select>
                     </td>
