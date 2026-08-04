@@ -42,6 +42,9 @@ export default function Pagamentos() {
   const [erro, setErro] = useState('')
   const [compFile, setCompFile] = useState(null)
   const [boletoFile, setBoletoFile] = useState(null)
+  const [rateio, setRateio] = useState([])
+  const CUSTO_CATS = ['industria', 'montagem', 'frete', 'assistencia', 'compra_extra', 'gratificacao']
+  const mapCustoCat = (c) => CUSTO_CATS.includes(c) ? c : 'compra_extra'
 
   const baixar = async (path) => {
     if (!path) return
@@ -64,9 +67,16 @@ export default function Pagamentos() {
     setProjetos(data || [])
   })() }, [])
 
-  const abrirNovo = () => { setCompFile(null); setBoletoFile(null); setModal({ form: novo(), editId: null }) }
-  const abrirEdit = (r) => { setCompFile(null); setBoletoFile(null); setModal({ form: { data: r.data || today(), descricao: r.descricao || '', categoria: r.categoria || 'operacional', tipo: r.tipo || 'Eventual', valor: r.valor ?? '', forma_pagamento: r.forma_pagamento || 'PIX', data_vencimento: r.data_vencimento || '', status: r.status || 'Pendente', fornecedor: r.fornecedor || '', conta_bancaria_id: r.conta_bancaria_id ?? '', observacao: r.observacao || '', recorrente: r.recorrente ?? false, dia_vencimento: r.dia_vencimento ?? '', projeto_uid: r.projeto_uid || '', comprovante_path: r.comprovante_path || '', comprovante_nome: r.comprovante_nome || '', boleto_path: r.boleto_path || '', boleto_nome: r.boleto_nome || '' }, editId: r.id }) }
+  const abrirNovo = () => { setCompFile(null); setBoletoFile(null); setRateio([]); setModal({ form: novo(), editId: null }) }
+  const abrirEdit = async (r) => {
+    setCompFile(null); setBoletoFile(null)
+    const { data: cst } = await supabase.from('custos_operacionais').select('id, projeto_uid, valor, categoria').eq('rateio_pagamento_id', r.id)
+    setRateio((cst || []).map((c) => ({ projeto_uid: c.projeto_uid || '', valor: c.valor ?? '' })))
+    setModal({ form: { data: r.data || today(), descricao: r.descricao || '', categoria: r.categoria || 'operacional', tipo: r.tipo || 'Eventual', valor: r.valor ?? '', forma_pagamento: r.forma_pagamento || 'PIX', data_vencimento: r.data_vencimento || '', status: r.status || 'Pendente', fornecedor: r.fornecedor || '', conta_bancaria_id: r.conta_bancaria_id ?? '', observacao: r.observacao || '', recorrente: r.recorrente ?? false, dia_vencimento: r.dia_vencimento ?? '', projeto_uid: r.projeto_uid || '', comprovante_path: r.comprovante_path || '', comprovante_nome: r.comprovante_nome || '', boleto_path: r.boleto_path || '', boleto_nome: r.boleto_nome || '' }, editId: r.id }) }
   const setF = (k, v) => setModal((m) => ({ ...m, form: { ...m.form, [k]: v } }))
+  const addRateio = () => setRateio((s) => [...s, { projeto_uid: '', valor: '' }])
+  const setRat = (i, k, v) => setRateio((s) => s.map((x, j) => j === i ? { ...x, [k]: v } : x))
+  const rmRateio = (i) => setRateio((s) => s.filter((_, j) => j !== i))
 
   const salvar = async () => {
     setErro(''); const f = modal.form
@@ -90,6 +100,14 @@ export default function Pagamentos() {
       }
       await up(compFile, 'comprovante_path', 'comprovante_nome')
       await up(boletoFile, 'boleto_path', 'boleto_nome')
+      // rateio: cria um custo por contrato (entra na margem do projeto)
+      await supabase.from('custos_operacionais').delete().eq('rateio_pagamento_id', id)
+      const linhas = rateio.filter((x) => x.projeto_uid && Number(x.valor) > 0).map((x) => ({
+        data: f.data || today(), categoria: mapCustoCat(f.categoria), fornecedor: f.fornecedor || null,
+        descricao: f.descricao || null, valor: Number(x.valor), projeto_uid: x.projeto_uid,
+        rateio_pagamento_id: id, status: f.status || 'Pago',
+      }))
+      if (linhas.length) await supabase.from('custos_operacionais').insert(linhas)
     }
     setSaving(false)
     if (error) { setErro(error.message); return }
@@ -178,6 +196,33 @@ export default function Pagamentos() {
               <option value="">— sem vínculo —</option>
               {[...projetos].sort((a, b) => (a.cliente_nome || '').localeCompare(b.cliente_nome || '')).map((p) => <option key={p.projeto_uid} value={p.projeto_uid}>{p.cliente_nome || 's/ nome'} · {p.projeto_uid}</option>)}
             </select></div>
+
+          <div style={{ border: '1px solid var(--line)', borderRadius: 10, padding: 12, marginBottom: 12 }}>
+            <div className="between">
+              <b style={{ fontSize: 13 }}>Ratear entre vários contratos</b>
+              <button className="btn ghost sm" type="button" onClick={addRateio}>+ Adicionar contrato</button>
+            </div>
+            <div className="sub" style={{ margin: '4px 0 8px' }}>Um pagamento (ex.: indústria) dividido por contrato. Cada parte vira custo do projeto e entra na margem.</div>
+            {rateio.map((x, i) => (
+              <div className="row-2" key={i} style={{ marginBottom: 6, alignItems: 'end' }}>
+                <div className="field" style={{ margin: 0 }}>
+                  <select className="input" value={x.projeto_uid} onChange={(e) => setRat(i, 'projeto_uid', e.target.value)}>
+                    <option value="">— escolha o contrato —</option>
+                    {[...projetos].sort((a, b) => (a.cliente_nome || '').localeCompare(b.cliente_nome || '')).map((p) => <option key={p.projeto_uid} value={p.projeto_uid}>{p.cliente_nome || 's/ nome'} · {p.projeto_uid}</option>)}
+                  </select>
+                </div>
+                <div className="flex" style={{ gap: 6 }}>
+                  <input className="input" type="number" step="0.01" placeholder="valor" value={x.valor} onChange={(e) => setRat(i, 'valor', e.target.value)} />
+                  <button className="icon-btn" type="button" onClick={() => rmRateio(i)} title="Remover">×</button>
+                </div>
+              </div>
+            ))}
+            {rateio.length > 0 && (() => {
+              const soma = rateio.reduce((s, x) => s + (Number(x.valor) || 0), 0)
+              const dif = (Number(modal.form.valor) || 0) - soma
+              return <div className="between" style={{ marginTop: 6, fontSize: 12.5 }}><span className="muted">Somado: <b>{brl(soma)}</b></span><span style={{ color: Math.abs(dif) > 0.5 ? 'var(--warn)' : 'var(--ok)' }}>{Math.abs(dif) > 0.5 ? `faltam ${brl(dif)} p/ bater o total` : 'bate com o total ✓'}</span></div>
+            })()}
+          </div>
           <div className="row-2" style={{ alignItems: 'end' }}>
             <div className="field"><label>Conta fixa mensal?</label>
               <select className="input" value={modal.form.recorrente ? 'sim' : 'nao'} onChange={(e) => setF('recorrente', e.target.value === 'sim')}><option value="nao">Não</option><option value="sim">Sim — entra nas Contas Fixas</option></select></div>
