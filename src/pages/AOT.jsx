@@ -150,7 +150,7 @@ export default function AOT() {
             <div className="field"><label>Contrato / projeto</label>
               <select className="input" value={modal.form.projeto_uid} onChange={(e) => setF('projeto_uid', e.target.value)}>
                 <option value="">— sem vínculo —</option>
-                {projetos.map((p) => <option key={p.projeto_uid} value={p.projeto_uid}>{p.projeto_uid} · {p.cliente_nome}</option>)}
+                {[...projetos].sort((a, b) => (a.cliente_nome || '').localeCompare(b.cliente_nome || '')).map((p) => <option key={p.projeto_uid} value={p.projeto_uid}>{p.cliente_nome || 's/ nome'} · {p.projeto_uid}</option>)}
               </select></div>
           </div>
           <div className="row-2">

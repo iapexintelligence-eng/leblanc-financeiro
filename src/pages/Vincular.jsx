@@ -88,7 +88,7 @@ export default function Vincular() {
                 <td>
                   <select className="input" style={{ height: 32, minWidth: 240 }} value={r.projeto_uid || ''} onChange={(e) => vincular(r.id, e.target.value)}>
                     <option value="">— sem vínculo —</option>
-                    {projetos.map((p) => <option key={p.projeto_uid} value={p.projeto_uid}>{p.projeto_uid} · {p.cliente_nome}</option>)}
+                    {[...projetos].sort((a, b) => (a.cliente_nome || '').localeCompare(b.cliente_nome || '')).map((p) => <option key={p.projeto_uid} value={p.projeto_uid}>{p.cliente_nome || 's/ nome'} · {p.projeto_uid}</option>)}
                   </select>
                 </td>
               </tr>
