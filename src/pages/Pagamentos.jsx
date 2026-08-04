@@ -96,6 +96,7 @@ export default function Pagamentos() {
     setModal(null); carregar()
   }
 
+  const clienteDe = Object.fromEntries(projetos.map((p) => [p.projeto_uid, p.cliente_nome]))
   const lista = (rows || []).filter((r) => {
     if (busca && !((r.descricao || '').toLowerCase().includes(busca.toLowerCase()) || (r.fornecedor || '').toLowerCase().includes(busca.toLowerCase()))) return false
     if (filtro === 'pendentes') return r.status !== 'Pago'
@@ -130,7 +131,7 @@ export default function Pagamentos() {
             {lista.map((r) => (
               <tr key={r.id}>
                 <td className="muted">{fmtDate(r.data)}</td>
-                <td>{r.descricao}{r.fornecedor ? <span className="faint"> · {r.fornecedor}</span> : ''}</td>
+                <td>{r.descricao}{r.fornecedor ? <span className="faint"> · {r.fornecedor}</span> : ''}{r.projeto_uid ? <div className="faint" style={{ fontSize: 11 }}>📄 {clienteDe[r.projeto_uid] || r.projeto_uid}</div> : null}</td>
                 <td><span className="badge neutral">{CAT_LABEL[r.categoria] || r.categoria || '—'}</span></td>
                 <td className="num">{brl(r.valor)}</td>
                 <td className="muted">{fmtDate(r.data_vencimento)}</td>
@@ -166,10 +167,10 @@ export default function Pagamentos() {
             <div className="field"><label>Conta bancária</label><select className="input" value={modal.form.conta_bancaria_id || ''} onChange={(e) => setF('conta_bancaria_id', e.target.value)}><option value="">— não definir —</option>{contas.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}</select></div>
           </div>
           <div className="field"><label>Fornecedor</label><input className="input" value={modal.form.fornecedor} onChange={(e) => setF('fornecedor', e.target.value)} /></div>
-          <div className="field"><label>Contrato / projeto (opcional)</label>
+          <div className="field"><label>Contrato do cliente (vincular)</label>
             <select className="input" value={modal.form.projeto_uid} onChange={(e) => setF('projeto_uid', e.target.value)}>
               <option value="">— sem vínculo —</option>
-              {projetos.map((p) => <option key={p.projeto_uid} value={p.projeto_uid}>{p.projeto_uid} · {p.cliente_nome}</option>)}
+              {[...projetos].sort((a, b) => (a.cliente_nome || '').localeCompare(b.cliente_nome || '')).map((p) => <option key={p.projeto_uid} value={p.projeto_uid}>{p.cliente_nome || 's/ nome'} · {p.projeto_uid}</option>)}
             </select></div>
           <div className="row-2" style={{ alignItems: 'end' }}>
             <div className="field"><label>Conta fixa mensal?</label>
