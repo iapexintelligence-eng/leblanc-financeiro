@@ -25,7 +25,7 @@ const CATEGORIAS = [
   { v: 'outros', t: 'Outros' },
 ]
 const CAT_LABEL = Object.fromEntries(CATEGORIAS.map((c) => [c.v, c.t]))
-const TIPOS = ['Eventual', 'Fixo', 'Recorrente']
+const TIPOS = ['Eventual', 'Fixa']
 const FORMAS = ['PIX', 'Boleto', 'Transferência', 'Cartão', 'Dinheiro']
 const STATUS = ['Pendente', 'Pago']
 
