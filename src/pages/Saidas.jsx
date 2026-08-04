@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { brl, fmtDate } from '../lib/format.js'
 import { IcoSearch } from '../components/Icons.jsx'
+import Modal from '../components/Modal.jsx'
 
 const n = (v) => Number(v) || 0
 const MESES_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
@@ -23,6 +24,27 @@ export default function Saidas() {
   const [catF, setCatF] = useState('todas')
   const [fornF, setFornF] = useState('todos')
   const [aberto, setAberto] = useState(null)
+  const [rat, setRatModal] = useState(null) // { r, linhas:[{projeto_uid, valor}] }
+  const mapCustoCat = (c) => CUSTO_CATS.includes(c) ? c : 'compra_extra'
+
+  const abrirRateio = async (r) => {
+    const { data } = await supabase.from('custos_operacionais').select('projeto_uid, valor').eq('rateio_pagamento_id', r.id)
+    const linhas = (data || []).map((c) => ({ projeto_uid: c.projeto_uid || '', valor: c.valor ?? '' }))
+    setRatModal({ r, linhas: linhas.length ? linhas : [{ projeto_uid: '', valor: '' }] })
+  }
+  const salvarRateio = async () => {
+    const { r, linhas } = rat
+    await supabase.from('custos_operacionais').delete().eq('rateio_pagamento_id', r.id)
+    const novos = linhas.filter((x) => x.projeto_uid && Number(x.valor) > 0).map((x) => ({
+      data: r.data, categoria: mapCustoCat(r.categoria), fornecedor: r.fornecedor && r.fornecedor !== '—' ? r.fornecedor : null,
+      descricao: r.descricao || null, valor: Number(x.valor), projeto_uid: x.projeto_uid, rateio_pagamento_id: r.id, status: r.status,
+    }))
+    if (novos.length) { const { error } = await supabase.from('custos_operacionais').insert(novos); if (error) { setErro(error.message); return } }
+    // recarrega custos p/ o drill-down refletir
+    const { data } = await supabase.from('custos_operacionais').select('id, data, categoria, fornecedor, descricao, valor, projeto_uid').limit(5000)
+    setCustos(data || [])
+    setRatModal(null)
+  }
 
   useEffect(() => {
     (async () => {
@@ -157,7 +179,13 @@ export default function Saidas() {
                     <td><select className="input" style={{ height: 30, padding: '2px 6px', fontSize: 12.5, minWidth: 120 }} value={r.categoria} onChange={(e) => mudarCategoria(r.id, e.target.value)}>{CATS.map((c) => <option key={c} value={c}>{labelCat(c)}</option>)}</select></td>
                     <td>{r.fornecedor}</td>
                     <td><input className="input" style={{ height: 30, padding: '2px 8px', fontSize: 12.5, minWidth: 180 }} defaultValue={r.descricao} placeholder="descreva…" onBlur={(e) => { if (e.target.value !== r.descricao) salvarDescricao(r.id, e.target.value) }} /></td>
-                    <td><select className="input" style={{ height: 30, padding: '2px 6px', fontSize: 12, minWidth: 120 }} value={r.projeto_uid} onChange={(e) => mudarContrato(r.id, e.target.value)}><option value="">—</option>{projetos.map((p) => <option key={p.projeto_uid} value={p.projeto_uid}>{p.projeto_uid}</option>)}</select></td>
+                    <td>
+                      <select className="input" style={{ height: 30, padding: '2px 6px', fontSize: 12, minWidth: 150 }} value={r.projeto_uid} onChange={(e) => mudarContrato(r.id, e.target.value)}>
+                        <option value="">— sem contrato —</option>
+                        {[...projetos].sort((a, b) => (a.cliente_nome || '').localeCompare(b.cliente_nome || '')).map((p) => <option key={p.projeto_uid} value={p.projeto_uid}>{p.cliente_nome || p.projeto_uid}</option>)}
+                      </select>
+                      <button className="btn ghost sm" style={{ marginTop: 4 }} onClick={() => abrirRateio(r)}>Ratear</button>
+                    </td>
                     <td className="num">{brl(r.valor)}</td>
                     <td>{r.status === 'Pago' ? <span className="badge ok">Pago</span> : <span className="badge warn">{r.status}</span>}</td>
                   </tr>
@@ -192,6 +220,29 @@ export default function Saidas() {
           {lista.length > 0 && <tfoot><tr><td colSpan="6"><b>TOTAL</b></td><td className="num"><b>{brl(total)}</b></td><td></td></tr></tfoot>}
         </table>
       </div>
+
+      {rat && (
+        <Modal title="Ratear pagamento entre contratos" onClose={() => setRatModal(null)}
+          footer={<><button className="btn ghost" onClick={() => setRatModal(null)}>Cancelar</button><button className="btn" onClick={salvarRateio}>Salvar rateio</button></>}>
+          <div className="sub" style={{ marginBottom: 10 }}>{rat.r.fornecedor} · {rat.r.descricao || '—'} · total <b>{brl(rat.r.valor)}</b>. Divida por contrato; cada parte vira custo do projeto.</div>
+          {rat.linhas.map((x, i) => (
+            <div className="row-2" key={i} style={{ marginBottom: 6, alignItems: 'end' }}>
+              <div className="field" style={{ margin: 0 }}>
+                <select className="input" value={x.projeto_uid} onChange={(e) => setRatModal((m) => ({ ...m, linhas: m.linhas.map((l, j) => j === i ? { ...l, projeto_uid: e.target.value } : l) }))}>
+                  <option value="">— escolha o contrato —</option>
+                  {[...projetos].sort((a, b) => (a.cliente_nome || '').localeCompare(b.cliente_nome || '')).map((p) => <option key={p.projeto_uid} value={p.projeto_uid}>{p.cliente_nome || p.projeto_uid}</option>)}
+                </select>
+              </div>
+              <div className="flex" style={{ gap: 6 }}>
+                <input className="input" type="number" step="0.01" placeholder="valor" value={x.valor} onChange={(e) => setRatModal((m) => ({ ...m, linhas: m.linhas.map((l, j) => j === i ? { ...l, valor: e.target.value } : l) }))} />
+                <button className="icon-btn" type="button" onClick={() => setRatModal((m) => ({ ...m, linhas: m.linhas.filter((_, j) => j !== i) }))}>×</button>
+              </div>
+            </div>
+          ))}
+          <button className="btn ghost sm" type="button" onClick={() => setRatModal((m) => ({ ...m, linhas: [...m.linhas, { projeto_uid: '', valor: '' }] }))}>+ Adicionar contrato</button>
+          {(() => { const soma = rat.linhas.reduce((s, x) => s + (Number(x.valor) || 0), 0); const dif = n(rat.r.valor) - soma; return <div className="between" style={{ marginTop: 10, fontSize: 13 }}><span className="muted">Somado: <b>{brl(soma)}</b></span><span style={{ color: Math.abs(dif) > 0.5 ? 'var(--warn)' : 'var(--ok)' }}>{Math.abs(dif) > 0.5 ? `faltam ${brl(dif)}` : 'bate com o total ✓'}</span></div> })()}
+        </Modal>
+      )}
     </div>
   )
 }
