@@ -92,9 +92,14 @@ export default function Home() {
       totalReceber: receber.reduce((s, x) => s + x.valor, 0) }
   }, [d])
 
-  const marcarPago = async (id) => {
-    setD((s) => ({ ...s, pagamentos: s.pagamentos.map((p) => p.id === id ? { ...p, status: 'Pago', data_pagamento: today() } : p) }))
-    await supabase.from('pagamentos').update({ status: 'Pago', data_pagamento: today() }).eq('id', id)
+  const marcarPago = async (id, juros = 0) => {
+    setD((s) => ({ ...s, pagamentos: s.pagamentos.map((p) => p.id === id ? { ...p, status: 'Pago', data_pagamento: today(), juros } : p) }))
+    await supabase.from('pagamentos').update({ status: 'Pago', data_pagamento: today(), juros }).eq('id', id)
+  }
+  const pagarComJuros = (id) => {
+    const v = window.prompt('Pagamento em ATRASO. Informe os juros pagos (R$) — pode ser 0:', '0')
+    if (v === null) return
+    marcarPago(id, Number(String(v).replace(',', '.')) || 0)
   }
   const remarcarPagar = async (id, novaData) => {
     if (!novaData) return
@@ -178,7 +183,7 @@ export default function Home() {
                       <td>{x.quem}</td>
                       <td><input className="input" type="number" step="0.01" defaultValue={x.valor} style={{ height: 28, padding: '2px 6px', fontSize: 12, width: 100, textAlign: 'right', color: 'var(--danger)' }} onBlur={(e) => { if (Number(e.target.value) !== x.valor) editarValorPagar(x.id, e.target.value) }} title="Editar valor" /></td>
                       <td><input className="input" type="date" defaultValue={x.venc} style={{ height: 28, padding: '2px 4px', fontSize: 12 }} onChange={(e) => remarcarPagar(x.id, e.target.value)} title="Remarcar data" /></td>
-                      <td><button className="btn ghost sm" onClick={() => marcarPago(x.id)}>Pago</button></td>
+                      <td><button className="btn ghost sm" onClick={() => pagarComJuros(x.id)}>Pago</button></td>
                     </tr>
                   ))}
                 </tbody></table>
