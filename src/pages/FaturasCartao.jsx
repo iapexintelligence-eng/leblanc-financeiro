@@ -4,6 +4,7 @@ import { brl, fmtDate, today } from '../lib/format.js'
 import { IcoSearch, IcoTrash } from '../components/Icons.jsx'
 import Modal from '../components/Modal.jsx'
 import { extrairLinhas } from '../lib/pdfLer.js'
+import { ocrImagem } from '../lib/ocr.js'
 import { parseFaturaCartao, sugerirBucket } from '../lib/faturaCartao.js'
 
 const n = (v) => Number(v) || 0
@@ -23,6 +24,7 @@ export default function FaturasCartao() {
   const [salvando, setSalvando] = useState(false)
   const [pendente, setPendente] = useState(null) // File aguardando senha
   const [senha, setSenha] = useState('')
+  const [ocrProg, setOcrProg] = useState(null) // progresso do OCR (0..100) ou null
   const fileRef = useRef(null)
 
   const carregar = async () => {
@@ -74,7 +76,33 @@ export default function FaturasCartao() {
     setRows((s) => s.filter((x) => x.id !== r.id))
   }
 
-  // ---- Importar PDF ----
+  // ---- Importar PDF ou FOTO ----
+  const montarPreview = (r, foto = false) => {
+    if (!r.itens.length) {
+      setErro('Não encontrei transações. Se a foto estiver tremida/cortada, tente uma mais nítida; se for de um banco diferente, me avise.')
+      return false
+    }
+    const itens = r.itens.map((it) => ({
+      ...it,
+      incluir: !it.credito,
+      bucket: it.credito ? 'outros' : sugerirBucket(it.descricao),
+    }))
+    setImp({ cartao: r.cartao || '', mesRef: r.mesRef || '', itens, foto })
+    setPendente(null); setSenha('')
+    return true
+  }
+
+  const lerFoto = async (file) => {
+    setErro(''); setLendo(true); setOcrProg(0)
+    try {
+      const linhas = await ocrImagem(file, (p) => setOcrProg(p))
+      montarPreview(parseFaturaCartao(linhas), true)
+    } catch (err) {
+      setErro('Não consegui ler a foto: ' + (err?.message || err))
+    }
+    setOcrProg(null); setLendo(false)
+  }
+
   const lerFatura = async (file, pass) => {
     setErro(''); setLendo(true)
     try {
@@ -84,13 +112,7 @@ export default function FaturasCartao() {
         setErro('Não encontrei transações nesse PDF. Se for de um banco diferente, me avise que ajusto o leitor.')
         setLendo(false); return
       }
-      const itens = r.itens.map((it) => ({
-        ...it,
-        incluir: !it.credito, // créditos/pagamentos vêm desmarcados
-        bucket: it.credito ? 'outros' : sugerirBucket(it.descricao),
-      }))
-      setImp({ cartao: r.cartao || '', mesRef: r.mesRef || '', itens })
-      setPendente(null); setSenha('')
+      montarPreview(r)
     } catch (err) {
       const nome = err?.name || ''
       const cod = err?.code
@@ -108,7 +130,8 @@ export default function FaturasCartao() {
     e.target.value = ''
     if (!file) return
     setSenha('')
-    lerFatura(file, '')
+    if (file.type?.startsWith('image/')) lerFoto(file)
+    else lerFatura(file, '')
   }
 
   const impInclusos = useMemo(() => (imp?.itens || []).filter((i) => i.incluir), [imp])
@@ -139,11 +162,11 @@ export default function FaturasCartao() {
       <div className="between">
         <div>
           <h3>Faturas de cartão — rateio</h3>
-          <div className="sub">Suba o PDF da fatura: o sistema lê as compras e você marca de quem é cada uma (loja / Catelli). Depois marque o que já foi cobrado (repassado).</div>
+          <div className="sub">Suba o PDF da fatura <b>ou uma foto/print</b>: o sistema lê as compras e você marca de quem é cada uma (loja / Catelli). Depois marque o que já foi cobrado (repassado).</div>
         </div>
         <div className="tools">
-          <input ref={fileRef} type="file" accept="application/pdf" style={{ display: 'none' }} onChange={aoEscolherArquivo} />
-          <button className="btn" onClick={() => fileRef.current?.click()} disabled={lendo}>{lendo ? 'Lendo PDF…' : '⬆ Subir fatura (PDF)'}</button>
+          <input ref={fileRef} type="file" accept="application/pdf,image/*" style={{ display: 'none' }} onChange={aoEscolherArquivo} />
+          <button className="btn" onClick={() => fileRef.current?.click()} disabled={lendo}>{lendo ? (ocrProg != null ? `Lendo foto… ${ocrProg}%` : 'Lendo…') : '⬆ Subir fatura (PDF ou foto)'}</button>
         </div>
       </div>
 
@@ -218,11 +241,12 @@ export default function FaturasCartao() {
       )}
 
       {imp && (
-        <Modal title="Importar fatura do PDF" onClose={() => setImp(null)} wide
+        <Modal title="Importar fatura" onClose={() => setImp(null)} wide
           footer={<><button className="btn ghost" onClick={() => setImp(null)}>Cancelar</button><button className="btn" onClick={salvarImport} disabled={salvando}>{salvando ? 'Importando…' : `Importar ${impInclusos.length} item(ns) · ${brl(impTotal)}`}</button></>}>
           {erro && <div className="login-err" style={{ marginBottom: 12 }}>{erro}</div>}
+          {imp.foto && <div className="sub" style={{ marginBottom: 12, background: 'var(--warn-bg, #fff7e6)', border: '1px solid var(--line)', borderRadius: 8, padding: '8px 10px' }}>📷 Lido de uma foto. A leitura por imagem pode errar um número ou uma data — <b>confira os valores</b> antes de importar. Você pode editar data, descrição e valor aqui mesmo.</div>}
           <div className="grid cols-2" style={{ gap: 12, marginBottom: 12 }}>
-            <div className="field"><label>Cartão</label><input className="input" value={imp.cartao} onChange={(e) => setImp((s) => ({ ...s, cartao: e.target.value }))} placeholder="Ex.: Sicredi Visa final 9514" /></div>
+            <div className="field"><label>Cartão</label><input className="input" value={imp.cartao} onChange={(e) => setImp((s) => ({ ...s, cartao: e.target.value }))} placeholder="Ex.: Nubank / Sicredi Visa final 9514" /></div>
             <div className="field"><label>Mês de referência (AAAA-MM)</label><input className="input" value={imp.mesRef} onChange={(e) => setImp((s) => ({ ...s, mesRef: e.target.value }))} placeholder="2026-08" /></div>
           </div>
           <div className="between" style={{ marginBottom: 8 }}>
@@ -234,19 +258,22 @@ export default function FaturasCartao() {
           </div>
           <div className="table-wrap" style={{ maxHeight: 380, overflow: 'auto' }}>
             <table>
-              <thead><tr><th style={{ width: 34 }}></th><th>Data</th><th>Descrição</th><th>Bucket</th><th className="num">Valor</th></tr></thead>
+              <thead><tr><th style={{ width: 34 }}></th><th style={{ width: 140 }}>Data</th><th>Descrição</th><th>Bucket</th><th className="num" style={{ width: 120 }}>Valor</th></tr></thead>
               <tbody>
                 {imp.itens.map((it, idx) => (
                   <tr key={idx} style={{ opacity: it.incluir ? 1 : 0.45 }}>
                     <td><input type="checkbox" checked={it.incluir} onChange={(e) => setItem(idx, { incluir: e.target.checked })} /></td>
-                    <td className="muted">{it.data_compra ? fmtDate(it.data_compra) : '—'}</td>
-                    <td>{it.descricao}{it.parcela ? <span className="faint" style={{ fontSize: 11 }}> · {it.parcela}</span> : null}{it.credito ? <span className="badge" style={{ marginLeft: 6, fontSize: 10 }}>crédito/pagto</span> : null}</td>
+                    <td><input className="input" type="date" style={{ padding: '6px 8px' }} value={it.data_compra || ''} onChange={(e) => setItem(idx, { data_compra: e.target.value })} /></td>
+                    <td>
+                      <input className="input" style={{ padding: '6px 8px' }} value={it.descricao} onChange={(e) => setItem(idx, { descricao: e.target.value })} />
+                      {it.parcela ? <span className="faint" style={{ fontSize: 11 }}> · {it.parcela}</span> : null}{it.credito ? <span className="badge" style={{ marginLeft: 6, fontSize: 10 }}>crédito/pagto</span> : null}
+                    </td>
                     <td>
                       <select className="input" style={{ padding: '6px 10px', minWidth: 128 }} value={it.bucket} onChange={(e) => setItem(idx, { bucket: e.target.value })}>
                         {BUCKETS.map((b) => <option key={b} value={b}>{bktLabel(b)}</option>)}
                       </select>
                     </td>
-                    <td className="num" style={{ color: it.valor < 0 ? 'var(--danger)' : 'inherit' }}>{brl(it.valor)}</td>
+                    <td className="num"><input className="input num" type="number" step="0.01" style={{ padding: '6px 8px', textAlign: 'right', color: it.valor < 0 ? 'var(--danger)' : 'inherit' }} value={it.valor} onChange={(e) => setItem(idx, { valor: e.target.value === '' ? '' : Number(e.target.value) })} /></td>
                   </tr>
                 ))}
               </tbody>

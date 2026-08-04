@@ -142,12 +142,91 @@ export function parseFaturaCartao(lines) {
       continue
     }
   }
+  // Se não casou nenhum formato de PDF (ex.: veio de FOTO/OCR), tenta Nubank.
+  if (!itens.length) {
+    const nb = parseNubankTexto(arr)
+    if (nb.itens.length) return nb
+  }
+  return { cartao, mesRef, itens }
+}
+
+// ---- Nubank (a partir de FOTO/print via OCR) ----
+const MESES_FULL = { janeiro: 1, fevereiro: 2, marco: 3, 'março': 3, abril: 4, maio: 5, junho: 6, julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12 }
+const normLinha = (l) => l
+  .replace(/R\s*[S$§5]\s*(?=-?\s*[\d])/g, 'R$ ') // "RS 747,60" / "R§" -> "R$ "
+  .replace(/[−—–]/g, '-') // sinais de menos unicode -> '-'
+  .replace(/\s+/g, ' ').trim()
+
+function nubankCabecalho(lines) {
+  let mesRef = ''
+  for (const l of lines) {
+    const m = l.match(/\b(janeiro|fevereiro|mar[cç]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+(\d{4})/i)
+    if (m) { const mm = MESES_FULL[m[1].toLowerCase()]; if (mm) { mesRef = `${m[2]}-${pad(mm)}`; break } }
+  }
+  return { cartao: 'Nubank', mesRef }
+}
+
+// Recebe texto (linhas) do OCR de um print da fatura do Nubank.
+export function parseNubankTexto(lines) {
+  const arr = (Array.isArray(lines) ? lines : String(lines).split('\n')).map(normLinha).filter(Boolean)
+  const { cartao, mesRef } = nubankCabecalho(arr)
+  const anoFat = /^\d{4}-\d{2}$/.test(mesRef) ? Number(mesRef.slice(0, 4)) : null
+  const itens = []
+  let pendingDesc = ''
+  const reValor = /R\$\s*-?\s*[\d.]+,\d{2}/
+  const reParc = /Parcela\s*(\d{1,2}\/\d{1,2})/i
+
+  for (const l of arr) {
+    const parc = l.match(reParc)
+    if (reValor.test(l)) {
+      const tokens = l.match(/R\$\s*-?\s*[\d.]+,\d{2}/g)
+      const valTok = tokens[tokens.length - 1]
+      const idx = l.lastIndexOf(valTok)
+      // data no início: "30 JUL" / "30JUL"
+      const dm = l.match(/^\s*(\d{1,2})\s*([A-Za-zç]{3})\b/)
+      let head = ''
+      let dia = null, mon = null
+      if (dm) { dia = Number(dm[1]); mon = MESES[dm[2].toLowerCase().slice(0, 3)]; head = l.slice(dm[0].length) }
+      else head = l
+      // descrição = do começo (após data) até o valor
+      let desc = (head.slice(0, head.length - (l.length - idx))).trim()
+      if (desc === head.trim()) desc = head.slice(0, idx >= 0 ? idx : head.length).trim()
+      desc = l.slice(dm ? dm[0].length : 0, idx).trim()
+      // se não achou data, remove um token-lixo inicial que contenha mês (ex.: "MNJUL", "tJUL")
+      if (!dm) desc = desc.replace(/^\S*(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\S*\s*/i, (m0) => { const mm = m0.match(/(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)/i); if (mm) mon = MESES[mm[1].toLowerCase()]; return '' }).trim()
+      desc = ((pendingDesc + ' ' + desc).trim()).replace(/[-\s]+$/, '').trim()
+      desc = desc.replace(/^[^A-Za-zÀ-ÿ0-9]+/, '').replace(/^cart\w{0,2}es\s+/i, '').trim()
+      pendingDesc = ''
+      // crédito só pelo rótulo (o "-" antes do R$ costuma ser separador "desc - Parcela")
+      const credito = /pagamento recebido|estorno|cr[eé]dito|reembolso/i.test(l) || /R\$\s*-\s*[\d.]+,\d{2}/.test(l)
+      // pula linha de total (sem data e sem descrição textual)
+      if (!dm && !/[A-Za-zÀ-ÿ]{3}/.test(desc)) continue
+      let valor = parseMoney(valTok)
+      if (valor === null) continue
+      valor = credito ? -Math.abs(valor) : Math.abs(valor)
+      let data = null
+      if (dia && mon && anoFat) { let ano = anoFat; if (mon > Number(mesRef.slice(5, 7))) ano -= 1; data = `${ano}-${pad(mon)}-${pad(dia)}` }
+      const pInline = desc.match(reParc)
+      itens.push({
+        data_compra: data,
+        descricao: (desc.replace(reParc, '').replace(/[-\s]+$/, '').trim()) || l,
+        parcela: parc ? parc[1] : (pInline ? pInline[1] : ''),
+        valor_usd: null, valor,
+        credito, encargo: /\b(iof|juros|encargo|anuidade|multa|rotativo)\b/i.test(desc),
+      })
+    } else if (parc && itens.length) {
+      itens[itens.length - 1].parcela = parc[1]
+    } else if (/[A-Za-zÀ-ÿ]{3}/.test(l) && !/vencimento|fechamento|fatura|cart\w{0,2}es|\bde \d{4}\b|janeiro|fevereiro|mar[cç]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro/i.test(l)) {
+      // possível descrição que "quebrou" para cima da linha do valor
+      pendingDesc = l
+    }
+  }
   return { cartao, mesRef, itens }
 }
 
 // Sugestão simples de bucket por palavra-chave. Ajustável.
 const REGRAS = [
-  { re: /(anthropic|openai|supabase|google ads|google workspace|canva|facebk|facebook|meta |amazon ad|amazonprime|amazon prime|apple com|uber|dl google|99app|99 ?inapp|pop \d)/i, bucket: 'loja' },
+  { re: /(anthropic|openai|supabase|google ads|google workspace|canva|facebk|facebook|meta |netlify|amazon ad|amazonprime|amazon prime|apple com|uber|dl google|99app|99 ?inapp|pop \d)/i, bucket: 'loja' },
 ]
 export function sugerirBucket(descricao, padrao = 'loja') {
   for (const r of REGRAS) if (r.re.test(descricao || '')) return r.bucket
