@@ -18,6 +18,11 @@ export default function Custos() {
   const [saving, setSaving] = useState(false)
   const [erro, setErro] = useState('')
   const [projetos, setProjetos] = useState([])
+  const [rateio, setRateio] = useState([])
+  const addRateio = () => setRateio((s) => [...s, { projeto_uid: '', valor: '' }])
+  const setRat = (i, k, v) => setRateio((s) => s.map((x, j) => j === i ? { ...x, [k]: v } : x))
+  const rmRateio = (i) => setRateio((s) => s.filter((_, j) => j !== i))
+  const projOrd = () => [...projetos].sort((a, b) => (a.cliente_nome || '').localeCompare(b.cliente_nome || ''))
 
   const carregar = async () => {
     const { data, error } = await supabase.from('custos_operacionais').select('*').order('data', { ascending: false }).limit(1000)
@@ -32,8 +37,8 @@ export default function Custos() {
     })()
   }, [])
 
-  const abrirNovo = () => setModal({ form: novo(), editId: null })
-  const abrirEdit = (r) => setModal({ form: { data: r.data || today(), categoria: r.categoria || 'Material', fornecedor: r.fornecedor || '', descricao: r.descricao || '', valor: r.valor ?? '', forma_pagamento: r.forma_pagamento || 'PIX', status: r.status || 'Pendente', projeto_uid: r.projeto_uid || '', projeto_relacionado: r.projeto_relacionado || '', montador: r.montador || '', observacao: r.observacao || '' }, editId: r.id })
+  const abrirNovo = () => { setRateio([]); setModal({ form: novo(), editId: null }) }
+  const abrirEdit = (r) => { setRateio([]); setModal({ form: { data: r.data || today(), categoria: r.categoria || 'Material', fornecedor: r.fornecedor || '', descricao: r.descricao || '', valor: r.valor ?? '', forma_pagamento: r.forma_pagamento || 'PIX', status: r.status || 'Pendente', projeto_uid: r.projeto_uid || '', projeto_relacionado: r.projeto_relacionado || '', montador: r.montador || '', observacao: r.observacao || '' }, editId: r.id }) }
   const setF = (k, v) => setModal((m) => ({ ...m, form: { ...m.form, [k]: v } }))
 
   const salvar = async () => {
@@ -42,8 +47,14 @@ export default function Custos() {
     setSaving(true)
     const projLabel = f.projeto_uid ? (projetos.find((p) => p.projeto_uid === f.projeto_uid)?.cliente_nome || f.projeto_relacionado || null) : (f.projeto_relacionado || null)
     const payload = { data: f.data || today(), categoria: f.categoria, fornecedor: f.fornecedor || null, descricao: f.descricao || null, valor: f.valor === '' ? null : Number(f.valor), forma_pagamento: f.forma_pagamento || null, status: f.status, projeto_uid: f.projeto_uid || null, projeto_relacionado: projLabel, montador: f.montador || null, observacao: f.observacao || null }
+    const linhasRateio = rateio.filter((x) => x.projeto_uid && Number(x.valor) > 0)
     let error
     if (modal.editId) { ({ error } = await supabase.from('custos_operacionais').update(payload).eq('id', modal.editId)); if (!error) await registrarLog({ tabela: 'custos_operacionais', registroId: modal.editId, acao: 'edicao', descricao: `Custo: ${payload.fornecedor || payload.descricao}` }) }
+    else if (linhasRateio.length) {
+      // ratear: cria um custo por contrato
+      const novos = linhasRateio.map((x) => ({ ...payload, projeto_uid: x.projeto_uid, projeto_relacionado: projetos.find((p) => p.projeto_uid === x.projeto_uid)?.cliente_nome || null, valor: Number(x.valor) }))
+      ;({ error } = await supabase.from('custos_operacionais').insert(novos))
+    }
     else { ({ error } = await supabase.from('custos_operacionais').insert(payload)) }
     setSaving(false)
     if (error) { setErro(error.message); return }
@@ -103,12 +114,38 @@ export default function Custos() {
             <div className="field"><label>Status</label><select className="input" value={modal.form.status} onChange={(e) => setF('status', e.target.value)}>{STATUS.map((c) => <option key={c}>{c}</option>)}</select></div>
             <div className="field"><label>Montador</label><input className="input" value={modal.form.montador} onChange={(e) => setF('montador', e.target.value)} placeholder="opcional" /></div>
           </div>
-          <div className="field"><label>Contrato / projeto (para margem por contrato)</label>
-            <select className="input" value={modal.form.projeto_uid} onChange={(e) => setF('projeto_uid', e.target.value)}>
-              <option value="">— sem vínculo —</option>
-              {projetos.map((p) => <option key={p.projeto_uid} value={p.projeto_uid}>{p.projeto_uid} · {p.cliente_nome}</option>)}
-            </select>
-          </div>
+          {rateio.length === 0 && (
+            <div className="field"><label>Contrato do cliente (para margem por contrato)</label>
+              <select className="input" value={modal.form.projeto_uid} onChange={(e) => setF('projeto_uid', e.target.value)}>
+                <option value="">— sem vínculo —</option>
+                {projOrd().map((p) => <option key={p.projeto_uid} value={p.projeto_uid}>{p.cliente_nome || 's/ nome'} · {p.projeto_uid}</option>)}
+              </select>
+            </div>
+          )}
+          {!modal.editId && (
+            <div style={{ border: '1px solid var(--line)', borderRadius: 10, padding: 12, marginBottom: 12 }}>
+              <div className="between">
+                <b style={{ fontSize: 13 }}>Ratear entre vários contratos</b>
+                <button className="btn ghost sm" type="button" onClick={addRateio}>+ Adicionar contrato</button>
+              </div>
+              <div className="sub" style={{ margin: '4px 0 8px' }}>Use quando um custo (ex.: indústria) é de vários contratos. Cria um custo por contrato. Se usar isto, o contrato único acima é ignorado.</div>
+              {rateio.map((x, i) => (
+                <div className="row-2" key={i} style={{ marginBottom: 6, alignItems: 'end' }}>
+                  <div className="field" style={{ margin: 0 }}>
+                    <select className="input" value={x.projeto_uid} onChange={(e) => setRat(i, 'projeto_uid', e.target.value)}>
+                      <option value="">— escolha o contrato —</option>
+                      {projOrd().map((p) => <option key={p.projeto_uid} value={p.projeto_uid}>{p.cliente_nome || 's/ nome'} · {p.projeto_uid}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex" style={{ gap: 6 }}>
+                    <input className="input" type="number" step="0.01" placeholder="valor" value={x.valor} onChange={(e) => setRat(i, 'valor', e.target.value)} />
+                    <button className="icon-btn" type="button" onClick={() => rmRateio(i)}>×</button>
+                  </div>
+                </div>
+              ))}
+              {rateio.length > 0 && (() => { const soma = rateio.reduce((s, x) => s + (Number(x.valor) || 0), 0); const dif = (Number(modal.form.valor) || 0) - soma; return <div className="between" style={{ marginTop: 6, fontSize: 12.5 }}><span className="muted">Somado: <b>{brl(soma)}</b></span><span style={{ color: Math.abs(dif) > 0.5 ? 'var(--warn)' : 'var(--ok)' }}>{Math.abs(dif) > 0.5 ? `dif. ${brl(dif)} vs. valor` : 'bate com o valor ✓'}</span></div> })()}
+            </div>
+          )}
           <div className="field"><label>Observação</label><textarea className="input" value={modal.form.observacao} onChange={(e) => setF('observacao', e.target.value)} /></div>
         </Modal>
       )}
