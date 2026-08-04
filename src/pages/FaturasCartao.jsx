@@ -21,6 +21,8 @@ export default function FaturasCartao() {
   const [imp, setImp] = useState(null) // { cartao, mesRef, itens:[{...,incluir,bucket}] }
   const [lendo, setLendo] = useState(false)
   const [salvando, setSalvando] = useState(false)
+  const [pendente, setPendente] = useState(null) // File aguardando senha
+  const [senha, setSenha] = useState('')
   const fileRef = useRef(null)
 
   const carregar = async () => {
@@ -73,25 +75,40 @@ export default function FaturasCartao() {
   }
 
   // ---- Importar PDF ----
-  const aoEscolherArquivo = async (e) => {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
+  const lerFatura = async (file, pass) => {
     setErro(''); setLendo(true)
     try {
-      const linhas = await extrairLinhas(file)
+      const linhas = await extrairLinhas(file, pass || undefined)
       const r = parseFaturaCartao(linhas)
-      if (!r.itens.length) { setErro('Não encontrei transações nesse PDF. Confira se é a fatura do cartão.'); setLendo(false); return }
+      if (!r.itens.length) {
+        setErro('Não encontrei transações nesse PDF. Se for de um banco diferente, me avise que ajusto o leitor.')
+        setLendo(false); return
+      }
       const itens = r.itens.map((it) => ({
         ...it,
         incluir: !it.credito, // créditos/pagamentos vêm desmarcados
         bucket: it.credito ? 'outros' : sugerirBucket(it.descricao),
       }))
       setImp({ cartao: r.cartao || '', mesRef: r.mesRef || '', itens })
+      setPendente(null); setSenha('')
     } catch (err) {
-      setErro('Não consegui ler o PDF: ' + (err?.message || err))
+      const nome = err?.name || ''
+      const cod = err?.code
+      if (nome === 'PasswordException' || cod === 1 || cod === 2) {
+        setPendente(file) // guarda o arquivo e pede a senha
+        setErro(cod === 2 ? 'Senha incorreta. Tente de novo.' : '')
+      } else {
+        setErro('Não consegui ler o PDF: ' + (err?.message || err))
+      }
     }
     setLendo(false)
+  }
+  const aoEscolherArquivo = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setSenha('')
+    lerFatura(file, '')
   }
 
   const impInclusos = useMemo(() => (imp?.itens || []).filter((i) => i.incluir), [imp])
@@ -186,6 +203,19 @@ export default function FaturasCartao() {
           {lista.length > 0 && <tfoot><tr><td colSpan="5"><b>TOTAL</b></td><td className="num"><b>{brl(total)}</b></td><td colSpan="2"></td></tr></tfoot>}
         </table>
       </div>
+
+      {pendente && !imp && (
+        <Modal title="Fatura protegida por senha" onClose={() => { setPendente(null); setSenha('') }}
+          footer={<><button className="btn ghost" onClick={() => { setPendente(null); setSenha('') }}>Cancelar</button><button className="btn" onClick={() => lerFatura(pendente, senha)} disabled={lendo || !senha}>{lendo ? 'Abrindo…' : 'Abrir fatura'}</button></>}>
+          {erro && <div className="login-err" style={{ marginBottom: 12 }}>{erro}</div>}
+          <div className="sub" style={{ marginBottom: 12 }}>Este PDF do banco pede senha para abrir. Digite a senha da fatura (a mesma que o banco usa para abrir o arquivo).</div>
+          <div className="field"><label>Senha da fatura</label>
+            <input className="input" type="password" value={senha} autoFocus
+              onChange={(e) => setSenha(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && senha) lerFatura(pendente, senha) }} />
+          </div>
+        </Modal>
+      )}
 
       {imp && (
         <Modal title="Importar fatura do PDF" onClose={() => setImp(null)} wide

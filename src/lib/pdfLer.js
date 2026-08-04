@@ -19,9 +19,11 @@ export async function extrairTexto(file) {
 
 // Extrai o texto AGRUPADO POR LINHA (uma linha da fatura = uma string), de todas
 // as páginas. Necessário para faturas de cartão, onde cada transação é uma linha.
-export async function extrairLinhas(file) {
+export async function extrairLinhas(file, password) {
   const buf = await file.arrayBuffer()
-  const pdf = await pdfjs.getDocument({ data: buf }).promise
+  const params = { data: buf }
+  if (password) params.password = password
+  const pdf = await pdfjs.getDocument(params).promise
   const linhas = []
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p)
