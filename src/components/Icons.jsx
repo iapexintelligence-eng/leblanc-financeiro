@@ -17,3 +17,4 @@ export const IcoPlus = () => <svg viewBox="0 0 24 24" {...S}><path d="M12 5v14M5
 export const IcoEdit = () => <svg viewBox="0 0 24 24" {...S}><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
 export const IcoSwap = () => <svg viewBox="0 0 24 24" {...S}><path d="M7 4 3 8l4 4"/><path d="M3 8h13a4 4 0 0 1 0 8h-1"/><path d="m17 20 4-4-4-4"/></svg>
 export const IcoSearch = () => <svg viewBox="0 0 24 24" {...S}><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+export const IcoTrash = () => <svg viewBox="0 0 24 24" {...S}><path d="M3 6h18M8 6V4h8v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14M10 11v6M14 11v6"/></svg>

@@ -17,6 +17,31 @@ export async function extrairTexto(file) {
   return txt
 }
 
+// Extrai o texto AGRUPADO POR LINHA (uma linha da fatura = uma string), de todas
+// as páginas. Necessário para faturas de cartão, onde cada transação é uma linha.
+export async function extrairLinhas(file) {
+  const buf = await file.arrayBuffer()
+  const pdf = await pdfjs.getDocument({ data: buf }).promise
+  const linhas = []
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p)
+    const c = await page.getTextContent()
+    const mapa = {}
+    for (const it of c.items) {
+      if (!it.str || !it.str.trim()) continue
+      const y = Math.round(it.transform[5])
+      const x = it.transform[4]
+      ;(mapa[y] ||= []).push({ x, s: it.str })
+    }
+    const ys = Object.keys(mapa).map(Number).sort((a, b) => b - a)
+    for (const y of ys) {
+      const linha = mapa[y].sort((a, b) => a.x - b.x).map((o) => o.s).join(' ').replace(/\s+/g, ' ').trim()
+      if (linha) linhas.push(linha)
+    }
+  }
+  return linhas
+}
+
 // Tenta ler os campos de um contrato Le Blanc. Retorna o que conseguir; o resto fica vazio.
 export function parseContrato(txt) {
   const t = (txt || '').replace(/\s+/g, ' ')
