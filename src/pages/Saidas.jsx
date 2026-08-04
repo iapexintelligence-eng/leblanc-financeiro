@@ -112,6 +112,11 @@ export default function Saidas() {
     const { error } = await supabase.from('custos_operacionais').update({ categoria }).eq('id', id)
     if (error) setErro('Não consegui salvar a categoria do pedido: ' + error.message)
   }
+  const mudarProjetoCusto = async (id, projeto_uid) => {
+    setErro(''); setCustos((s) => s.map((x) => x.id === id ? { ...x, projeto_uid } : x))
+    const { error } = await supabase.from('custos_operacionais').update({ projeto_uid: projeto_uid || null }).eq('id', id)
+    if (error) setErro('Não consegui trocar o contrato do pedido: ' + error.message)
+  }
   const excluirCusto = async (id) => {
     if (!window.confirm('Excluir este pedido/custo? Essa ação não pode ser desfeita.')) return
     setErro(''); setCustos((s) => s.filter((x) => x.id !== id))
@@ -201,7 +206,7 @@ export default function Saidas() {
                               <tr key={i} style={c._dup ? { background: 'rgba(220,53,69,0.08)' } : undefined}>
                                 <td className="muted">{fmtDate(c.data)}{c._dup && <span className="badge warn" style={{ marginLeft: 6 }}>duplicado?</span>}</td>
                                 <td><select className="input" style={{ height: 28, padding: '2px 6px', fontSize: 12, minWidth: 120 }} value={c.categoria || ''} onChange={(e) => mudarCatCusto(c.id, e.target.value)}>{CUSTO_CATS.map((x) => <option key={x} value={x}>{CUSTO_LABEL[x]}</option>)}</select></td>
-                                <td>{c.projeto_uid ? `${c.projeto_uid}${clienteDe[c.projeto_uid] ? ' · ' + clienteDe[c.projeto_uid] : ''}` : '—'}</td>
+                                <td><select className="input" style={{ height: 28, padding: '2px 6px', fontSize: 12, minWidth: 160 }} value={c.projeto_uid || ''} onChange={(e) => mudarProjetoCusto(c.id, e.target.value)}><option value="">— vincular contrato —</option>{[...projetos].sort((a, b) => (a.cliente_nome || '').localeCompare(b.cliente_nome || '')).map((p) => <option key={p.projeto_uid} value={p.projeto_uid}>{p.cliente_nome || p.projeto_uid}</option>)}</select></td>
                                 <td className="muted">{c.descricao || '—'}</td>
                                 <td className="num">{brl(c.valor)}</td>
                                 <td className="right"><button className="icon-btn" title="Excluir (duplicado)" onClick={() => excluirCusto(c.id)} style={{ color: 'var(--danger)' }}>×</button></td>
