@@ -134,8 +134,14 @@ export default function Pagamentos() {
                 <td>{r.descricao}{r.fornecedor ? <span className="faint"> · {r.fornecedor}</span> : ''}{r.projeto_uid ? <div className="faint" style={{ fontSize: 11 }}>📄 {clienteDe[r.projeto_uid] || r.projeto_uid}</div> : null}</td>
                 <td><span className="badge neutral">{CAT_LABEL[r.categoria] || r.categoria || '—'}</span></td>
                 <td className="num">{brl(r.valor)}</td>
-                <td className="muted">{fmtDate(r.data_vencimento)}</td>
-                <td>{r.status === 'Pago' ? <span className="badge ok">Pago</span> : <span className="badge warn">Pendente</span>}</td>
+                <td style={{ color: (r.status !== 'Pago' && r.status !== 'Cancelado' && r.data_vencimento && r.data_vencimento < today()) ? 'var(--danger)' : 'var(--ink-faint)' }}>{fmtDate(r.data_vencimento)}</td>
+                <td>{r.status === 'Pago'
+                  ? <span className="badge ok">Pago</span>
+                  : r.status === 'Cancelado'
+                    ? <span className="badge neutral">Cancelado</span>
+                    : (r.data_vencimento && r.data_vencimento < today())
+                      ? <span className="badge" style={{ background: 'rgba(220,53,69,0.14)', color: 'var(--danger)', fontWeight: 600 }}>Atrasado</span>
+                      : <span className="badge warn">Pendente</span>}</td>
                 <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
                   {r.comprovante_path && <button className="btn ghost sm" style={{ marginRight: 4 }} onClick={() => baixar(r.comprovante_path)} title="Comprovante">Compr.</button>}
                   {r.boleto_path && <button className="btn ghost sm" onClick={() => baixar(r.boleto_path)} title="Boleto">Boleto</button>}
