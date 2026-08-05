@@ -5,13 +5,16 @@ import { IcoSearch, IcoTrash } from '../components/Icons.jsx'
 import Modal from '../components/Modal.jsx'
 import { extrairLinhas } from '../lib/pdfLer.js'
 import { ocrImagem } from '../lib/ocr.js'
-import { parseFaturaCartao, sugerirBucket } from '../lib/faturaCartao.js'
+import { parseFaturaCartao, sugerirBucket, sugerirCategoria } from '../lib/faturaCartao.js'
 
 const n = (v) => Number(v) || 0
 const MESES_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 const rotuloMes = (ym) => { if (!ym) return '—'; const p = String(ym).slice(0, 7).split('-'); return `${MESES_PT[Number(p[1]) - 1]}/${p[0].slice(2)}` }
 const BUCKETS = ['loja', 'catelli', 'marketing', 'priscila', 'andressa', 'outros']
 const bktLabel = (b) => ({ loja: 'Loja', catelli: 'Catelli', marketing: 'Marketing', priscila: 'Priscila', andressa: 'Andressa', outros: 'Outros' }[b] || b || '—')
+const CATS = ['app', 'marketing', 'mercadolivre', 'transporte', 'industria', 'materiais', 'alimentacao', 'saude', 'viagem', 'encargos', 'outros']
+const CAT_LABEL = { app: 'Aplicativos', marketing: 'Marketing', mercadolivre: 'Mercado Livre', transporte: 'Transporte (99/Uber/Pop)', industria: 'Indústria', materiais: 'Materiais', alimentacao: 'Alimentação', saude: 'Saúde', viagem: 'Viagem', encargos: 'Juros/IOF', outros: 'Outros' }
+const catLabel = (c) => CAT_LABEL[c] || c || '—'
 
 export default function FaturasCartao() {
   const [rows, setRows] = useState(null)
@@ -19,6 +22,7 @@ export default function FaturasCartao() {
   const [busca, setBusca] = useState('')
   const [cartaoF, setCartaoF] = useState('todos')
   const [mesF, setMesF] = useState('')
+  const [catF, setCatF] = useState('todos')
   const [imp, setImp] = useState(null) // { cartao, mesRef, itens:[{...,incluir,bucket}] }
   const [lendo, setLendo] = useState(false)
   const [salvando, setSalvando] = useState(false)
@@ -41,9 +45,10 @@ export default function FaturasCartao() {
   const lista = useMemo(() => (rows || []).filter((r) => {
     if (cartaoF !== 'todos' && r.cartao !== cartaoF) return false
     if (mesF && mesF !== 'todos' && String(r.mes_ref || '').slice(0, 7) !== mesF) return false
-    if (busca) { const q = busca.toLowerCase(); if (!((r.descricao || '').toLowerCase().includes(q) || (r.bucket || '').toLowerCase().includes(q))) return false }
+    if (catF !== 'todos' && (r.categoria || 'outros') !== catF) return false
+    if (busca) { const q = busca.toLowerCase(); if (!((r.descricao || '').toLowerCase().includes(q) || (r.bucket || '').toLowerCase().includes(q) || catLabel(r.categoria).toLowerCase().includes(q))) return false }
     return true
-  }), [rows, cartaoF, mesF, busca])
+  }), [rows, cartaoF, mesF, catF, busca])
 
   const total = lista.reduce((s, r) => s + n(r.valor), 0)
   const cobrado = lista.filter((r) => r.cobrado).reduce((s, r) => s + n(r.valor), 0)
@@ -53,6 +58,12 @@ export default function FaturasCartao() {
     const m = {}
     for (const r of lista) { const b = r.bucket || 'outros'; (m[b] ||= { total: 0, aCobrar: 0 }); m[b].total += n(r.valor); if (!r.cobrado) m[b].aCobrar += n(r.valor) }
     return m
+  }, [lista])
+  // por categoria (do filtro), só despesas positivas — ordenado do maior pro menor
+  const porCategoria = useMemo(() => {
+    const m = {}
+    for (const r of lista) { if (n(r.valor) <= 0) continue; const c = r.categoria || 'outros'; m[c] = (m[c] || 0) + n(r.valor) }
+    return Object.entries(m).sort((a, b) => b[1] - a[1])
   }, [lista])
 
   const toggleCobrado = async (r) => {
@@ -66,6 +77,12 @@ export default function FaturasCartao() {
     setErro('')
     setRows((s) => s.map((x) => x.id === r.id ? { ...x, bucket } : x))
     const { error } = await supabase.from('fatura_rateio').update({ bucket }).eq('id', r.id)
+    if (error) setErro(error.message)
+  }
+  const mudarCategoria = async (r, categoria) => {
+    setErro('')
+    setRows((s) => s.map((x) => x.id === r.id ? { ...x, categoria } : x))
+    const { error } = await supabase.from('fatura_rateio').update({ categoria }).eq('id', r.id)
     if (error) setErro(error.message)
   }
   const excluir = async (r) => {
@@ -86,6 +103,7 @@ export default function FaturasCartao() {
       ...it,
       incluir: !it.credito,
       bucket: it.credito ? 'outros' : sugerirBucket(it.descricao),
+      categoria: it.credito ? 'outros' : sugerirCategoria(it.descricao),
     }))
     setImp({ cartao: r.cartao || '', mesRef: r.mesRef || '', itens, foto })
     setPendente(null); setSenha('')
@@ -145,6 +163,7 @@ export default function FaturasCartao() {
     setSalvando(true); setErro('')
     const linhas = impInclusos.map((i) => ({
       cartao: imp.cartao.trim(), mes_ref: imp.mesRef, bucket: i.bucket || 'outros',
+      categoria: i.categoria || 'outros',
       descricao: i.descricao, data_compra: i.data_compra || null, parcela: i.parcela || null,
       valor: n(i.valor), cobrado: false,
     }))
@@ -178,6 +197,9 @@ export default function FaturasCartao() {
         <select className="input" style={{ width: 150 }} value={mesF} onChange={(e) => setMesF(e.target.value)}>
           <option value="todos">Todos os meses</option>{meses.map((m) => <option key={m} value={m}>{rotuloMes(m)}</option>)}
         </select>
+        <select className="input" style={{ width: 200 }} value={catF} onChange={(e) => setCatF(e.target.value)}>
+          <option value="todos">Todas as categorias</option>{CATS.map((c) => <option key={c} value={c}>{catLabel(c)}</option>)}
+        </select>
       </div>
 
       {erro && !imp && <div className="login-err" style={{ marginBottom: 12 }}>{erro}</div>}
@@ -189,24 +211,43 @@ export default function FaturasCartao() {
       </div>
 
       {Object.keys(porBucket).length > 0 && (
-        <div className="tools" style={{ gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+        <div className="tools" style={{ gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
           {Object.entries(porBucket).sort().map(([b, v]) => (
             <div key={b} className="badge" style={{ padding: '6px 10px' }}>{bktLabel(b)}: <b>{brl(v.total)}</b>{v.aCobrar > 0 ? <span style={{ color: 'var(--warn)' }}> · falta {brl(v.aCobrar)}</span> : <span style={{ color: 'var(--ok)' }}> · ok</span>}</div>
           ))}
         </div>
       )}
 
+      {porCategoria.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div className="sub" style={{ marginBottom: 6 }}>Gasto por categoria {mesF && mesF !== 'todos' ? `· ${rotuloMes(mesF)}` : ''} <span className="faint">(clique para filtrar)</span></div>
+          <div className="tools" style={{ gap: 8, flexWrap: 'wrap' }}>
+            {porCategoria.map(([c, v]) => (
+              <button key={c} className="badge" onClick={() => setCatF(catF === c ? 'todos' : c)}
+                style={{ padding: '6px 11px', cursor: 'pointer', border: catF === c ? '2px solid var(--ink)' : '1px solid var(--line)', background: catF === c ? 'var(--ink)' : 'transparent', color: catF === c ? '#fff' : 'inherit' }}>
+                {catLabel(c)}: <b>{brl(v)}</b>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Cartão</th><th>Mês</th><th>Data</th><th style={{ minWidth: 130 }}>Bucket</th><th>Descrição</th><th className="num">Valor</th><th>Cobrado</th><th></th></tr></thead>
+          <thead><tr><th>Cartão</th><th>Mês</th><th>Data</th><th style={{ minWidth: 128 }}>Categoria</th><th style={{ minWidth: 128 }}>Bucket</th><th>Descrição</th><th className="num">Valor</th><th>Cobrado</th><th></th></tr></thead>
           <tbody>
-            {rows === null && <tr><td colSpan="8" className="empty">Carregando…</td></tr>}
-            {rows && lista.length === 0 && <tr><td colSpan="8" className="empty">Sem itens de fatura neste filtro. Use “Subir fatura (PDF)” para importar.</td></tr>}
+            {rows === null && <tr><td colSpan="9" className="empty">Carregando…</td></tr>}
+            {rows && lista.length === 0 && <tr><td colSpan="9" className="empty">Sem itens de fatura neste filtro. Use “Subir fatura (PDF ou foto)” para importar.</td></tr>}
             {lista.map((r) => (
               <tr key={r.id}>
                 <td><b>{r.cartao || '—'}</b></td>
                 <td className="muted">{rotuloMes(r.mes_ref)}</td>
                 <td className="muted">{r.data_compra ? fmtDate(r.data_compra) : '—'}</td>
+                <td>
+                  <select className="input" style={{ padding: '6px 10px', minWidth: 128 }} value={CATS.includes(r.categoria) ? r.categoria : 'outros'} onChange={(e) => mudarCategoria(r, e.target.value)}>
+                    {CATS.map((c) => <option key={c} value={c}>{catLabel(c)}</option>)}
+                  </select>
+                </td>
                 <td>
                   <select className="input" style={{ padding: '6px 10px', minWidth: 128 }} value={BUCKETS.includes(r.bucket) ? r.bucket : 'outros'} onChange={(e) => mudarBucket(r, e.target.value)}>
                     {BUCKETS.map((b) => <option key={b} value={b}>{bktLabel(b)}</option>)}
@@ -223,7 +264,7 @@ export default function FaturasCartao() {
               </tr>
             ))}
           </tbody>
-          {lista.length > 0 && <tfoot><tr><td colSpan="5"><b>TOTAL</b></td><td className="num"><b>{brl(total)}</b></td><td colSpan="2"></td></tr></tfoot>}
+          {lista.length > 0 && <tfoot><tr><td colSpan="6"><b>TOTAL</b></td><td className="num"><b>{brl(total)}</b></td><td colSpan="2"></td></tr></tfoot>}
         </table>
       </div>
 
@@ -258,7 +299,7 @@ export default function FaturasCartao() {
           </div>
           <div className="table-wrap" style={{ maxHeight: 380, overflow: 'auto' }}>
             <table>
-              <thead><tr><th style={{ width: 34 }}></th><th style={{ width: 140 }}>Data</th><th>Descrição</th><th>Bucket</th><th className="num" style={{ width: 120 }}>Valor</th></tr></thead>
+              <thead><tr><th style={{ width: 34 }}></th><th style={{ width: 140 }}>Data</th><th>Descrição</th><th>Categoria</th><th>Bucket</th><th className="num" style={{ width: 120 }}>Valor</th></tr></thead>
               <tbody>
                 {imp.itens.map((it, idx) => (
                   <tr key={idx} style={{ opacity: it.incluir ? 1 : 0.45 }}>
@@ -267,6 +308,11 @@ export default function FaturasCartao() {
                     <td>
                       <input className="input" style={{ padding: '6px 8px' }} value={it.descricao} onChange={(e) => setItem(idx, { descricao: e.target.value })} />
                       {it.parcela ? <span className="faint" style={{ fontSize: 11 }}> · {it.parcela}</span> : null}{it.credito ? <span className="badge" style={{ marginLeft: 6, fontSize: 10 }}>crédito/pagto</span> : null}
+                    </td>
+                    <td>
+                      <select className="input" style={{ padding: '6px 10px', minWidth: 128 }} value={it.categoria} onChange={(e) => setItem(idx, { categoria: e.target.value })}>
+                        {CATS.map((c) => <option key={c} value={c}>{catLabel(c)}</option>)}
+                      </select>
                     </td>
                     <td>
                       <select className="input" style={{ padding: '6px 10px', minWidth: 128 }} value={it.bucket} onChange={(e) => setItem(idx, { bucket: e.target.value })}>

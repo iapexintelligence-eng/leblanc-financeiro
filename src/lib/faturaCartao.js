@@ -232,3 +232,21 @@ export function sugerirBucket(descricao, padrao = 'loja') {
   for (const r of REGRAS) if (r.re.test(descricao || '')) return r.bucket
   return padrao
 }
+
+// Sugestão de CATEGORIA de gasto (tipo de despesa), por palavra-chave.
+const REGRAS_CAT = [
+  { re: /(anthropic|openai|supabase|google workspace|dl google|canva|apple com|apple\.com|netlify|amazonprime|amazon prime|amazon ad|spotify|microsoft|adobe|vindi|ebn |htm\*|12min|figma)/i, cat: 'app' },
+  { re: /(facebk|facebook|google ads|\bmeta\b|instagram|marketing|adwords|boost)/i, cat: 'marketing' },
+  { re: /(mercadolivre|mercado livre|mercadoli|mercado\*|\bmeli\b)/i, cat: 'mercadolivre' },
+  { re: /(uber|99app|99 ?inapp|99pop|99inapp|\bpop \d|\bpop\d|cabify|dl\*uber|dl uber|indriver|posto|combust|ipiranga|shell|petrobras|ampm)/i, cat: 'transporte' },
+  { re: /(promob|rudegon|electrolux|cassol|rc conect|r m lima|metalon|perfar|rafex|vidra|marcenaria|ferragen|donnaferragens|tintas|eletroras|eletro)/i, cat: 'industria' },
+  { re: /(amazonmktplc|amazon marketplace|magalu|americanas|shopee|aliexpress|leroy|telha|casa do ma|casaprin)/i, cat: 'materiais' },
+  { re: /(ifood|restaurante|lanche|padaria|assai|atacad|supermerc|mercado municipal|bar |cafe|coffee|burger|pizzar)/i, cat: 'alimentacao' },
+  { re: /(iof|juros|encargo|anuidade|multa|rotativo|tarifa)/i, cat: 'encargos' },
+  { re: /(clinica|farmacia|drogaria|hospital|academia|fit |saude|odonto|laborat)/i, cat: 'saude' },
+  { re: /(azul|latam|gol |cvc|hotel|reserva|airbnb|booking|passagem)/i, cat: 'viagem' },
+]
+export function sugerirCategoria(descricao) {
+  for (const r of REGRAS_CAT) if (r.re.test(descricao || '')) return r.cat
+  return 'outros'
+}
