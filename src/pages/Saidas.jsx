@@ -11,6 +11,13 @@ const CAT_LABEL = { fixos: 'Fixos', impostos: 'Impostos', salarios: 'Salários',
 const labelCat = (c) => CAT_LABEL[c] || c || '—'
 const CATS = ['industria', 'montagem', 'frete', 'rafex', 'perfar', 'vidracaria', 'metalon', 'rudegon', 'assistencia', 'operacional', 'fixos', 'salarios', 'pro_labore', 'marketing', 'impostos', 'outros']
 const normForn = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim()
+const semAcento = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+// palavras genéricas que NÃO caracterizam duplicado (pró-labore/adiantamento de pessoas diferentes, etc.)
+const STOP_DUP = new Set(['pro', 'labore', 'prolabore', 'adiantamento', 'adiantamentos', 'adintamento', 'adinatamento', 'salario', 'salarios', 'salarial', 'contabilidade', 'honorario', 'honorarios', 'plano', 'saude', 'comissao', 'aluguel', 'internet', 'retirada', 'retiradas', 'despesa', 'fixa', 'conta', 'pagamento', 'material', 'obra', 'loja', 'nova', 'parcial', 'compra', 'pedido', 'pedidos', 'para', 'com', 'dos', 'das'])
+const tokensDup = (r) => {
+  const t = semAcento(((r.fornecedor || '') + ' ' + (r.descricao || '')).toLowerCase()).split(/[^a-z0-9]+/)
+  return new Set(t.filter((w) => w.length >= 4 && !STOP_DUP.has(w)))
+}
 const CUSTO_CATS = ['industria', 'montagem', 'frete', 'assistencia', 'compra_extra', 'gratificacao']
 const CUSTO_LABEL = { industria: 'Indústria', montagem: 'Montagem', frete: 'Frete', assistencia: 'Assistência', compra_extra: 'Compra extra', gratificacao: 'Gratificação' }
 
@@ -24,6 +31,7 @@ export default function Saidas() {
   const [catF, setCatF] = useState('todas')
   const [fornF, setFornF] = useState('todos')
   const [aberto, setAberto] = useState(null)
+  const [soDup, setSoDup] = useState(false)
   const [rat, setRatModal] = useState(null) // { r, linhas:[{projeto_uid, valor}] }
   const mapCustoCat = (c) => CUSTO_CATS.includes(c) ? c : 'compra_extra'
 
@@ -84,13 +92,42 @@ export default function Saidas() {
   const cats = useMemo(() => [...new Set((rows || []).map((r) => r.categoria).filter(Boolean))].sort(), [rows])
   const fornecedores = useMemo(() => [...new Set((rows || []).map((r) => r.fornecedor).filter((x) => x && x !== '—'))].sort(), [rows])
 
+  // Possíveis duplicados: mesmo valor + até 10 dias de diferença + token relevante em comum (mesmo fornecedor/serviço)
+  const dupIds = useMemo(() => {
+    const grupos = {}
+    for (const r of rows || []) {
+      if (!r.valor || !r.data) continue
+      const k = r.data.slice(0, 7) + '|' + r.valor
+      ;(grupos[k] ||= []).push(r)
+    }
+    const flag = new Set()
+    for (const k in grupos) {
+      const arr = grupos[k]
+      if (arr.length < 2) continue
+      for (let i = 0; i < arr.length; i++) {
+        for (let j = i + 1; j < arr.length; j++) {
+          const a = arr[i], b = arr[j]
+          const dd = Math.abs((new Date(a.data) - new Date(b.data)) / 86400000)
+          if (dd > 10) continue
+          const ta = tokensDup(a), tb = tokensDup(b)
+          let shared = false
+          for (const t of ta) { if (tb.has(t)) { shared = true; break } }
+          if (shared) { flag.add(a.id); flag.add(b.id) }
+        }
+      }
+    }
+    return flag
+  }, [rows])
+
   const lista = useMemo(() => (rows || []).filter((r) => {
     if (mesF !== 'todos' && (r.data || '').slice(0, 7) !== mesF) return false
     if (catF !== 'todas' && r.categoria !== catF) return false
     if (fornF !== 'todos' && r.fornecedor !== fornF) return false
+    if (soDup && !dupIds.has(r.id)) return false
     if (busca) { const q = busca.toLowerCase(); if (!((r.fornecedor || '').toLowerCase().includes(q) || labelCat(r.categoria).toLowerCase().includes(q) || (r.descricao || '').toLowerCase().includes(q))) return false }
     return true
-  }), [rows, mesF, catF, fornF, busca])
+  }), [rows, mesF, catF, fornF, busca, soDup, dupIds])
+  const dupNaLista = useMemo(() => lista.filter((r) => dupIds.has(r.id)).length, [lista, dupIds])
 
   const mudarCategoria = async (id, categoria) => {
     setErro(''); setRows((s) => s.map((x) => x.id === id ? { ...x, categoria } : x))
@@ -166,6 +203,10 @@ export default function Saidas() {
         <select className="input" style={{ width: 170 }} value={fornF} onChange={(e) => setFornF(e.target.value)}>
           <option value="todos">Todas as indústrias/fornec.</option>{fornecedores.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+          <input type="checkbox" checked={soDup} onChange={(e) => setSoDup(e.target.checked)} /> Só possíveis duplicados
+          {dupIds.size > 0 && <span className="badge" style={{ background: 'var(--danger)', color: '#fff', fontSize: 11 }}>{dupIds.size}</span>}
+        </label>
       </div>
 
       {erro && <div className="login-err" style={{ marginBottom: 12 }}>{erro}</div>}
@@ -187,9 +228,9 @@ export default function Saidas() {
               const exp = aberto === r.id
               return (
                 <>
-                  <tr key={r.id}>
+                  <tr key={r.id} style={dupIds.has(r.id) ? { background: 'rgba(180,0,0,.05)' } : null}>
                     <td style={{ textAlign: 'center', color: 'var(--ink-faint)', cursor: pedidos.length ? 'pointer' : 'default' }} onClick={() => pedidos.length && setAberto(exp ? null : r.id)}>{pedidos.length ? (exp ? '▾' : '▸') : ''}</td>
-                    <td className="muted">{fmtDate(r.data)}</td>
+                    <td className="muted">{fmtDate(r.data)}{dupIds.has(r.id) && <div><span className="badge" style={{ background: 'var(--danger)', color: '#fff', fontSize: 10, marginTop: 2 }} title="Mesmo valor, data próxima e mesmo fornecedor/serviço de outra saída. Confira se não é duplicado.">possível duplicado</span></div>}</td>
                     <td><select className="input" style={{ height: 30, padding: '2px 6px', fontSize: 12.5, minWidth: 120 }} value={r.categoria} onChange={(e) => mudarCategoria(r.id, e.target.value)}>{CATS.map((c) => <option key={c} value={c}>{labelCat(c)}</option>)}</select></td>
                     <td>{r.fornecedor}</td>
                     <td><input className="input" style={{ height: 30, padding: '2px 8px', fontSize: 12.5, minWidth: 180 }} defaultValue={r.descricao} placeholder="descreva…" onBlur={(e) => { if (e.target.value !== r.descricao) salvarDescricao(r.id, e.target.value) }} /></td>
