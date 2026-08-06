@@ -123,6 +123,15 @@ export default function Saidas() {
     const { error } = await supabase.from('custos_operacionais').delete().eq('id', id)
     if (error) setErro('Não consegui excluir: ' + error.message)
   }
+  const excluirPagamento = async (r) => {
+    if (!window.confirm(`Excluir esta saída?\n\n${r.fornecedor || r.descricao || ''} — ${brl(r.valor)}\n\nEssa ação não pode ser desfeita.`)) return
+    setErro('')
+    // remove também eventuais custos rateados vinculados a este pagamento
+    await supabase.from('custos_operacionais').delete().eq('rateio_pagamento_id', r.id)
+    const { error } = await supabase.from('pagamentos').delete().eq('id', r.id)
+    if (error) { setErro('Não consegui excluir: ' + error.message); return }
+    setRows((s) => s.filter((x) => x.id !== r.id))
+  }
 
   const total = lista.reduce((s, r) => s + r.valor, 0)
   const pago = lista.filter((r) => r.status === 'Pago').reduce((s, r) => s + r.valor, 0)
@@ -192,7 +201,9 @@ export default function Saidas() {
                       <button className="btn ghost sm" style={{ marginTop: 4 }} onClick={() => abrirRateio(r)}>Ratear</button>
                     </td>
                     <td className="num">{brl(r.valor)}</td>
-                    <td>{r.status === 'Pago' ? <span className="badge ok">Pago</span> : <span className="badge warn">{r.status}</span>}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{r.status === 'Pago' ? <span className="badge ok">Pago</span> : <span className="badge warn">{r.status}</span>}
+                      <button className="icon-btn" title="Excluir esta saída (duplicada)" onClick={() => excluirPagamento(r)} style={{ color: 'var(--danger)', marginLeft: 6 }}>×</button>
+                    </td>
                   </tr>
                   {exp && (
                     <tr key={r.id + '-d'}>
