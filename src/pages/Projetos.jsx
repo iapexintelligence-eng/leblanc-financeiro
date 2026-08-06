@@ -16,7 +16,6 @@ const corMargem = (status, pct) => {
 export default function Projetos() {
   const [projs, setProjs] = useState([])
   const [custos, setCustos] = useState([])
-  const [extra, setExtra] = useState({})
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState('')
   const [busca, setBusca] = useState('')
@@ -27,16 +26,13 @@ export default function Projetos() {
   useEffect(() => {
     (async () => {
       setLoading(true)
-      const [m, c, p] = await Promise.all([
+      const [m, c] = await Promise.all([
         supabase.from('vw_margem_projetos').select('*').order('created_at', { ascending: false }).limit(2000),
         supabase.from('custos_operacionais').select('projeto_uid, data, categoria, fornecedor, descricao, valor, montador').not('projeto_uid', 'is', null).limit(5000),
-        supabase.from('projetos').select('projeto_uid, custo_extra').limit(2000),
       ])
       if (m.error) setErro('Erro ao carregar projetos: ' + m.error.message)
       setProjs(m.data || [])
       setCustos(c.data || [])
-      const ex = {}; (p.data || []).forEach((r) => { ex[r.projeto_uid] = n(r.custo_extra) })
-      setExtra(ex)
       setLoading(false)
     })()
   }, [])
@@ -48,10 +44,10 @@ export default function Projetos() {
   }, [custos])
 
   const linhas = useMemo(() => projs.map((p) => {
-    const custoTotal = n(p.custo_industria) + n(p.custo_montagem) + n(p.custo_assistencias) + n(p.custo_gratificacao) + n(extra[p.projeto_uid])
+    const custoTotal = n(p.custo_total)
     const pct = n(p.margem_real_percentual)
     return { ...p, custoTotal, pct }
-  }), [projs, extra])
+  }), [projs])
 
   const statusList = useMemo(() => [...new Set(projs.map((p) => p.status_margem).filter(Boolean))], [projs])
   const mesesList = useMemo(() => [...new Set(projs.map((p) => (p.created_at || '').slice(0, 7)).filter(Boolean))].sort().reverse(), [projs])
@@ -127,9 +123,10 @@ export default function Projetos() {
                         <div className="grid cols-3" style={{ gap: 8, margin: '4px 0 12px' }}>
                           <Comp l="Indústria" v={p.custo_industria} />
                           <Comp l="Montagem" v={p.custo_montagem} />
+                          <Comp l="Frete" v={p.custo_frete} />
                           <Comp l="Assistências" v={p.custo_assistencias} />
                           <Comp l="Gratificação" v={p.custo_gratificacao} />
-                          <Comp l="Extras" v={extra[p.projeto_uid]} />
+                          <Comp l="Extras" v={p.custo_extra} />
                           <Comp l="Custo total" v={p.custoTotal} forte />
                         </div>
                         <div className="sub" style={{ marginBottom: 6 }}>Custos lançados vinculados a este contrato ({lista.length})</div>
