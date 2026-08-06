@@ -7,13 +7,14 @@ import { IcoPlus, IcoEdit, IcoSearch } from '../components/Icons.jsx'
 import { extrairTexto, parseContrato } from '../lib/pdfLer.js'
 import { ocrImagemAuto } from '../lib/ocr.js'
 
-const CAMPOS = ['cliente_nome', 'vendedor', 'funcionario_id', 'valor_vendido', 'valor_promob', 'desconto_percentual', 'data_venda', 'observacoes']
+const CAMPOS = ['cliente_nome', 'vendedor', 'funcionario_id', 'valor_vendido', 'valor_promob', 'desconto_percentual', 'data_venda', 'observacoes', 'comissao_pct', 'comissao_valor', 'rt_percentual', 'rt_valor']
 
 const novo = () => ({
   cliente_nome: '', vendedor: '', funcionario_id: '',
   valor_vendido: '', valor_promob: '', desconto_percentual: '',
   data_venda: today(), observacoes: '', contrato_path: '', contrato_nome: '',
   rt_tipo: '', rt_beneficiario: '', rt_valor: '',
+  comissao_pct: '', comissao_valor: '', rt_percentual: '',
 })
 
 const RT_TIPOS = ['Indicação', 'Arquiteto parceiro', 'Catelli']
@@ -84,6 +85,7 @@ export default function Vendas() {
       data_venda: r.data_venda || today(), observacoes: r.observacoes || '',
       contrato_path: r.contrato_path || '', contrato_nome: r.contrato_nome || '',
       rt_tipo: r.rt_tipo || '', rt_beneficiario: r.rt_beneficiario || '', rt_valor: r.rt_valor ?? '',
+      comissao_pct: r.comissao_pct ?? '', comissao_valor: r.comissao_valor ?? '', rt_percentual: r.rt_percentual ?? '',
     },
     editId: r.id, original: r,
   }) }
@@ -116,12 +118,30 @@ export default function Vendas() {
   const setVendido = (v) => setModal((m) => {
     const promob = Number(m.form.valor_promob) || 0, vend = Number(v)
     const desc = promob > 0 && v !== '' && !isNaN(vend) ? String(r2((1 - vend / promob) * 100)) : m.form.desconto_percentual
-    return { ...m, form: { ...m.form, valor_vendido: v, desconto_percentual: desc } }
+    return { ...m, form: { ...m.form, valor_vendido: v, desconto_percentual: desc, ...recalcComRt(m.form, v) } }
   })
+  // recalcula comissão e RT (quando têm %) a partir de um valor vendido
+  const recalcComRt = (form, vendStr) => {
+    const vend = Number(vendStr) || 0
+    const out = {}
+    if (form.comissao_pct !== '' && !isNaN(Number(form.comissao_pct))) out.comissao_valor = String(r2(vend * Number(form.comissao_pct) / 100))
+    if (form.rt_percentual !== '' && !isNaN(Number(form.rt_percentual))) out.rt_valor = String(r2(vend * Number(form.rt_percentual) / 100))
+    return out
+  }
   const setDesconto = (v) => setModal((m) => {
     const promob = Number(m.form.valor_promob) || 0, d = Number(v)
     const vend = promob > 0 && v !== '' && !isNaN(d) ? String(r2(promob * (1 - d / 100))) : m.form.valor_vendido
-    return { ...m, form: { ...m.form, desconto_percentual: v, valor_vendido: vend } }
+    return { ...m, form: { ...m.form, desconto_percentual: v, valor_vendido: vend, ...recalcComRt(m.form, vend) } }
+  })
+  const setComissaoPct = (v) => setModal((m) => {
+    const vend = Number(m.form.valor_vendido) || 0
+    const val = v !== '' && !isNaN(Number(v)) ? String(r2(vend * Number(v) / 100)) : m.form.comissao_valor
+    return { ...m, form: { ...m.form, comissao_pct: v, comissao_valor: val } }
+  })
+  const setRtPct = (v) => setModal((m) => {
+    const vend = Number(m.form.valor_vendido) || 0
+    const val = v !== '' && !isNaN(Number(v)) ? String(r2(vend * Number(v) / 100)) : m.form.rt_valor
+    return { ...m, form: { ...m.form, rt_percentual: v, rt_valor: val } }
   })
 
   // Ao escolher o vendedor no select, grava o nome (texto) e o funcionario_id juntos.
@@ -149,6 +169,9 @@ export default function Vendas() {
       rt_tipo: f.rt_tipo || null,
       rt_beneficiario: f.rt_beneficiario || null,
       rt_valor: f.rt_valor === '' ? null : Number(f.rt_valor),
+      rt_percentual: f.rt_percentual === '' ? null : Number(f.rt_percentual),
+      comissao_pct: f.comissao_pct === '' ? null : Number(f.comissao_pct),
+      comissao_valor: f.comissao_valor === '' ? null : Number(f.comissao_valor),
     }
     let error, novoId
     if (modal.editId) {
@@ -200,18 +223,19 @@ export default function Vendas() {
           <thead>
             <tr>
               <th>Cliente</th><th>Vendedor</th><th className="num">Valor vendido</th>
-              <th className="num">Desc.</th><th>Data</th><th>Contrato</th><th></th>
+              <th className="num">Desc.</th><th className="num">Comissão</th><th>Data</th><th>Contrato</th><th></th>
             </tr>
           </thead>
           <tbody>
-            {rows === null && <tr><td colSpan="7" className="empty">Carregando…</td></tr>}
-            {rows && lista.length === 0 && <tr><td colSpan="7" className="empty">Nenhuma venda encontrada.</td></tr>}
+            {rows === null && <tr><td colSpan="8" className="empty">Carregando…</td></tr>}
+            {rows && lista.length === 0 && <tr><td colSpan="8" className="empty">Nenhuma venda encontrada.</td></tr>}
             {lista.map((r) => (
               <tr key={r.id}>
                 <td>{r.cliente_nome}</td>
                 <td>{r.vendedor ? <span className="badge neutral">{r.vendedor}</span> : <span className="faint">— sem vendedor —</span>}</td>
                 <td className="num">{r.valor_vendido ? brl(r.valor_vendido) : '—'}</td>
                 <td className="num muted">{r.desconto_percentual ? r.desconto_percentual + '%' : '—'}</td>
+                <td className="num">{r.comissao_valor ? <span title={r.comissao_pct ? r.comissao_pct + '%' : ''}>{brl(r.comissao_valor)}</span> : <span className="faint">—</span>}</td>
                 <td className="muted">{fmtDate(r.data_venda)}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>
                   {r.contrato_path && <button className="btn ghost sm" onClick={() => baixarContrato(r)}>Ver</button>}
@@ -265,14 +289,28 @@ export default function Vendas() {
               <input className="input" type="number" step="0.01" value={modal.form.desconto_percentual} onChange={(e) => setDesconto(e.target.value)} /></div>
           </div>
           <div className="sub" style={{ marginTop: -6 }}>Informe o Promob e o Vendido → calcula o desconto. Ou informe o desconto → calcula o vendido.</div>
-          <div className="row-3">
-            <div className="field"><label>RT para</label>
+
+          <div style={{ borderTop: '1px solid var(--line)', margin: '14px 0 10px' }} />
+          <div className="row-2">
+            <div className="field"><label>Comissão do vendedor (%)</label>
+              <input className="input" type="number" step="0.01" value={modal.form.comissao_pct} onChange={(e) => setComissaoPct(e.target.value)} placeholder="ex.: 3" /></div>
+            <div className="field"><label>Valor da comissão (R$)</label>
+              <input className="input" type="number" step="0.01" value={modal.form.comissao_valor} onChange={(e) => setF('comissao_valor', e.target.value)} /></div>
+          </div>
+          <div className="sub" style={{ marginTop: -6 }}>A % é sobre o valor vendido. Esse valor é o que a Léia paga de comissão desse vendedor{modal.form.comissao_valor ? <> — <b>{brl(Number(modal.form.comissao_valor) || 0)}</b> para {modal.form.vendedor || 'o vendedor'}</> : ''}.</div>
+
+          <div className="row-3" style={{ marginTop: 4 }}>
+            <div className="field"><label>RT para (marketing / indicação)</label>
               <select className="input" value={modal.form.rt_tipo} onChange={(e) => setF('rt_tipo', e.target.value)}>
                 <option value="">— sem RT —</option>
                 {RT_TIPOS.map((t) => <option key={t} value={t}>{t}</option>)}
               </select></div>
             <div className="field"><label>Beneficiário do RT (nome)</label><input className="input" value={modal.form.rt_beneficiario} onChange={(e) => setF('rt_beneficiario', e.target.value)} placeholder="quem recebe o RT" /></div>
+            <div className="field"><label>RT %</label><input className="input" type="number" step="0.01" value={modal.form.rt_percentual} onChange={(e) => setRtPct(e.target.value)} placeholder="ex.: 5" /></div>
+          </div>
+          <div className="row-2">
             <div className="field"><label>Valor do RT (R$)</label><input className="input" type="number" step="0.01" value={modal.form.rt_valor} onChange={(e) => setF('rt_valor', e.target.value)} /></div>
+            <div className="field" style={{ display: 'flex', alignItems: 'flex-end' }}><div className="sub">Digite a % do RT → calcula o valor. Ou preencha o valor direto (indicação com valor fixo).</div></div>
           </div>
           <div className="field">
             <label>Contrato vendido (anexar PDF/imagem)</label>
