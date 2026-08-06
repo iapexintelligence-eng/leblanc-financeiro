@@ -5,6 +5,7 @@ import { registrarLog, montarDiff } from '../lib/log.js'
 import Modal from '../components/Modal.jsx'
 import { IcoPlus, IcoEdit, IcoSearch } from '../components/Icons.jsx'
 import { extrairTexto, parseContrato } from '../lib/pdfLer.js'
+import { ocrImagemAuto } from '../lib/ocr.js'
 
 const CAMPOS = ['cliente_nome', 'vendedor', 'funcionario_id', 'valor_vendido', 'valor_promob', 'desconto_percentual', 'data_venda', 'observacoes']
 
@@ -28,21 +29,34 @@ export default function Vendas() {
   const [enviando, setEnviando] = useState(false)
   const [lido, setLido] = useState('')
 
+  const aplicarLido = (p) => {
+    setModal((m) => m && ({ ...m, form: { ...m.form,
+      cliente_nome: m.form.cliente_nome || p.cliente || '',
+      valor_vendido: m.form.valor_vendido || (p.valor ?? ''),
+      data_venda: p.data || m.form.data_venda,
+      vendedor: m.form.vendedor || p.vendedor || '',
+    } }))
+    const achou = [p.cliente && 'cliente', p.valor && 'valor', p.data && 'data', p.vendedor && 'vendedor'].filter(Boolean)
+    return achou
+  }
+
   const aoAnexar = async (file) => {
     setArquivo(file || null); setLido('')
     if (!file) return
-    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+    const ehPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
+    const ehImg = file.type?.startsWith('image/') || /\.(jpe?g|png|heic|webp)$/i.test(file.name)
+    if (ehPdf) {
       try {
-        const p = parseContrato(await extrairTexto(file))
-        setModal((m) => m && ({ ...m, form: { ...m.form,
-          cliente_nome: m.form.cliente_nome || p.cliente || '',
-          valor_vendido: m.form.valor_vendido || (p.valor ?? ''),
-          data_venda: p.data || m.form.data_venda,
-          vendedor: m.form.vendedor || p.vendedor || '',
-        } }))
-        const achou = [p.cliente && 'cliente', p.valor && 'valor', p.data && 'data', p.vendedor && 'vendedor'].filter(Boolean)
+        const achou = aplicarLido(parseContrato(await extrairTexto(file)))
         setLido(achou.length ? `Li do contrato: ${achou.join(', ')}. Confira antes de salvar.` : 'Não consegui ler os dados automaticamente — preencha à mão.')
       } catch (_) { setLido('Não consegui ler o PDF — preencha à mão.') }
+    } else if (ehImg) {
+      setLido('Lendo a foto do contrato…')
+      try {
+        const linhas = await ocrImagemAuto(file, { onProgress: (pct) => setLido(`Lendo a foto do contrato… ${pct}%`) })
+        const achou = aplicarLido(parseContrato(linhas.join(' ')))
+        setLido(achou.length ? `Li da foto: ${achou.join(', ')}. A leitura por foto pode errar — confira tudo antes de salvar.` : 'Não consegui ler os dados da foto — preencha à mão (a foto foi anexada).')
+      } catch (_) { setLido('Não consegui ler a foto — preencha à mão (a foto foi anexada).') }
     }
   }
 

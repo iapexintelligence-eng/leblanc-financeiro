@@ -56,13 +56,26 @@ export function parseContrato(txt) {
   else cliente = pick(/CLIENTE\b[:\s]*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ '.\-]{4,60}?)\s*(?:CPF|CNPJ|R\.?G|NASC)/i)
   cliente = cliente.split(/\s+(?:CPF|CNPJ|Normal|Especial|R\.?G|Nasc|Nascimento|Tipo|Telefone|Endere|Profiss|F[íi]sica|Jur[íi]dica)/i)[0].trim()
 
-  const cpf = pick(/CPF\s*\/?\s*C?N?P?J?\b[:\s]*([\d.\-\/]{11,18})/i)
+  let cpf = pick(/CPF\s*\/?\s*C?N?P?J?\b[:\s]*([\d.\-\/]{11,18})/i)
+  // Fallback: qualquer CPF no texto (tolera vírgula no lugar do ponto por causa de OCR)
+  if (!/\d{3}[.,]\d{3}[.,]\d{3}-\d{2}/.test(cpf)) {
+    const mcpf = t.match(/\b(\d{3}[.,]\d{3}[.,]\d{3}-\d{2})\b/)
+    if (mcpf) cpf = mcpf[1].replace(/,/g, '.')
+  }
+
   const dataStr = pick(/DATA DO CONTRATO[^\d]*(\d{2}\/\d{2}\/\d{4})/i) || pick(/(\d{2}\/\d{2}\/\d{4})/)
   const valorStr = pick(/TOTAL A (?:PRAZO|SER PAGO)[^\d]*([\d.]+,\d{2})/i)
     || pick(/Total (?:do pedido|a ser pago)[:\s]*R?\$?\s*([\d.]+,\d{2})/i)
 
   let data = ''
   if (dataStr) { const [d, m, a] = dataStr.split('/'); data = `${a}-${m}-${d}` }
-  const valor = valorStr ? Number(valorStr.replace(/\./g, '').replace(',', '.')) : null
+  let valor = valorStr ? Number(valorStr.replace(/\./g, '').replace(',', '.')) : null
+  // Fallback (fotos/OCR sem o rótulo "Total"): usa o maior valor monetário da página.
+  // O total do pedido é a soma dos ambientes, então é sempre >= qualquer item.
+  if (valor === null) {
+    const toks = t.match(/[\d.]+,\d{2}(?![\d-])/g) || [] // ignora fragmentos de CPF (…,429-23)
+    const nums = toks.map((s) => Number(s.replace(/\./g, '').replace(',', '.'))).filter((x) => !isNaN(x) && x > 0)
+    if (nums.length) valor = Math.max(...nums)
+  }
   return { cliente, cpf, valor, data, vendedor: '' }
 }
