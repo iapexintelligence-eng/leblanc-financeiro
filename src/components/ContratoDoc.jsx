@@ -19,7 +19,7 @@ export async function imprimirContrato(d) {
   } catch (_) {}
 
   const total = d.total_pedido || (d.itens || []).reduce((s, it) => s + (Number(it.valor) || 0), 0)
-  const descontoValor = d.desconto_tipo === '%' ? total * (Number(d.desconto_valor) || 0) / 100 : (Number(d.desconto_valor) || 0)
+  const descontoValor = (d.desconto_tipo === '%' || d.desconto_tipo === 'pct') ? total * (Number(d.desconto_valor) || 0) / 100 : (Number(d.desconto_valor) || 0)
   const somaParcelas = (d.parcelas || []).reduce((s, p) => s + (Number(p.valor) || 0), 0)
   const totalPagar = somaParcelas > 0 ? somaParcelas : Math.max(0, total - descontoValor)
   const endCliente = [d.endereco, d.bairro, d.cidade, d.uf].filter(Boolean).join(', ')

@@ -76,7 +76,7 @@ const inicial = () => ({
   parcelas: [parcelaVazia(1)],
   observacao_ambientes: '', observacoes: '',
   local_orcamento: '', itens_extras: [], comissao_marketing: '',
-  desconto_tipo: '%', desconto_valor: '', desconto_aprovado: false, desconto_aprovado_por: '',
+  desconto_tipo: 'pct', desconto_valor: '', desconto_aprovado: false, desconto_aprovado_por: '',
 })
 const LIMITE_DESCONTO = 35 // % máximo sem autorização da diretoria
 
@@ -241,7 +241,7 @@ export default function EmitirContrato() {
 
   // ---- Desconto ao cliente (trava 35%) ----
   const descVal = Number(f.desconto_valor) || 0
-  const descontoValor = f.desconto_tipo === '%' ? totalPedido * descVal / 100 : descVal
+  const descontoValor = f.desconto_tipo === 'pct' ? totalPedido * descVal / 100 : descVal
   const descontoPct = totalPedido > 0 ? (descontoValor / totalPedido) * 100 : 0
   const valorFinal = Math.max(0, totalPedido - descontoValor)
   const precisaAprovacao = descontoPct > LIMITE_DESCONTO + 0.001
@@ -551,7 +551,7 @@ export default function EmitirContrato() {
       <div className="row-3">
         <div className="field"><label>Desconto</label>
           <div className="flex">
-            <select className="input" style={{ width: 78 }} value={f.desconto_tipo} onChange={(e) => set('desconto_tipo', e.target.value)}><option value="%">%</option><option value="R$">R$</option></select>
+            <select className="input" style={{ width: 78 }} value={f.desconto_tipo} onChange={(e) => set('desconto_tipo', e.target.value)}><option value="pct">%</option><option value="rs">R$</option></select>
             <input className="input" type="number" step="0.01" value={f.desconto_valor} onChange={(e) => set('desconto_valor', e.target.value)} />
           </div></div>
         <div className="field"><label>Desconto aplicado</label><input className="input" value={`${brl(descontoValor)} · ${descontoPct.toFixed(1)}%`} disabled /></div>

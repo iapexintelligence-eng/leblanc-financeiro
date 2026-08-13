@@ -18,7 +18,7 @@ const FORMAS = [
 const vazio = () => ({
   cliente_nome: '', cliente_cpf: '', cliente_telefone: '', cliente_endereco: '',
   projeto_ambientes: '', vendor: '', modelo_contrato: 'Le Blanc',
-  valor_tabela: '', desconto_tipo: '%', desconto_entrada: '',
+  valor_tabela: '', desconto_tipo: 'pct', desconto_entrada: '',
   forma_pagamento: 'À vista', parcelas: 1, primeira_parcela: today(),
   intervalo: 30, taxa_juros: 0, observacoes: '',
 })
@@ -45,7 +45,7 @@ export default function NovoContrato() {
 
   // ---- Cálculos ----
   const valorTabela = Number(f.valor_tabela) || 0
-  const descVal = f.desconto_tipo === '%'
+  const descVal = f.desconto_tipo === 'pct'
     ? valorTabela * (Number(f.desconto_entrada) || 0) / 100
     : (Number(f.desconto_entrada) || 0)
   const valorBase = Math.max(0, valorTabela - descVal)
@@ -161,7 +161,7 @@ export default function NovoContrato() {
         <div className="field"><label>Desconto</label>
           <div className="flex">
             <select className="input" style={{ width: 80 }} value={f.desconto_tipo} onChange={(e) => set('desconto_tipo', e.target.value)}>
-              <option value="%">%</option><option value="R$">R$</option>
+              <option value="pct">%</option><option value="rs">R$</option>
             </select>
             <input className="input" type="number" step="0.01" value={f.desconto_entrada} onChange={(e) => set('desconto_entrada', e.target.value)} />
           </div>
