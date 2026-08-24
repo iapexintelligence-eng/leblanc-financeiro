@@ -106,6 +106,20 @@ export default function NovoContrato() {
     }))
     await supabase.from('a_receber').insert(receber)
 
+    // 4) Espelha como Projeto + Venda no Financeiro, para vincular custos e entrar na margem
+    try {
+      const pctDesc = valorTabela > 0 ? Math.round((descVal / valorTabela) * 10000) / 100 : 0
+      await supabase.from('projetos').insert({
+        projeto_uid: numero, cliente_nome: f.cliente_nome.trim(), status_projeto: 'Em andamento',
+        valor_vendido: valorFinal, valor_promob: valorTabela, desconto_percentual: pctDesc, vendedor: f.vendor || null,
+      })
+      await supabase.from('vendas').insert({
+        cliente_nome: f.cliente_nome.trim(), valor_vendido: valorFinal, valor_promob: valorTabela,
+        desconto_percentual: pctDesc, vendedor: f.vendor || null,
+        data_venda: new Date().toISOString().slice(0, 10), projeto_uid: numero,
+      })
+    } catch (_) { /* não bloqueia a emissão do contrato */ }
+
     await registrarLog({ tabela: 'contratos', registroId: 0, acao: 'criacao', descricao: `Contrato ${numero} — ${f.cliente_nome} (${brl(valorFinal)})` })
 
     setSaving(false)
