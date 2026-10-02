@@ -333,6 +333,8 @@ export default function EmitirContrato() {
 
   const S = { fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--ink-faint)', margin: '20px 0 12px', borderTop: '1px solid var(--line)', paddingTop: 16 }
 
+  if(original?.importacao)return <div className="card"><h3>{original.cliente_nome} · {original.numero}</h3><p>Contrato histórico preservado. Consulte o PDF original e os aditivos para conferir valores e condições.</p><p>Este documento não é recalculado nem reemitido pelo simulador de novas vendas.</p><Link className="btn" to="/contratos-importados">Abrir documentos importados</Link><button className="btn ghost" onClick={novoContrato}>Voltar aos contratos</button></div>
+
   return (
     <div className="card" style={{ maxWidth: 1000 }}>
       <div className="between">

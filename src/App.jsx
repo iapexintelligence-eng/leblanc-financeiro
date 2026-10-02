@@ -1,3 +1,4 @@
+import ContratosImportados from './pages/ContratosImportados.jsx'
 import Pendencias from './pages/Pendencias.jsx'
 import RevisaoMensal from './pages/RevisaoMensal.jsx'
 import CapacidadeMontagem from './pages/CapacidadeMontagem.jsx'
@@ -51,6 +52,7 @@ export default function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<Home />} />
+        <Route path="/contratos-importados" element={<ContratosImportados />} />
         <Route path="/pendencias" element={<Pendencias />} />
         <Route path="/revisao-mensal" element={<RevisaoMensal />} />
         <Route path="/capacidade-montagem" element={<CapacidadeMontagem />} />
