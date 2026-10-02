@@ -176,3 +176,21 @@ textarea.input { resize: vertical; min-height: 72px; }
 .search { position: relative; }
 .search .input { padding-left: 34px; }
 .search svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--ink-faint); }
+
+/* Jornada: formulários e agenda utilizáveis em telas menores. */
+@media (max-width: 760px) {
+  .app { flex-direction: column; }
+  .sidebar { width:100%; min-width:0; max-height:210px; position:relative; height:auto; overflow-y:auto; }
+  .sidebar .brand { padding-bottom:8px; }
+  .main { width:100%; }
+  .content { padding:16px; }
+  .topbar { padding:16px; flex-wrap:wrap; gap:10px; }
+  .section-head { flex-wrap:wrap; gap:10px; }
+  .modal-overlay { padding:8px; }
+  .modal .body { padding:16px; }
+  .modal .foot { flex-wrap:wrap; }
+  .between { flex-wrap:wrap; gap:10px; }
+}
+.btn:disabled { opacity:.45; cursor:not-allowed; }
+
+.btn svg { width: 18px; height: 18px; flex-shrink: 0; }

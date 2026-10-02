@@ -1,0 +1,18 @@
+import { useEffect,useState } from 'react'
+import { Link } from 'react-router-dom'
+import { authOn } from '../lib/supabase.js'
+import { carregarJornada } from '../lib/jornada.js'
+import { listarItens } from '../lib/colaboracao.js'
+import { jornadaDemo } from '../lib/jornadaDemo.js'
+import { PAPEIS, pendenciasAutomaticas, ordenarPendencias } from '../lib/operacao.js'
+import { hojeSP } from '../lib/prazos.js'
+export default function Pendencias(){
+ const [base,setBase]=useState(()=>authOn?null:jornadaDemo().dados),[itens,setItens]=useState([]),[papel,setPapel]=useState(''),[mes,setMes]=useState(hojeSP().slice(0,7)),[erro,setErro]=useState(''),[busca,setBusca]=useState('')
+ useEffect(()=>{if(authOn)Promise.all([carregarJornada(),listarItens()]).then(([b,i])=>{setBase(b);setItens(i);setPapel(b.eu?.papel==='gestor'?'':b.eu?.papel||'')}).catch(e=>setErro(e.message))},[])
+ const registros=base?.registros||[]
+ const lista=ordenarPendencias([...pendenciasAutomaticas(registros),...itens.filter(i=>(i.tipo==='tarefa'&&!i.dados.concluida)||(i.tipo==='excecao'&&['Em análise','Em tratamento'].includes(i.dados.status))).map(i=>({...i,cliente:registros.find(r=>r.id===i.registro_id)?.dados.cliente_nome,papel:i.tipo==='excecao'?'gestor':i.dados.responsavel_papel,prazo:i.dados.prazo,origem:i.tipo==='excecao'?'Exceção · '+i.dados.status:i.dados.bloqueia?'Tarefa bloqueante':'Tarefa',pessoa:i.dados.responsavel_id}))]).filter(i=>(!papel||i.papel===papel)&&(!i.prazo||i.prazo.startsWith(mes)||i.prazo<mes+'-01')&&`${i.cliente||''} ${i.titulo}`.toLowerCase().includes(busca.toLowerCase()))
+ return <><div className="card"><h3>Pendências da equipe</h3><p>Etapas em aberto e tarefas atribuídas. Pendências de meses anteriores permanecem visíveis até a conclusão.</p>{!authOn&&<p className="sub">Demonstração com clientes fictícios. Nenhum dado é gravado.</p>}<div className="tools" style={{flexWrap:'wrap'}}><label>Mês<input className="input" type="month" value={mes} onChange={e=>setMes(e.target.value||hojeSP().slice(0,7))}/></label><label>Equipe<select aria-label="Equipe" className="input" value={papel} onChange={e=>setPapel(e.target.value)}><option value="">Todos os responsáveis visíveis</option>{Object.entries(PAPEIS).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label><label>Buscar<input className="input" placeholder="Cliente ou tarefa" value={busca} onChange={e=>setBusca(e.target.value)}/></label></div></div>
+ {erro&&<div className="login-err" role="alert">Não foi possível carregar as pendências: {erro}</div>}
+ <div className="grid cols-3" style={{margin:'16px 0'}}>{[['Pendências nesta visão',lista.length],['Prazo vencido',lista.filter(i=>i.atrasada).length],['Sem data definida',lista.filter(i=>!i.prazo).length]].map(([l,v])=><div className="card kpi" key={l}><div className="label">{l}</div><div className="value">{v}</div></div>)}</div>
+ <div className="table-wrap"><table><thead><tr><th>Cliente</th><th>Próxima ação</th><th>Responsável</th><th>Prazo</th><th></th></tr></thead><tbody>{lista.map(i=><tr key={i.id} style={{background:i.atrasada?'var(--danger-bg)':undefined}}><td>{i.cliente||'Cliente do registro'}</td><td>{i.titulo}<div className="sub">{i.origem}</div></td><td>{PAPEIS[i.papel]}{i.pessoa&&<div>{base?.pessoas.find(p=>p.usuario_id===i.pessoa)?.nome||'Pessoa atribuída'}</div>}</td><td>{i.prazo||'Definir acompanhamento'}{i.atrasada&&<div className="badge danger">Atrasada</div>}</td><td><Link className="btn ghost" to={'/jornada?registro='+encodeURIComponent(i.registro_id)}>Abrir atendimento</Link></td></tr>)}{!lista.length&&<tr><td colSpan="5">Nenhuma pendência nesta seleção.</td></tr>}</tbody></table></div></>
+}

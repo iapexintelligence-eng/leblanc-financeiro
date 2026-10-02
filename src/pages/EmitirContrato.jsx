@@ -1,3 +1,7 @@
+import AditivosContrato from '../components/AditivosContrato.jsx'
+import { useSearchParams, Link } from 'react-router-dom'
+import { calcularProposta, dividirParcelas, VERSAO_REGRAS } from '../lib/regras.js'
+import { anexarJornada } from '../lib/jornada.js'
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { brl, fmtDate, today, addMonths, addBusinessDays } from '../lib/format.js'
@@ -10,12 +14,12 @@ import { parsePromobXML } from '../lib/promob.js'
 
 const FORMAS_PG = ['Pix / À vista', 'Débito', 'Crédito (cartão)', 'Financeira Santander']
 const BANDEIRAS = Object.keys(CARTAO)
-const linhaPgVazia = (valor = '') => ({ forma: 'Pix / À vista', valor, bandeira: 'Visa / Master / Elo', parcelas: 1, carencia: 30, prazoFin: 12, primeira: today() })
+const linhaPgVazia = (valor = '') => ({ forma: 'Pix / À vista', valor, operadora:'Sicoob', absorver:false, bandeira: 'Visa / Master / Elo', parcelas: 1, carencia: 30, prazoFin: 12, primeira: today() })
 function calcForma(l) {
   const valor = Number(l.valor) || 0
-  if (l.forma === 'Débito') return simularCartao(valor, l.bandeira, 'Débito', 1)
-  if (l.forma === 'Crédito (cartão)') return simularCartao(valor, l.bandeira, 'Crédito', Number(l.parcelas) || 1)
-  if (l.forma === 'Financeira Santander') return simularFinanceira(valor, Number(l.carencia), Number(l.prazoFin)) || { valorCliente: 0, parcela: 0, n: 0, lojaRecebe: 0, taxaCliente: 0 }
+  if (l.forma === 'Débito') return simularCartao(valor, l.bandeira, 'Débito', 1, l.operadora, l.absorver)
+  if (l.forma === 'Crédito (cartão)') return simularCartao(valor, l.bandeira, 'Crédito', Number(l.parcelas) || 1, l.operadora, l.absorver)
+  if (l.forma === 'Financeira Santander') return simularFinanceira(valor, Number(l.carencia), Number(l.prazoFin), l.absorver) || { valorCliente: 0, parcela: 0, n: 0, lojaRecebe: 0, taxaCliente: 0 }
   return { valorCliente: valor, parcela: valor, n: 1, lojaRecebe: valor, taxaCliente: 0 }
 }
 
@@ -63,13 +67,13 @@ const itemVazio = () => ({ qtd: 1, descricao: '', fornecedor: '', linha: '', pra
 const parcelaVazia = (n) => ({ numero: n, vencimento: today(), valor: '' })
 
 const inicial = () => ({
-  data_contrato: today(), loja: 'Curitiba', tipo_contrato: 'Normal',
+  regras_versao: VERSAO_REGRAS, entrada_percentual:60, data_contrato: today(), loja: 'Curitiba', tipo_contrato: 'Normal',
   vendedor: '', modelo_contrato: 'Le Blanc',
   cliente_nome: '', cliente_cpf: '', cliente_rg: '', cliente_nascimento: '',
   cliente_telefone: '', cliente_email: '', cliente_profissao: '',
   endereco: '', bairro: '', cidade: 'Curitiba', uf: 'PR', cep: '',
   entrega_endereco: '', entrega_bairro: '', entrega_cidade: '', entrega_uf: 'PR', entrega_cep: '',
-  prazo_entrega: 'Em dias úteis conforme ambientes',
+  prazo_entrega: '35 dias úteis após a aprovação do projeto pelo cliente',
   led_incluso: 'LED e instalação inclusos',
   itens: [itemVazio()],
   condicao_pagamento: '', forma_pagamento: 'Pix', data_entrada: '',
@@ -78,10 +82,12 @@ const inicial = () => ({
   local_orcamento: '', itens_extras: [], comissao_marketing: '',
   desconto_tipo: 'pct', desconto_valor: '', desconto_aprovado: false, desconto_aprovado_por: '',
 })
-const LIMITE_DESCONTO = 35 // % máximo sem autorização da diretoria
+
 
 export default function EmitirContrato() {
   const [f, setF] = useState(inicial())
+  const [params] = useSearchParams()
+  const [aprovacoes,setAprovacoes] = useState([])
   const [vendedores, setVendedores] = useState([])
   const [modelos, setModelos] = useState([])
   const [saving, setSaving] = useState(false)
@@ -115,25 +121,9 @@ export default function EmitirContrato() {
     setFluxo(data || null)
     if (data) setEnvio({ grupo: !!data.grupo_criado, imagens: !!data.imagens_enviadas })
   }
-  const enviarParaCorrecao = async () => {
-    setErro('')
-    if (!editId) { setErro('Salve o contrato antes de enviar para a Correção.'); return }
-    if (!envio.grupo || !envio.imagens) { setErro('Marque "grupo criado" e "imagens enviadas ao cliente" antes de enviar.'); return }
-    if (anexos.length === 0) { setErro('Anexe o print do grupo/imagens na pasta do cliente antes de enviar para a Correção.'); return }
-    const { data: u } = await supabase.auth.getUser()
-    const quem = u?.user?.email || 'sistema'
-    const payload = {
-      contrato_id: editId, etapa: 'correcao', grupo_criado: true, imagens_enviadas: true,
-      enviado_correcao_em: new Date().toISOString(), correcao_prazo: addBusinessDays(today(), 12),
-      devolvido: false, prioridade: false, updated_at: new Date().toISOString(),
-    }
-    const up = await crm.from('projeto_fluxo').upsert(payload, { onConflict: 'contrato_id' })
-    if (up.error) { setErro('Erro ao enviar: ' + up.error.message); return }
-    await crm.from('projeto_eventos').insert({ contrato_id: editId, tipo: 'envio_correcao', descricao: `Enviado para a Correção (prazo ${fmtDate(addBusinessDays(today(), 12))})`, setor: 'Vendas', autor: quem })
-    carregarFluxo(editId)
-  }
+  const enviarParaCorrecao = () => { window.location.hash = ''; window.location.assign('/jornada') }
   const baixarAnexo = async (a) => {
-    const { data, error } = await supabase.storage.from('pasta-cliente').createSignedUrl(a.path, 60)
+    const { data, error } = await supabase.storage.from(a.bucket||'pasta-cliente').createSignedUrl(a.path, 60)
     if (!error && data?.signedUrl) window.open(data.signedUrl, '_blank')
     else setErro('Não foi possível abrir o arquivo.')
   }
@@ -148,12 +138,16 @@ export default function EmitirContrato() {
     }
     setUploading(tipo)
     const safe = file.name.replace(/[^\w.\-]/g, '_')
-    const path = `${id}/${tipo}/${Date.now()}_${safe}`
-    const up = await supabase.storage.from('pasta-cliente').upload(path, file, { upsert: false })
+    const { data: identidade } = await supabase.auth.getUser()
+    if(!identidade?.user){setUploading('');setErro('Entre no sistema para anexar.');return}
+    if(file.size>50*1024*1024){setUploading('');setErro('O limite por arquivo é 50 MB.');return}
+    const path = `${identidade.user.id}/${id}/${tipo}/${crypto.randomUUID()}_${safe}`
+    const up = await supabase.storage.from('comercial-documentos').upload(path, file, { upsert: false })
     if (up.error) { setUploading(''); setErro('Erro no upload: ' + up.error.message); return }
     const { data: u } = await supabase.auth.getUser()
-    await crm.from('contrato_anexos').insert({ contrato_id: id, tipo, nome_arquivo: file.name, path, tamanho: file.size, enviado_por: u?.user?.email || 'sistema' })
+    const anexo = await crm.from('contrato_anexos').insert({ bucket:'comercial-documentos', contrato_id: id, tipo, nome_arquivo: file.name, path, tamanho: file.size, enviado_por: u?.user?.email || 'sistema' })
     setUploading('')
+    if(anexo.error){setErro('Arquivo enviado, mas não foi possível vincular: '+anexo.error.message);return}
     carregarAnexos(id)
   }
 
@@ -166,8 +160,9 @@ export default function EmitirContrato() {
       const industria = INDUSTRIAS.includes(p.fornecedor) ? p.fornecedor : (p.fornecedor || '')
       const itensNovos = (p.ambientes.length ? p.ambientes : [{ descricao: '', valor: p.total, fornecedor: industria }])
         .map((a) => ({ ...itemVazio(), descricao: a.descricao, valor: a.valor || '', fornecedor: industria }))
+      const arquivo = await anexarJornada(file)
       setF((s) => ({
-        ...s,
+        ...s, promob_arquivo:arquivo, promob_original:p,
         cliente_nome: s.cliente_nome || p.cliente.cliente_nome,
         cliente_cpf: s.cliente_cpf || p.cliente.cliente_cpf,
         cliente_email: s.cliente_email || p.cliente.cliente_email,
@@ -181,8 +176,7 @@ export default function EmitirContrato() {
         itens: itensNovos,
       }))
       setImportInfo(`Promob importado: ${p.ambientes.length || 1} ambiente(s) · ${industria || 'indústria não identificada'} · total ${brl(p.total)}. Confira os campos antes de salvar.`)
-      // guarda o próprio XML na pasta do cliente (preço de fábrica)
-      enviarArquivo(file, 'promob')
+      // O XML original fica em armazenamento privado; o importador nunca o sobrescreve.
     } catch (e) {
       setErro('Não consegui ler o XML do Promob: ' + (e.message || e))
     }
@@ -199,7 +193,7 @@ export default function EmitirContrato() {
     })()
   }, [])
 
-  const novoContrato = () => { setF(inicial()); setEditId(null); setSalvo(null); setErro(''); setOriginal(null); setHistorico([]); setAnexos([]); setFluxo(null); setEnvio({ grupo: false, imagens: false }) }
+  const novoContrato = () => { setFormasPg([linhaPgVazia()]);setAprovacoes([]);setF(inicial()); setEditId(null); setSalvo(null); setErro(''); setOriginal(null); setHistorico([]); setAnexos([]); setFluxo(null); setEnvio({ grupo: false, imagens: false }) }
 
   const abrirContrato = async (id) => {
     setErro(''); setSalvo(null)
@@ -207,11 +201,13 @@ export default function EmitirContrato() {
     if (error) { setErro('Erro ao abrir contrato: ' + error.message); return }
     const dj = data.dados_json && Object.keys(data.dados_json).length ? data.dados_json : null
     setOriginal(dj || null)
+    setSalvo(dj?{...dj,id:data.id,status:data.status}:null)
     carregarHistorico(id)
     carregarAnexos(id)
     carregarFluxo(id)
     if (dj) {
       setF({ ...inicial(), ...dj })
+      setFormasPg(dj.formas_pagamento || [linhaPgVazia()])
     } else {
       // contrato antigo (sem dados_json completo) — reconstrói o básico das colunas
       setF({ ...inicial(), numero: data.numero, cliente_nome: data.cliente_nome || '', cliente_cpf: data.cliente_cpf || '',
@@ -220,11 +216,13 @@ export default function EmitirContrato() {
         observacoes: data.observacoes || '', itens: [{ ...itemVazio(), descricao: data.projeto_ambientes || '', valor: data.valor_final || '' }] })
     }
     setEditId(id)
+    const ap = await supabase.from('comercial_aprovacoes').select('*').eq('contrato_id',String(id)).order('criado_em',{ascending:false})
+    setAprovacoes(ap.data||[])
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const set = (k, v) => setF((s) => ({ ...s, [k]: v }))
-  const setItem = (i, k, v) => setF((s) => ({ ...s, itens: s.itens.map((it, j) => j === i ? { ...it, [k]: v } : it) }))
+  const set = (k, v) => {setSalvo(null);setF((s) => ({ ...s, [k]: v }))}
+  const setItem = (i, k, v) => {setSalvo(null);return setF((s) => ({ ...s, itens: s.itens.map((it, j) => j === i ? { ...it, [k]: v } : it) }))}
   const addItem = () => setF((s) => ({ ...s, itens: [...s.itens, itemVazio()] }))
   const rmItem = (i) => setF((s) => ({ ...s, itens: s.itens.filter((_, j) => j !== i) }))
   const setParc = (i, k, v) => setF((s) => ({ ...s, parcelas: s.parcelas.map((p, j) => j === i ? { ...p, [k]: v } : p) }))
@@ -235,20 +233,15 @@ export default function EmitirContrato() {
   const rmExtra = (i) => setF((s) => ({ ...s, itens_extras: s.itens_extras.filter((_, j) => j !== i) }))
 
   const role = useRole()
-  const totalPedido = f.itens.reduce((s, it) => s + (Number(it.valor) || 0), 0)
-  const totalParcelas = f.parcelas.reduce((s, p) => s + (Number(p.valor) || 0), 0)
-  const totalExtras = f.itens_extras.reduce((s, it) => s + (Number(it.valor) || 0), 0)
-
-  // ---- Desconto ao cliente (trava 35%) ----
-  const descVal = Number(f.desconto_valor) || 0
-  const descontoValor = f.desconto_tipo === 'pct' ? totalPedido * descVal / 100 : descVal
-  const descontoPct = totalPedido > 0 ? (descontoValor / totalPedido) * 100 : 0
-  const valorFinal = Math.max(0, totalPedido - descontoValor)
-  const precisaAprovacao = descontoPct > LIMITE_DESCONTO + 0.001
-  const bloqueadoDesconto = precisaAprovacao && !f.desconto_aprovado
-
+  let calculo, calculoErro=''
+  try {calculo=calcularProposta(f.itens,f.desconto_valor||0,f.desconto_tipo)} catch(e) {calculoErro=e.message;calculo={original:0,marketing:0,base:0,abatimento:0,percentual:0,limite:0,final:0,exigeAutorizacao:true}}
+  const totalPedido=calculo.base, descontoValor=calculo.abatimento, descontoPct=calculo.percentual, valorFinal=calculo.final
+  const LIMITE_DESCONTO=calculo.limite, precisaAprovacao=calculo.exigeAutorizacao, bloqueadoDesconto=precisaAprovacao&&!f.desconto_aprovado
+  const descVal=Number(f.desconto_valor)||0
+  const totalParcelas=f.parcelas.reduce((s,p)=>s+Number(p.valor||0),0)
+  const totalExtras=f.itens_extras.reduce((s,i)=>s+Number(i.valor||0)*Number(i.qtd||1),0)
   // ---- Simulador de pagamento (misto) ----
-  const setFP = (i, k, v) => setFormasPg((s) => s.map((l, j) => j === i ? { ...l, [k]: v } : l))
+  const setFP = (i, k, v) => {setSalvo(null);setFormasPg((s) => s.map((l, j) => j === i ? { ...l, [k]: v } : l))}
   const addFP = () => setFormasPg((s) => [...s, linhaPgVazia()])
   const rmFP = (i) => setFormasPg((s) => s.filter((_, j) => j !== i))
   const preencherTotal = () => setFormasPg([linhaPgVazia(valorFinal)])
@@ -259,13 +252,16 @@ export default function EmitirContrato() {
   const pgLoja = calcPg.reduce((s, r) => s + (r.lojaRecebe || 0), 0)
 
   const aplicarSimulacao = () => {
+    setSalvo(null)
+    if (Math.abs(pgRestante)>0.01 || calcPg.some(r=>r.erro)) {setErro('Confira a alocação e as formas de pagamento antes de aplicar.');return}
     const out = []
     let num = 0
     formasPg.forEach((l, idx) => {
       const r = calcForma(l)
       const n = r.n || 1
       const primeira = l.primeira || today()
-      for (let i = 0; i < n; i++) { num++; out.push({ numero: num, valor: r.parcela, vencimento: i === 0 ? primeira : addMonths(primeira, i) }) }
+      const valores=dividirParcelas(r.valorCliente,n)
+      for (let i = 0; i < n; i++) { num++; out.push({ numero: num, valor: valores[i], vencimento: i === 0 ? primeira : addMonths(primeira, i) }) }
     })
     if (!out.length) return
     const resumo = formasPg.map((l) => l.forma === 'Crédito (cartão)' ? `Cartão ${l.parcelas}x` : l.forma === 'Financeira Santander' ? `Financeira ${l.prazoFin}x` : l.forma).join(' + ')
@@ -288,84 +284,52 @@ export default function EmitirContrato() {
     return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}${String(d.getSeconds()).padStart(2, '0')}`
   }
 
-  const montarDados = (numero) => ({ ...f, numero, total_pedido: totalPedido })
+  const montarDados = (numero) => ({ ...f, numero, total_pedido: totalPedido, formas_pagamento: formasPg, regras_versao: VERSAO_REGRAS })
 
   const salvar = async () => {
     setErro('')
-    if (!f.cliente_nome.trim()) { setErro('Informe ao menos o nome do cliente.'); return }
+    if(calculoErro){setErro(calculoErro);return}
+    if(editId && original?.regras_versao!==VERSAO_REGRAS){setErro('Contrato histórico preservado. Faça uma revisão antes de migrar seus valores.');return}
+    if(f.itens_extras.length){setErro('Kits ainda aguardam tabela e regra de desconto. Não é possível emitir com valores provisórios.');return}
     setSaving(true)
-    const numero = f.numero || gerarNumero()
-    const ambientesTxt = f.itens.filter((it) => it.descricao).map((it) => `${it.descricao}${it.linha ? ` (${it.linha})` : ''}`).join('; ')
-    const status = bloqueadoDesconto ? 'Aguardando aprovação' : (totalPedido > 0 ? 'Emitido' : 'Rascunho')
-    const payload = {
-      numero, cliente_nome: f.cliente_nome.trim(), cliente_cpf: f.cliente_cpf || null,
-      cliente_telefone: f.cliente_telefone || null,
-      cliente_endereco: [f.endereco, f.bairro, f.cidade, f.uf].filter(Boolean).join(', ') || null,
-      projeto_ambientes: ambientesTxt || null, vendor: f.vendedor || null,
-      modelo_contrato: f.modelo_contrato, valor_tabela: totalPedido,
-      desconto_tipo: f.desconto_tipo, desconto_entrada: descVal, valor_desconto: descontoValor, valor_final: valorFinal,
-      forma_pagamento: f.forma_pagamento, parcelas: f.parcelas.length,
-      status, observacoes: f.observacoes || null, dados_json: montarDados(numero),
-    }
-    let contrato
-    if (editId) {
-      const up = await crm.from('contratos').update(payload).eq('id', editId).select('*').single()
-      if (up.error) { setSaving(false); setErro('Erro ao atualizar: ' + up.error.message); return }
-      contrato = up.data
-      await crm.from('contrato_parcelas').delete().eq('contrato_id', editId)
-      await supabase.from('a_receber').delete().ilike('descricao', `Contrato ${numero} —%`)
-    } else {
-      const ins = await crm.from('contratos').insert(payload).select('*').single()
-      if (ins.error) { setSaving(false); setErro('Erro ao salvar: ' + ins.error.message); return }
-      contrato = ins.data; setEditId(contrato.id)
-    }
-
-    const parcelasValidas = f.parcelas.filter((p) => Number(p.valor) > 0)
-    if (parcelasValidas.length) {
-      await crm.from('contrato_parcelas').insert(parcelasValidas.map((p) => ({
-        contrato_id: contrato.id, numero: p.numero, valor: Number(p.valor), vencimento: p.vencimento, status: 'Pendente',
-      })))
-      await supabase.from('a_receber').insert(parcelasValidas.map((p) => ({
-        cliente_nome: f.cliente_nome.trim(),
-        descricao: `Contrato ${numero} — parcela ${p.numero}/${parcelasValidas.length}`,
-        valor_parcela: Number(p.valor), data_prevista: p.vencimento, status: 'Pendente', forma_recebimento: f.forma_pagamento,
-      })))
-    }
-    // Histórico: quem, quando e o que mudou
-    const { data: u } = await supabase.auth.getUser()
-    const quem = u?.user?.email || 'sistema'
-    const snapshot = montarDados(numero)
-    const campos = editId ? diffContrato(original, snapshot) : {}
-    let descricao = editId
-      ? (Object.keys(campos).length ? 'Alterou: ' + Object.keys(campos).join(', ') : 'Salvou sem mudanças')
-      : 'Contrato criado'
-    if (bloqueadoDesconto) descricao += ` · AGUARDANDO APROVAÇÃO — desconto ${descontoPct.toFixed(1)}% (acima de ${LIMITE_DESCONTO}%)`
-    await crm.from('contrato_historico').insert({
-      contrato_id: contrato.id, numero, acao: editId ? 'edicao' : 'criacao',
-      alteracoes: { campos, snapshot }, descricao, editado_por: quem,
-    })
-    await registrarLog({ tabela: 'contratos', registroId: 0, acao: editId ? 'edicao' : 'criacao',
-      descricao: `Contrato ${numero} — ${f.cliente_nome}${bloqueadoDesconto ? ' · APROVAÇÃO DE DESCONTO PENDENTE (diretoria informada)' : ''}` })
-
-    setSaving(false)
-    setF((s) => ({ ...s, numero }))
-    setOriginal(snapshot)
-    setSalvo({ ...snapshot, id: contrato.id, status })
-    carregarLista(); carregarHistorico(contrato.id)
-    return contrato
+    try {
+      const numero=f.numero||gerarNumero()
+      const res=await supabase.rpc('comercial_salvar',{p_id:editId?String(editId):null,p_dados:montarDados(numero)})
+      if(res.error)throw res.error
+      const c=res.data
+      setEditId(c.id);setF({...inicial(),...c.dados_json});setOriginal(c.dados_json);setSalvo({...c.dados_json,id:c.id,status:c.status})
+      await carregarLista();await carregarHistorico(c.id)
+      const ap=await supabase.from('comercial_aprovacoes').select('*').eq('contrato_id',String(c.id)).order('criado_em',{ascending:false});setAprovacoes(ap.data||[])
+      return c
+    }catch(e){setErro(e.message)}finally{setSaving(false)}
   }
-
-  const imprimir = () => imprimirContrato(salvo || montarDados(f.numero || gerarNumero()))
-
+  const imprimir = () => {
+    if(!salvo || salvo.status!=='Emitido'){setErro('Salve a proposta e conclua as autorizações antes de emitir o contrato.');return}
+    imprimirContrato(salvo).catch(e=>setErro(e.message))
+  }
   const aprovarDesconto = async () => {
-    if (!editId) { setErro('Salve o contrato antes de aprovar o desconto.'); return }
-    const novoDados = { ...montarDados(f.numero), desconto_aprovado: true, desconto_aprovado_por: role.email }
-    const up = await crm.from('contratos').update({ status: 'Emitido', dados_json: novoDados }).eq('id', editId)
-    if (up.error) { setErro('Erro ao aprovar: ' + up.error.message); return }
-    await crm.from('contrato_historico').insert({ contrato_id: editId, numero: f.numero, acao: 'edicao', descricao: `Desconto ${descontoPct.toFixed(1)}% APROVADO pela diretoria`, editado_por: role.email, alteracoes: { campos: {} } })
-    setF((s) => ({ ...s, desconto_aprovado: true, desconto_aprovado_por: role.email }))
-    carregarHistorico(editId); carregarLista()
+    const pendente=aprovacoes.find(a=>!a.aprovado_em)
+    if(!pendente){setErro('Salve a proposta para criar a solicitação de autorização.');return}
+    const r=await supabase.rpc('comercial_aprovar',{p_id:pendente.id})
+    if(r.error){setErro(r.error.message);return}
+    await abrirContrato(editId)
+    setErro('Autorização registrada. Salve a versão aprovada para emitir.')
   }
+  const avista = () => {
+    setSalvo(null)
+    const pct=Number(f.entrada_percentual)
+    if(!Number.isFinite(pct)||pct<=0||pct>=100){setErro('Informe percentual de entrada entre 0 e 100.');return}
+    const entrada=Math.round(valorFinal*pct)/100
+    setFormasPg([{...linhaPgVazia(valorFinal),forma:'Pix / À vista'}])
+    setF(v=>({...v,forma_pagamento:'Pix / À vista',condicao_pagamento:`${pct}% na venda e ${100-pct}% dois dias corridos antes da entrega`,parcelas:[{numero:1,valor:entrada,vencimento:v.data_contrato,marco:'venda'},{numero:2,valor:Math.round((valorFinal-entrada)*100)/100,vencimento:'',marco:'dois_dias_antes_entrega'}]}))
+  }
+  useEffect(()=>{
+    const lead=params.get('lead');if(!lead)return
+    supabase.schema('leblanc').from('leads').select('id,name,phone,city,vendor').eq('id',lead).single().then(({data,error})=>{
+      if(error){setErro('Não foi possível importar o cliente do CRM: '+error.message);return}
+      setF(v=>({...v,lead_id:String(data.id),cliente_nome:data.name||'',cliente_telefone:data.phone||'',cidade:data.city||v.cidade,vendedor:data.vendor||''}))
+    })
+  },[params])
 
   const S = { fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--ink-faint)', margin: '20px 0 12px', borderTop: '1px solid var(--line)', paddingTop: 16 }
 
@@ -378,12 +342,14 @@ export default function EmitirContrato() {
         </div>
         <div className="tools">
           {editId && <button className="btn ghost" onClick={novoContrato}>+ Novo (limpar)</button>}
-          <button className="btn ghost" onClick={imprimir}>Imprimir / PDF</button>
+          <button className="btn ghost" onClick={imprimir}>Prévia da minuta / PDF</button>
           <button className="btn" onClick={salvar} disabled={saving}><IcoPlus /> {saving ? 'Salvando…' : (editId ? 'Atualizar contrato' : 'Salvar contrato')}</button>
         </div>
       </div>
       {erro && <div className="login-err" style={{ margin: '12px 0' }}>{erro}</div>}
-      {salvo && <div className="badge ok" style={{ margin: '12px 0', display: 'inline-block' }}>Contrato {salvo.numero} {salvo.status === 'Rascunho' ? 'salvo como RASCUNHO (você pode completar depois)' : 'salvo · parcelas no Recebíveis'}</div>}
+      {calculoErro&&<p className="login-err">{calculoErro}</p>}
+      <p className="sub">Uso interno: Promob {brl(calculo.original)} + marketing automático de 15% ({brl(calculo.marketing)}). Base de desconto: {brl(totalPedido)}. Limite sem autorização: {LIMITE_DESCONTO}%.</p>
+      {salvo && <div className="badge ok" style={{ margin: '12px 0', display: 'inline-block' }}>Contrato {salvo.numero} {salvo.status === 'Rascunho' ? 'salvo como RASCUNHO (você pode completar depois)' : 'salvo · confira a situação de aprovação e os recebíveis da jornada'}</div>}
 
       {lista.length > 0 && (
         <details style={{ margin: '10px 0 16px', border: '1px solid var(--line)', borderRadius: 10, padding: '10px 14px' }}>
@@ -438,6 +404,7 @@ export default function EmitirContrato() {
         {importInfo && <div className="badge ok" style={{ display: 'inline-block', marginTop: 10 }}>{importInfo}</div>}
       </div>
 
+      <AditivosContrato key={editId||'sem-contrato'} contratoId={editId} />
       <div style={{ ...S }}>Pasta do cliente — arquivos</div>
       <div style={{ border: '1px solid var(--line)', borderRadius: 10, padding: 14 }}>
         <div className="row-2">
@@ -451,7 +418,7 @@ export default function EmitirContrato() {
           </div>
         </div>
         {uploading && <div className="sub" style={{ marginTop: 8 }}>Enviando arquivo ({uploading})…</div>}
-        {!editId && <div className="sub" style={{ marginTop: 8, color: 'var(--warn)' }}>Ao anexar, o contrato é salvo como rascunho automaticamente para criar a pasta (informe ao menos o cliente).</div>}
+        {!editId && <div className="sub" style={{ marginTop: 8, color: 'var(--warn)' }}>Salve a proposta completa para vincular os documentos ao contrato.</div>}
         {anexos.length > 0 && (
           <div className="table-wrap" style={{ boxShadow: 'none', marginTop: 12 }}>
             <table>
@@ -586,10 +553,13 @@ export default function EmitirContrato() {
                 <select className="input" value={l.forma} onChange={(e) => setFP(i, 'forma', e.target.value)}>{FORMAS_PG.map((x) => <option key={x}>{x}</option>)}</select></div>
               <div className="field" style={{ margin: 0 }}><label>Valor nesta forma</label><input className="input" type="number" step="0.01" value={l.valor} onChange={(e) => setFP(i, 'valor', e.target.value)} /></div>
             </div>
+            {['Débito','Crédito (cartão)'].includes(l.forma)&&<div className="field"><label>Operadora</label><select className="input" value={l.operadora||'Sicoob'} onChange={e=>setFP(i,'operadora',e.target.value)}><option>Sicoob</option><option>Cielo</option></select></div>}
+            <label><input type="checkbox" checked={!!l.absorver} onChange={e=>setFP(i,'absorver',e.target.checked)}/> Loja absorve taxas (exige autorização)</label>
+            {calcPg[i]?.erro&&<p className="login-err">{calcPg[i].erro}</p>}
             {l.forma === 'Crédito (cartão)' && (
               <div className="row-3" style={{ marginTop: 10 }}>
                 <div className="field" style={{ margin: 0 }}><label>Bandeira</label><select className="input" value={l.bandeira} onChange={(e) => setFP(i, 'bandeira', e.target.value)}>{BANDEIRAS.map((b) => <option key={b}>{b}</option>)}</select></div>
-                <div className="field" style={{ margin: 0 }}><label>Parcelas</label><input className="input" type="number" min="1" max="21" value={l.parcelas} onChange={(e) => setFP(i, 'parcelas', e.target.value)} /></div>
+                <div className="field" style={{ margin: 0 }}><label>Parcelas</label><input className="input" type="number" min="1" max={l.operadora==='Cielo'?18:21} value={l.parcelas} onChange={(e) => setFP(i, 'parcelas', e.target.value)} /></div>
                 <div className="field" style={{ margin: 0 }}><label>1ª parcela</label><input className="input" type="date" value={l.primeira} onChange={(e) => setFP(i, 'primeira', e.target.value)} /></div>
               </div>
             )}
@@ -618,6 +588,8 @@ export default function EmitirContrato() {
         <span className="muted">Cliente paga <b>{brl(pgCliente)}</b> · Loja recebe líquido <b>{brl(pgLoja)}</b></span>
         <button className="btn" onClick={aplicarSimulacao}>Aplicar ao contrato → gerar parcelas</button>
       </div>
+      <div className="tools"><label>Entrada (%) <input className="input" type="number" min="1" max="99" value={f.entrada_percentual} onChange={e=>set('entrada_percentual',e.target.value)}/></label><button className="btn ghost" onClick={avista}>Aplicar à vista · saldo 2 dias antes da entrega</button></div>
+      <p className="sub">Saldo à vista sem data de entrega definida fica com vencimento a confirmar. Qualquer entrada diferente de 60% exige autorização.</p>
       <div className="sub" style={{ marginBottom: 8 }}>Parcelas geradas (pode ajustar manualmente abaixo):</div>
       <div className="table-wrap" style={{ boxShadow: 'none' }}>
         <table>
@@ -626,7 +598,7 @@ export default function EmitirContrato() {
             {f.parcelas.map((p, i) => (
               <tr key={i}>
                 <td>{p.numero}</td>
-                <td><input className="input" style={{ width: 160 }} type="date" value={p.vencimento} onChange={(e) => setParc(i, 'vencimento', e.target.value)} /></td>
+                <td><input className="input" style={{ width: 160 }} type="date" disabled={p.marco==='dois_dias_antes_entrega'} value={p.vencimento} onChange={(e) => setParc(i, 'vencimento', e.target.value)} /></td>
                 <td><input className="input" style={{ width: 120 }} type="number" step="0.01" value={p.valor} onChange={(e) => setParc(i, 'valor', e.target.value)} /></td>
                 <td><button className="icon-btn" onClick={() => rmParc(i)} disabled={f.parcelas.length === 1}>×</button></td>
               </tr>
@@ -636,8 +608,8 @@ export default function EmitirContrato() {
       </div>
       <div className="between" style={{ marginTop: 10 }}>
         <button className="btn ghost sm" onClick={addParc}><IcoPlus /> Adicionar parcela</button>
-        <div className={Math.abs(totalParcelas - totalPedido) > 0.5 ? 'badge warn' : 'badge ok'}>
-          Parcelas: {brl(totalParcelas)} {Math.abs(totalParcelas - totalPedido) > 0.5 ? `(difere do total ${brl(totalPedido)})` : '· confere com o total'}
+        <div className={Math.abs(totalParcelas - (pgCliente||valorFinal)) > 0.5 ? 'badge warn' : 'badge ok'}>
+          Parcelas: {brl(totalParcelas)} {Math.abs(totalParcelas - (pgCliente||valorFinal)) > 0.5 ? `(difere do total ${brl(pgCliente||valorFinal)})` : '· confere com o total'}
         </div>
       </div>
 
@@ -647,7 +619,7 @@ export default function EmitirContrato() {
       <div style={{ border: '1px solid var(--warn-bg)', borderRadius: 10, padding: 16, marginTop: -6 }}>
         <div className="row-2">
           <div className="field"><label>Onde foi feito o orçamento</label><input className="input" value={f.local_orcamento} onChange={(e) => set('local_orcamento', e.target.value)} placeholder="Ex.: Promob, planilha…" /></div>
-          <div className="field"><label>Comissão do marketing (R$)</label><input className="input" type="number" step="0.01" value={f.comissao_marketing} onChange={(e) => set('comissao_marketing', e.target.value)} placeholder="valor interno" /></div>
+          <div className="field"><label>Custo de marketing para conferência (não confundir com o acréscimo de 15%)</label><input className="input" type="number" step="0.01" value={f.comissao_marketing} onChange={(e) => set('comissao_marketing', e.target.value)} placeholder="valor interno" /></div>
         </div>
         <div className="table-wrap" style={{ boxShadow: 'none' }}>
           <table>
@@ -677,21 +649,11 @@ export default function EmitirContrato() {
 
       <div className="tools" style={{ marginTop: 8 }}>
         <button className="btn" onClick={salvar} disabled={saving}>{saving ? 'Salvando…' : 'Salvar contrato'}</button>
-        <button className="btn ghost" onClick={imprimir}>Imprimir / Gerar PDF</button>
+        <button className="btn ghost" onClick={imprimir}>Prévia da minuta / PDF</button>
       </div>
 
-      <div style={S}>Envio para a Correção</div>
-      {fluxo && fluxo.etapa !== 'vendedor' ? (
-        <div className="badge ok" style={{ display: 'inline-block' }}>✓ Já na etapa "{fluxo.etapa}" · enviado à Correção em {fmtDate(fluxo.enviado_correcao_em)} · prazo {fmtDate(fluxo.correcao_prazo)}</div>
-      ) : (
-        <div style={{ border: '1px solid var(--line)', borderRadius: 10, padding: 14 }}>
-          {fluxo?.devolvido && <div style={{ background: 'var(--danger-bg)', color: 'var(--danger)', padding: '8px 12px', borderRadius: 8, marginBottom: 10, fontSize: 13 }}>⚠ Devolvido pela Correção: <b>{fluxo.devolucao_motivo}</b>. Resolva e reenvie.</div>}
-          <label className="flex" style={{ cursor: 'pointer', marginBottom: 8 }}><input type="checkbox" checked={envio.grupo} onChange={(e) => setEnvio({ ...envio, grupo: e.target.checked })} /> Grupo (WhatsApp) do cliente já criado</label>
-          <label className="flex" style={{ cursor: 'pointer', marginBottom: 10 }}><input type="checkbox" checked={envio.imagens} onChange={(e) => setEnvio({ ...envio, imagens: e.target.checked })} /> Imagens enviadas ao cliente</label>
-          <div className="sub" style={{ marginBottom: 10 }}>Anexe o print do grupo e as imagens na "Pasta do cliente" (acima). Só dá pra enviar com os dois itens marcados e ao menos um anexo.</div>
-          <button className="btn" onClick={enviarParaCorrecao} disabled={!envio.grupo || !envio.imagens || anexos.length === 0}>Enviar para a Correção</button>
-        </div>
-      )}
+      <div style={S}>Checklist, medição e correção</div><p>O checklist e as liberações agora são registrados na <Link to="/jornada">Jornada do cliente</Link>. A medição tem 5 dias corridos; a conferência, 12 dias úteis após a medição.</p>
+      <Link className="btn" to="/jornada">Abrir checklist e jornada</Link>
     </div>
   )
 }

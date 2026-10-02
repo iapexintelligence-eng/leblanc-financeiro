@@ -2,7 +2,7 @@
 
 // Cartão — MDR (custo da loja) por bandeira/faixa
 export const CARTAO = {
-  'Visa / Master / Elo': { debito: 0.89, credito_avista: 2.1, credito_2_6: 1.69, credito_7_21: 1.99 },
+  'Visa / Master / Elo': { debito: 0.89, credito_avista: 2, credito_2_6: 1.69, credito_7_21: 1.99 },
   'Amex': { debito: null, credito_avista: 4.69, credito_2_6: 4.99, credito_7_21: 4.99 },
 }
 export const ACRESCIMO_PARCELADO = 1.55 // % adicionado ao cliente em vendas parceladas no crédito
@@ -23,26 +23,30 @@ export function taxaCartaoMDR(bandeira, tipo, parcelas) {
   return b.credito_7_21
 }
 
-// Cartão: a taxa é COBRADA DO CLIENTE. Cliente paga valor + taxa (+1,55% se parcelado);
-// a loja recebe o valor cheio (a taxa vira margem/cobre o custo da maquininha).
-export function simularCartao(valor, bandeira, tipo, parcelas) {
-  valor = Number(valor) || 0
-  const base = taxaCartaoMDR(bandeira, tipo, parcelas)
-  const parcelado = tipo === 'Crédito' && parcelas > 1
-  // Cobrado do cliente = taxa da faixa + 1,55% quando parcelado no crédito
-  const taxaCliente = round2(base + (parcelado ? ACRESCIMO_PARCELADO : 0))
-  const n = tipo === 'Débito' ? 1 : parcelas
-  const valorCliente = round2(valor * (1 + taxaCliente / 100))
-  return { valorCliente, parcela: round2(valorCliente / n), n, taxaCliente, mdr: base, lojaRecebe: valor }
+// Taxas fornecidas pela loja. Antecipação mensal Sicoob: estimativa por vencimento
+// mensal (30, 60, ... dias); conciliar o líquido com o demonstrativo da operadora.
+export const CIELO_ANTECIPACAO = [0,1.29,0.70,0.80,1,0.90,0.85,0.70,0.70,0.70,0.70,0.80,0.75]
+export function simularCartao(valor, bandeira, tipo, parcelas, operadora = 'Sicoob', absorver = false) {
+  valor = Number(valor)
+  const n = tipo === 'Débito' ? 1 : Number(parcelas)
+  const max = operadora === 'Cielo' ? 18 : 21
+  if (!Number.isFinite(valor) || valor < 0 || !Number.isInteger(n) || n < 1 || n > max) return { erro: `Informe valor válido e de 1 a ${max} parcelas.`, n:0, valorCliente:0, lojaRecebe:0 }
+  if (!['Sicoob','Cielo'].includes(operadora) || !CARTAO[bandeira] || (tipo === 'Débito' && CARTAO[bandeira].debito == null) || (operadora === 'Cielo' && bandeira === 'Amex')) return {erro:'Combinação sem taxa cadastrada.',n:0,valorCliente:0,lojaRecebe:0}
+  const mdr = operadora === 'Cielo' ? (tipo === 'Débito' ? 0.79 : n === 1 ? 1.40 : n <= 6 ? 2.29 : 2.69) : taxaCartaoMDR(bandeira,tipo,n)
+  const ant = tipo === 'Débito' ? 0 : operadora === 'Cielo' ? CIELO_ANTECIPACAO[Math.min(n,12)] : n > 1 ? ACRESCIMO_PARCELADO*(n+1)/2 : 0
+  const fator = (1-mdr/100)*(1-ant/100)
+  const valorCliente = absorver ? round2(valor) : round2(valor/fator)
+  const lojaRecebe = round2(valorCliente*fator)
+  return {valorCliente, parcela:round2(valorCliente/n), n, taxaCliente:round2((valorCliente/Math.max(valor,0.01)-1)*100),mdr,antecipacao:round2(ant),lojaRecebe,custo:round2(valorCliente-lojaRecebe),estimativa:true}
 }
 
 // Financeira: repasse pro cliente (engorda pela retenção). Loja recebe o valor cheio.
-export function simularFinanceira(valor, carencia, prazo) {
+export function simularFinanceira(valor, carencia, prazo, absorver = false) {
   valor = Number(valor) || 0
   const t = FINANCEIRA[carencia]?.[prazo]
   if (!t) return null
   const [coef, ret] = t
-  const financiado = valor / (1 - ret / 100)
+  const financiado = absorver ? valor : valor / (1 - ret / 100)
   const parcela = round2(financiado * coef)
-  return { parcela, n: prazo, valorCliente: round2(parcela * prazo), retencao: ret, coef, financiado: round2(financiado), lojaRecebe: valor }
+  return { parcela, n: prazo, valorCliente: round2(parcela * prazo), retencao: ret, coef, financiado: round2(financiado), lojaRecebe: round2(financiado * (1 - ret / 100)) }
 }

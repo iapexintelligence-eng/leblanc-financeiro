@@ -1,3 +1,4 @@
+import {Link} from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { brl, fmtDate, today, addMonths } from '../lib/format.js'
@@ -91,7 +92,9 @@ export default function Recebiveis() {
   }
 
   const marcarRecebido = async (r) => {
-    await supabase.from('a_receber').update({ status: 'Recebido', data_recebimento: today() }).eq('id', r.id)
+    setErro('')
+    const {error} = await supabase.from('a_receber').update({ status: 'Recebido', data_recebimento: today() }).eq('id', r.id)
+    if(error){setErro(error.message);return}
     await registrarLog({ tabela: 'a_receber', registroId: r.id, acao: 'edicao', descricao: `Baixa (recebido) de ${r.cliente_nome}` })
     carregar()
   }
@@ -109,6 +112,7 @@ export default function Recebiveis() {
 
   return (
     <>
+      <div className="card" style={{marginBottom:16}}><Link to="/conferencia-financeira">Conferir novos contratos, recebíveis e gratificações da jornada</Link><p className="sub">Os registros anteriores permanecem preservados abaixo.</p></div>
       <div className="section-head">
         <div className="tools">
           <select className="input" style={{ width: 170 }} value={filtro} onChange={(e) => setFiltro(e.target.value)}>

@@ -1,3 +1,4 @@
+import { dataValida } from '../lib/prazos.js'
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { brl, fmtDate, today } from '../lib/format.js'
@@ -29,7 +30,7 @@ const TIPOS = ['Eventual', 'Fixa']
 const FORMAS = ['PIX', 'Boleto', 'Transferência', 'Cartão', 'Dinheiro']
 const STATUS = ['Pendente', 'Pago']
 
-const novo = () => ({ data: today(), descricao: '', categoria: 'operacional', tipo: 'Eventual', valor: '', forma_pagamento: 'PIX', data_vencimento: '', status: 'Pendente', fornecedor: '', conta_bancaria_id: '', observacao: '', recorrente: false, dia_vencimento: '', projeto_uid: '', juros: '' })
+const novo = () => ({ data: today(), descricao: '', categoria: 'operacional', tipo: 'Eventual', valor: '', forma_pagamento: 'PIX', data_vencimento: '', data_pagamento: '', status: 'Pendente', fornecedor: '', conta_bancaria_id: '', observacao: '', recorrente: false, dia_vencimento: '', projeto_uid: '', juros: '' })
 
 export default function Pagamentos() {
   const [rows, setRows] = useState(null)
@@ -72,7 +73,7 @@ export default function Pagamentos() {
     setCompFile(null); setBoletoFile(null)
     const { data: cst } = await supabase.from('custos_operacionais').select('id, projeto_uid, valor, categoria').eq('rateio_pagamento_id', r.id)
     setRateio((cst || []).map((c) => ({ projeto_uid: c.projeto_uid || '', valor: c.valor ?? '' })))
-    setModal({ form: { data: r.data || today(), descricao: r.descricao || '', categoria: r.categoria || 'operacional', tipo: r.tipo || 'Eventual', valor: r.valor ?? '', forma_pagamento: r.forma_pagamento || 'PIX', data_vencimento: r.data_vencimento || '', status: r.status || 'Pendente', fornecedor: r.fornecedor || '', conta_bancaria_id: r.conta_bancaria_id ?? '', observacao: r.observacao || '', recorrente: r.recorrente ?? false, dia_vencimento: r.dia_vencimento ?? '', projeto_uid: r.projeto_uid || '', comprovante_path: r.comprovante_path || '', comprovante_nome: r.comprovante_nome || '', boleto_path: r.boleto_path || '', boleto_nome: r.boleto_nome || '', juros: r.juros ?? '' }, editId: r.id }) }
+    setModal({ form: { data: r.data || today(), descricao: r.descricao || '', categoria: r.categoria || 'operacional', tipo: r.tipo || 'Eventual', valor: r.valor ?? '', forma_pagamento: r.forma_pagamento || 'PIX', data_vencimento: r.data_vencimento || '', data_pagamento: r.data_pagamento || '', status: r.status || 'Pendente', fornecedor: r.fornecedor || '', conta_bancaria_id: r.conta_bancaria_id ?? '', observacao: r.observacao || '', recorrente: r.recorrente ?? false, dia_vencimento: r.dia_vencimento ?? '', projeto_uid: r.projeto_uid || '', comprovante_path: r.comprovante_path || '', comprovante_nome: r.comprovante_nome || '', boleto_path: r.boleto_path || '', boleto_nome: r.boleto_nome || '', juros: r.juros ?? '' }, editId: r.id }) }
   const setF = (k, v) => setModal((m) => ({ ...m, form: { ...m.form, [k]: v } }))
   const addRateio = () => setRateio((s) => [...s, { projeto_uid: '', valor: '' }])
   const setRat = (i, k, v) => setRateio((s) => s.map((x, j) => j === i ? { ...x, [k]: v } : x))
@@ -82,11 +83,12 @@ export default function Pagamentos() {
     setErro(''); const f = modal.form
     if (!f.descricao.trim()) { setErro('Informe a descrição.'); return }
     if (f.valor === '' || Number(f.valor) <= 0) { setErro('Informe o valor.'); return }
+    if (f.status === 'Pago' && (!dataValida(f.data_pagamento) || f.data_pagamento > today())) { setErro('Informe a data efetiva do pagamento, até hoje.'); return }
     const atrasado = f.data_vencimento && f.data_vencimento < today()
     if (f.status === 'Pago' && atrasado && (f.juros === '' || f.juros === null)) { setErro('Pagamento em atraso: informe os juros (pode ser 0).'); return }
     setSaving(true)
     const payload = { data: f.data || today(), descricao: f.descricao.trim(), categoria: f.categoria || null, tipo: f.tipo, valor: Number(f.valor), forma_pagamento: f.forma_pagamento || null, data_vencimento: f.data_vencimento || null, status: f.status, fornecedor: f.fornecedor || null, conta_bancaria_id: f.conta_bancaria_id ? Number(f.conta_bancaria_id) : null, observacao: f.observacao || null, recorrente: !!f.recorrente, dia_vencimento: f.dia_vencimento === '' ? null : Number(f.dia_vencimento), projeto_uid: f.projeto_uid || null, juros: f.juros === '' ? 0 : Number(f.juros) }
-    if (f.status === 'Pago') payload.data_pagamento = today()
+    if (f.status === 'Pago') payload.data_pagamento = f.data_pagamento
     let error, id = modal.editId
     if (modal.editId) { ({ error } = await supabase.from('pagamentos').update(payload).eq('id', modal.editId)); if (!error) await registrarLog({ tabela: 'pagamentos', registroId: modal.editId, acao: 'edicao', descricao: `Pagamento: ${payload.descricao}` }) }
     else { const ins = await supabase.from('pagamentos').insert(payload).select('id').single(); error = ins.error; id = ins.data?.id }
@@ -185,6 +187,7 @@ export default function Pagamentos() {
           </div>
           <div className="row-3">
             <div className="field"><label>Data</label><input className="input" type="date" value={modal.form.data} onChange={(e) => setF('data', e.target.value)} /></div>
+            <div className="field"><label>Data efetiva do pagamento</label><input className="input" type="date" max={today()} value={modal.form.data_pagamento || ''} onChange={(e) => setF('data_pagamento', e.target.value)} /></div>
             <div className="field"><label>Vencimento</label><input className="input" type="date" value={modal.form.data_vencimento} onChange={(e) => setF('data_vencimento', e.target.value)} /></div>
             <div className="field"><label>Status</label><select className="input" value={modal.form.status} onChange={(e) => setF('status', e.target.value)}>{STATUS.map((c) => <option key={c}>{c}</option>)}</select></div>
           </div>

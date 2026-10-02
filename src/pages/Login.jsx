@@ -18,7 +18,7 @@ export default function Login() {
   return (
     <div className="login-screen">
       <div className="logo">Le Blanc</div>
-      <div className="tag">Financeiro · Painel</div>
+      <div className="tag">Gestão integrada</div>
       <form className="login-card" onSubmit={submit}>
         {err && <div className="login-err">{err}</div>}
         <div className="field">
@@ -33,7 +33,7 @@ export default function Login() {
         </div>
         <button className="btn" disabled={busy}>{busy ? 'Entrando…' : 'Entrar'}</button>
       </form>
-      <div className="login-foot">Acesso restrito · diretoria e administrativo</div>
+      <div className="login-foot">Acesso restrito · use seu login cadastrado</div>
     </div>
   )
 }

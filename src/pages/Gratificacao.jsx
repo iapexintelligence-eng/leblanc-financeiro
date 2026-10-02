@@ -1,3 +1,4 @@
+import {Link} from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { brl } from '../lib/format.js'
@@ -34,6 +35,7 @@ export default function Gratificacao() {
 
   return (
     <>
+      <div className="card" style={{marginBottom:16}}><Link to="/conferencia-financeira">Conferir novos contratos, recebíveis e gratificações da jornada</Link><p className="sub">Os registros anteriores permanecem preservados abaixo.</p></div>
       <div className="section-head">
         <div className="tools">
           <select className="input" style={{ width: 150 }} value={filtro} onChange={(e) => setFiltro(e.target.value)}>

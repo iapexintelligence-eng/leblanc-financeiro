@@ -1,8 +1,15 @@
+import Pendencias from './pages/Pendencias.jsx'
+import RevisaoMensal from './pages/RevisaoMensal.jsx'
+import CapacidadeMontagem from './pages/CapacidadeMontagem.jsx'
+import PlanejamentoIntegrado from './pages/PlanejamentoIntegrado.jsx'
+import HistoricoOperacional from './pages/HistoricoOperacional.jsx'
+import ConferenciaFinanceira from './pages/ConferenciaFinanceira.jsx'
 import { Routes, Route } from 'react-router-dom'
 import { useAuth } from './lib/useAuth.js'
 import Login from './pages/Login.jsx'
 import Layout from './components/Layout.jsx'
 
+import Jornada from './pages/Jornada.jsx'
 import Home from './pages/Home.jsx'
 import Vendas from './pages/Vendas.jsx'
 import Recebiveis from './pages/Recebiveis.jsx'
@@ -44,16 +51,27 @@ export default function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<Home />} />
-        <Route path="/vendas" element={<Vendas />} />
-        <Route path="/novo-contrato" element={<NovoContrato />} />
+        <Route path="/pendencias" element={<Pendencias />} />
+        <Route path="/revisao-mensal" element={<RevisaoMensal />} />
+        <Route path="/capacidade-montagem" element={<CapacidadeMontagem />} />
+        <Route path="/planejamento-integrado" element={<PlanejamentoIntegrado />} />
+        <Route path="/conferencia-financeira" element={<ConferenciaFinanceira />} />
+        <Route path="/historico-operacional" element={<HistoricoOperacional />} />
+        <Route path="/jornada" element={<Jornada />} />
+        <Route path="/fretes" element={<Jornada tipoInicial="frete" />} />
+        <Route path="/agenda-operacional" element={<Jornada tipoInicial="agenda" />} />
+        <Route path="/assistencias-operacionais" element={<Jornada tipoInicial="assistencia" />} />
+        <Route path="/vendas" element={<Jornada setor="vendas" />} />
+        <Route path="/vendas-historico" element={<Vendas />} />
+        <Route path="/novo-contrato" element={<EmitirContrato />} />
         <Route path="/contratos" element={<EmitirContrato />} />
         <Route path="/simulador" element={<Simulador />} />
-        <Route path="/correcao" element={<Correcao />} />
+        <Route path="/correcao" element={<Jornada setor="correcao" />} />
         <Route path="/acompanhamento" element={<Acompanhamento />} />
-        <Route path="/agenda" element={<Agenda />} />
-        <Route path="/liberacao" element={<Liberacao />} />
-        <Route path="/montagem" element={<Montagem />} />
-        <Route path="/qualidade" element={<Qualidade />} />
+        <Route path="/agenda" element={<Jornada tipoInicial="agenda" />} />
+        <Route path="/liberacao" element={<Jornada setor="liberacao" />} />
+        <Route path="/montagem" element={<Jornada setor="montagem" />} />
+        <Route path="/qualidade" element={<Jornada setor="qualidade" />} />
         <Route path="/recebiveis" element={<Recebiveis />} />
         <Route path="/bancos" element={<Bancos />} />
         <Route path="/funcionarios" element={<Funcionarios />} />
@@ -67,8 +85,8 @@ export default function App() {
         <Route path="/faturas-cartao" element={<FaturasCartao />} />
         <Route path="/dre" element={<DRE />} />
         <Route path="/previsibilidade" element={<Previsibilidade />} />
-        <Route path="/assistencias" element={<Assistencias />} />
-        <Route path="/aot" element={<AOT />} />
+        <Route path="/assistencias" element={<Jornada tipoInicial="assistencia" />} />
+        <Route path="/aot" element={<Jornada tipoInicial="assistencia" />} />
         <Route path="/gratificacao" element={<Gratificacao />} />
         <Route path="/projetos" element={<Projetos />} />
         <Route path="/relatorios" element={<Relatorios />} />

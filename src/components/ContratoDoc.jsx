@@ -1,3 +1,5 @@
+import { MODELO_CONTRATO } from '../lib/modeloContrato.js'
+import { contratoPublico } from '../lib/regras.js'
 import { supabase } from '../lib/supabase.js'
 import { brl, fmtDate } from '../lib/format.js'
 
@@ -5,23 +7,17 @@ const crm = supabase.schema('leblanc')
 
 const EMPRESA = {
   nome: 'LE BLANC MOVEIS E INTERIORES LTDA', cnpj: '33.834.316/0001-38',
-  end: 'Rua Camões, 556 · Alto da Rua XV · Curitiba-PR', tel: '41 99796-9618 · 41 3253-9983',
+  end: 'Rua Augusto Stresser, 1109 · Juvevê · Curitiba/PR · CEP 80040-310', tel: '41 99796-9618 · 41 3253-9983',
   site: 'www.leblancinteriores.com', email: 'gerencia@leblancinteriores.com',
 }
 const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
 const or = (v) => esc(v) || '—'
 
-export async function imprimirContrato(d) {
-  let corpo = ''
-  try {
-    const { data } = await crm.from('contrato_modelos').select('corpo').eq('nome', d.modelo_contrato).maybeSingle()
-    corpo = data?.corpo || ''
-  } catch (_) {}
+export async function imprimirContrato(interno) {
+  const d=contratoPublico(interno)
+  const corpo = MODELO_CONTRATO
 
-  const total = d.total_pedido || (d.itens || []).reduce((s, it) => s + (Number(it.valor) || 0), 0)
-  const descontoValor = (d.desconto_tipo === '%' || d.desconto_tipo === 'pct') ? total * (Number(d.desconto_valor) || 0) / 100 : (Number(d.desconto_valor) || 0)
-  const somaParcelas = (d.parcelas || []).reduce((s, p) => s + (Number(p.valor) || 0), 0)
-  const totalPagar = somaParcelas > 0 ? somaParcelas : Math.max(0, total - descontoValor)
+  const total = d.total_pagar, totalPagar=d.total_pagar
   const endCliente = [d.endereco, d.bairro, d.cidade, d.uf].filter(Boolean).join(', ')
   const ambientesTxt = (d.itens || []).filter((it) => it.descricao).map((it) => it.descricao).join('; ')
   const eAvista = /vista|pix/i.test(d.forma_pagamento || '') || /vista/i.test(d.condicao_pagamento || '')
@@ -34,10 +30,9 @@ export async function imprimirContrato(d) {
   const itens = (d.itens || []).filter((it) => it.descricao || Number(it.valor) > 0)
   const linhasItens = itens.map((it, i) => `<tr>
     <td>${i + 1}</td><td>${Number(it.qtd) || 1}</td><td>${esc(it.descricao)}</td>
-    <td>${or(it.fornecedor)}</td><td>${or(it.linha)}</td><td>${or(it.prazo)}</td>
-    <td style="text-align:right">${brl(it.valor)}</td></tr>`).join('')
+    <td>${or(it.fornecedor)}</td><td>${or(it.linha)}</td></tr>`).join('')
   const parcelas = (d.parcelas || []).filter((p) => Number(p.valor) > 0)
-  const linhasParc = parcelas.map((p) => `<tr><td>${p.numero}</td><td>${fmtDate(p.vencimento)}</td><td style="text-align:right">${brl(p.valor)}</td></tr>`).join('')
+  const linhasParc = parcelas.map((p) => `<tr><td>${p.numero}</td><td>${p.marco === 'dois_dias_antes_entrega' ? '2 dias corridos antes da entrega' : fmtDate(p.vencimento)}</td><td style="text-align:right">${brl(p.valor)}</td></tr>`).join('')
   const clausulas = corpo
     ? preencher(corpo).split(/\n\n+/).map((p) => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`).join('')
     : '<p class="muted">Cláusulas do modelo não cadastradas.</p>'
@@ -65,6 +60,7 @@ export async function imprimirContrato(d) {
   .muted { color: #999; } .mt { margin-top: 8px; }
   @media print { .noprint { display: none; } }
 </style></head><body>
+  <p style="border:1px solid #999;padding:8px;text-align:center"><b>MINUTA PARA REVISÃO — condições de garantia, cancelamento e crédito pendentes de consolidação antes da assinatura.</b></p>
   <div class="head">
     <div class="logo">LB</div>
     <div class="co"><b>${EMPRESA.nome}</b><div>CNPJ: ${EMPRESA.cnpj}</div><div>${EMPRESA.end}</div><div>Tel: ${EMPRESA.tel}</div><div>${EMPRESA.site} · ${EMPRESA.email}</div></div>
@@ -86,9 +82,9 @@ export async function imprimirContrato(d) {
   </table>
 
   <table class="mt">
-    <tr><th>Item</th><th>Qtd</th><th>Descrição / Ambiente</th><th>Fornecedor</th><th>Linha</th><th>Prazo</th><th style="text-align:right">Valor</th></tr>
-    ${linhasItens || '<tr><td colspan="7" class="muted">Sem itens.</td></tr>'}
-    <tr><td colspan="6" style="text-align:right"><b>Total do pedido</b></td><td style="text-align:right"><b>${brl(total)}</b></td></tr>
+    <tr><th>Item</th><th>Qtd</th><th>Descrição / Ambiente</th><th>Fornecedor</th><th>Linha</th></tr>
+    ${linhasItens || '<tr><td colspan="5" class="muted">Sem itens.</td></tr>'}
+    <tr><td colspan="4" style="text-align:right"><b>Valor final contratado</b></td><td style="text-align:right"><b>${brl(total)}</b></td></tr>
   </table>
 
   <table class="kv mt"><tr><td><b>Observação:</b> ${[esc(d.led_incluso), esc(d.observacao_ambientes)].filter(Boolean).join(' · ') || '—'}</td></tr></table>
@@ -99,7 +95,7 @@ export async function imprimirContrato(d) {
     <td><b>Condição de pagamento:</b> ${or(d.condicao_pagamento)}</td>
     <td><b>Forma de pagamento:</b> ${or(d.forma_pagamento)}</td>
   </tr></table>
-  ${eAvista ? '<table class="kv"><tr><td><b>Pagamento à vista:</b> o saldo restante deverá ser quitado até 2 (dois) dias antes da data prevista para a entrega dos móveis.</td></tr></table>' : ''}
+  ${eAvista ? '<table class="kv"><tr><td><b>Pagamento à vista:</b> o saldo restante deverá ser quitado até 2 (dois) dias corridos antes da data prevista para a entrega dos móveis.</td></tr></table>' : ''}
 
   <table class="mt">
     <tr><th>Parcela</th><th>Vencimento</th><th style="text-align:right">Valor</th></tr>
@@ -109,7 +105,7 @@ export async function imprimirContrato(d) {
   <h1>CONTRATO DE COMPRA E VENDA DE PRODUTO E DE PRESTAÇÃO DE SERVIÇO</h1>
   <div class="clauses">${clausulas}</div>
 
-  <div class="note">PARA PAGAMENTOS À VISTA, A SEGUNDA PARCELA DEVERÁ SER QUITADA ATÉ 2 (DOIS) DIAS ANTES DA DATA PREVISTA PARA A ENTREGA DOS MÓVEIS, CONDIÇÃO INDISPENSÁVEL PARA O INÍCIO DA MONTAGEM.</div>
+  <div class="note">PARA PAGAMENTOS À VISTA, A SEGUNDA PARCELA DEVERÁ SER QUITADA ATÉ 2 (DOIS) DIAS CORRIDOS ANTES DA DATA PREVISTA PARA A ENTREGA DOS MÓVEIS, CONDIÇÃO INDISPENSÁVEL PARA O INÍCIO DA MONTAGEM.</div>
 
   <div class="sign">
     <div>CONTRATADA: ${EMPRESA.nome}</div>
