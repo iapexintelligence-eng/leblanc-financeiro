@@ -22,6 +22,7 @@ const GROUPS = [
   {to:'/qualidade',icon:IcoTool,txt:'Qualidade',roles:['logistica','qualidade']},
  ]},
  {label:'Financeiro · Leia',items:[
+  {to:'/planilhas-historicas',icon:IcoReport,txt:'Planilhas históricas',roles:['financeiro','gestor']},
   {to:'/revisao-mensal',icon:IcoDre,txt:'Revisão mensal'},
   {to:'/conferencia-financeira',icon:IcoPay,txt:'Conferência, margens e autorizações'},
   {to:'/recebiveis',icon:IcoReceive,txt:'Recebimentos'},

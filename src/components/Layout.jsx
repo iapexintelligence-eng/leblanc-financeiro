@@ -6,6 +6,7 @@ import { signOut } from '../lib/useAuth.js'
 import { useRole } from '../lib/useRole.js'
 
 const TITLES = {
+ '/planilhas-historicas':['Financeiro · Leia','Planilhas históricas'],
  '/pendencias':['Equipe','Pendências e próximos passos'],
  '/revisao-mensal':['Financeiro · Leia','Revisão mensal'],
  '/capacidade-montagem':['Logística · Glauci','Capacidade de montagem'],
