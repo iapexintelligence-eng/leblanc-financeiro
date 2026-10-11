@@ -19,7 +19,7 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  alter table leblanc.contratos add constraint contratos_modelo_contrato_check check(modelo_contrato in ('leblanc','bartzen'));
  alter table leblanc.contratos add constraint contratos_forma_pagamento_check check(forma_pagamento in ('avista','cartao'));
  create table leblanc.contrato_historico(contrato_id uuid,numero text,acao text,descricao text,editado_por text,alteracoes jsonb);`)
- for(const name of ['20261002144759_jornada.sql','20261002144808_taxas.sql','20261002144904_comercial.sql','20261002144921_integracao.sql','20261002144930_colaboracao_e_revisao_mensal.sql','20261002144940_ativacao_compatibilidade_e_acessos.sql','20261002145427_aditivos_contratuais.sql','20261011193842_xml_final_conferencia.sql','20261011201612_importacao_revisoes_preservada.sql'])await db.exec(await readFile(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'))
+ for(const name of ['20261002144759_jornada.sql','20261002144808_taxas.sql','20261002144904_comercial.sql','20261002144921_integracao.sql','20261002144930_colaboracao_e_revisao_mensal.sql','20261002144940_ativacao_compatibilidade_e_acessos.sql','20261002145427_aditivos_contratuais.sql','20261011193842_xml_final_conferencia.sql','20261011201612_importacao_revisoes_preservada.sql','20261011220000_etapas_historicas.sql'])await db.exec(await readFile(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'))
  const gestor='00000000-0000-4000-8000-000000000001',vendedor='00000000-0000-4000-8000-000000000002',cid='00000000-0000-4000-8000-000000000010'
  await db.exec(`insert into auth.users(id) values('${gestor}'),('${vendedor}');
  insert into le_admin.jornada_acessos values('${gestor}','Gestão','gestor','Priscila',true),('${vendedor}','Venda','vendedor',null,true);
@@ -27,6 +27,7 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  update le_admin.jornada_config set calendario_de='2026-01-01',calendario_ate='2028-12-31',feriados=array['2026-09-28'::date];
  select set_config('test.uid','${gestor}',false);`)
  const save=async(tipo,d,id=null,v=0)=>{const q=await db.query('select * from le_admin.jornada_salvar($1,$2,$3,$4,$5)',[tipo,cid,JSON.stringify(d),id,v]);return q.rows[0]}
+ const save2=async(c,d,id,v)=>{const q=await db.query('select * from le_admin.jornada_salvar($1,$2,$3,$4,$5)',['pedido',c,JSON.stringify(d),id,v]);return q.rows[0]}
  const pedido=await save('pedido',{venda_data:'2026-09-25',tipo_venda:'Normal'})
  assert.equal(pedido.dados.planta_prazo,'2026-09-30')
  await assert.rejects(save('pedido',{...pedido.dados,entrada_confirmada:true},pedido.id,pedido.versao),/comprovante/)
@@ -195,6 +196,31 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  assert.equal(salvo.dados.importacao_revisoes.aba,'SETEMBRO')
  const sem={...salvo.dados};delete sem.importacao_revisoes
  assert.equal((await save('pedido',sem,salvo.id,salvo.versao)).dados.importacao_revisoes.linha,3)
+ j=(await db.query('select * from le_admin.jornada_registros where id=$1',[j.id])).rows[0]
+ // Etapas já realizadas nas fichas da planilha: com justificativa, em sequência e sem o checklist inicial.
+ const cid2='00000000-0000-4000-8000-000000000020',cid3='00000000-0000-4000-8000-000000000030'
+ await db.exec(`insert into leblanc.contratos(id,numero,cliente_nome) values('${cid2}','HIST','Cliente planilha'),('${cid3}','NOVO','Cliente novo')`)
+ const hist=(await db.query("insert into le_admin.jornada_registros(tipo,contrato_id,dados,criado_por) values('pedido',$1,$2,$3) returning *",[cid2,JSON.stringify({cliente_nome:'Cliente planilha',importacao_revisoes:{setor_codigo:'liberacao',importado_em:'2026-10-11'}}),gestor])).rows[0]
+ const hreg=(id,v,m,jus,pf=null)=>db.query('select * from le_admin.jornada_registrar_historico($1,$2,$3,$4,$5)',[id,v,JSON.stringify(m),jus,pf]).then((q)=>q.rows[0])
+ await assert.rejects(hreg(hist.id,hist.versao,{liberacao_em:'2026-05-05'},'curta'),/mínimo/)
+ await assert.rejects(hreg(hist.id,hist.versao,{medicao_em:'2026-05-27'},'Planilha CONTROLE DE REVISÕES'),/etapa anterior/)
+ await assert.rejects(hreg(hist.id,hist.versao,{liberacao_em:'2026-05-30',medicao_em:'2026-05-27'},'Planilha CONTROLE DE REVISÕES'),/anterior a/)
+ const semImp=(await db.query("insert into le_admin.jornada_registros(tipo,contrato_id,dados,criado_por) values('pedido',$1,'{}',$2) returning *",[cid3,gestor])).rows[0]
+ await assert.rejects(hreg(semImp.id,semImp.versao,{liberacao_em:'2026-05-05'},'Planilha CONTROLE DE REVISÕES'),/planilha de revisões/)
+ await db.query('delete from le_admin.jornada_registros where id=$1',[semImp.id])
+ const h1=await hreg(hist.id,hist.versao,{liberacao_em:'2026-05-05',medicao_em:'2026-05-27',correcao_em:'2026-06-10',aprovacao_em:'2026-06-20',implantacao_em:'2026-07-01'},'Planilha CONTROLE DE REVISÕES, aba MAIO','PF-123')
+ assert.equal(Object.keys(h1.dados.historico).length,5)
+ assert.equal(h1.dados.pedido_fabrica,'PF-123')
+ assert.ok(h1.dados.correcao_prazo&&h1.dados.entrega_prazo)
+ // Edição normal da ficha continua funcionando e não altera nem injeta histórico.
+ const h2=await save2(cid2,{...h1.dados,observacao:'ok',historico:{}},h1.id,h1.versao)
+ assert.equal(Object.keys(h2.dados.historico).length,5)
+ await assert.rejects(save2(cid2,{...h2.dados,medicao_em:'2026-05-28'},h2.id,h2.versao),/não pode ser alterad/)
+ assert.equal((await save2(cid,{...j.dados,historico:{implantacao_em:{data:'2026-01-01'}}},j.id,j.versao)).dados.historico,undefined)
+ await assert.rejects(hreg(h2.id,h2.versao,{cliente_recebe_em:'2099-01-01'},'Planilha CONTROLE DE REVISÕES'),/futura/)
+ await db.exec(`select set_config('test.uid','${vendedor}',false)`)
+ await assert.rejects(hreg(h2.id,h2.versao,{cliente_recebe_em:'2026-08-01'},'Planilha CONTROLE DE REVISÕES'),/permissão/)
+ await db.exec(`select set_config('test.uid','${gestor}',false)`)
  j=(await db.query('select * from le_admin.jornada_registros where id=$1',[j.id])).rows[0]
  // Conferente vê a situação do XML sem receita, custos ou margem; vendedor não acessa a conferência.
  const conferente='00000000-0000-4000-8000-000000000004'

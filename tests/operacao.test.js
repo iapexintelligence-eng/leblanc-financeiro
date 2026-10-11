@@ -58,3 +58,12 @@ test('data do fechamento não tira a ficha importada do setor nem cria pendênci
  assert.equal(setorPedido(d),'correcao')
  assert.deepEqual(pendenciasAutomaticas([{id:'x',tipo:'pedido',dados:d}]).map(p=>p.titulo),['Guias técnicas'])
 })
+
+test('etapas lançadas como já realizadas levam a ficha ao fluxo normal sem checklist inicial',async()=>{
+ const {setorPedido}=await import('../src/lib/setores.js')
+ const d={importacao_revisoes:{setor_codigo:'correcao',pendencias:['Guias técnicas']},liberacao_em:'2026-05-05',medicao_em:'2026-05-27',correcao_prazo:'2026-06-12',historico:{liberacao_em:{data:'2026-05-05'},medicao_em:{data:'2026-05-27'}}}
+ assert.equal(setorPedido(d),'correcao')
+ assert.deepEqual(pendenciasAutomaticas([{id:'x',tipo:'pedido',dados:d}]).map(p=>p.titulo),['Concluir conferência e guias técnicas'])
+ const imp={...d,correcao_em:'2026-06-10',aprovacao_em:'2026-06-20',implantacao_em:'2026-07-01',entrega_prazo:'2026-08-10',historico:{...d.historico,correcao_em:{},aprovacao_em:{},implantacao_em:{}}}
+ assert.ok(!pendenciasAutomaticas([{id:'x',tipo:'pedido',dados:imp}]).some(p=>/fábrica/.test(p.titulo)))
+})

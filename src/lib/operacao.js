@@ -4,7 +4,7 @@ import { setorPedido, SETORES, prazoImportado, setorImportado } from './setores.
 export const PAPEIS={vendedor:'Vendas',correcao:'Conferência',logistica:'Glauci · logística',financeiro:'Leia · financeiro',gestor:'Gestão'}
 export const MARCOS={'':'Não bloqueia avanço',liberacao_em:'Liberação para medição',implantacao_em:'Implantação na fábrica',confirmada:'Liberação da escala',entrega_em:'Entrega',fotos_em:'Fotos'}
 export function situacoesSeparadas(d) {
- return {comercial:d.tipo_venda==='Futura'&&!d.imovel_pronto_em?'Venda futura · aguarda imóvel':'Venda fechada',operacional:SETORES[setorPedido(d)]?.titulo||'Em acompanhamento',financeiro:d.saldo_confirmado?'Quitação conferida':d.entrada_confirmada?'Entrada conferida · saldo pendente':'Entrada pendente de conferência'}
+ return {comercial:d.tipo_venda==='Futura'&&!d.imovel_pronto_em?'Venda futura · aguarda imóvel':'Venda fechada',operacional:SETORES[setorPedido(d)]?.titulo||'Em acompanhamento',financeiro:d.saldo_confirmado?'Quitação conferida':d.entrada_confirmada?'Entrada conferida · saldo pendente':d.historico?.liberacao_em?'Entrada anterior ao sistema · saldo a conferir':'Entrada pendente de conferência'}
 }
 const PAPEL_IMPORTADO={'Assistência aberta':'logistica','Aguardando imóvel / liberação para medição':'vendedor','Definir conferente':'gestor'}
 export function pendenciasAutomaticas(registros,feriados=[]) {
@@ -21,14 +21,18 @@ export function pendenciasAutomaticas(registros,feriados=[]) {
    for(const p of imp.pendencias||[])out.push({id:`${r.id}-imp-${p}`,registro_id:r.id,contrato_id:r.contrato_id,cliente:d.cliente_nome,titulo:p,papel:PAPEL_IMPORTADO[p]||'correcao',prazo:PAPEL_IMPORTADO[p]?null:est?.prazo||null,origem:`Planilha de revisões${imp.conferente?' · '+imp.conferente:''}${imp.andamento?' · '+imp.andamento:''}`})
    continue
   }
-  if(!d.planta_enviada_em)add(r,'Enviar planta baixa e informações','vendedor',d.planta_prazo)
-  if(!d.entrada_confirmada)add(r,'Conferir entrada e comprovante','financeiro',null)
-  if(d.tipo_venda==='Futura'&&!d.imovel_pronto_em){add(r,'Acompanhar aviso de imóvel pronto','vendedor',null);continue}
+  // Etapas lançadas como já realizadas dispensam o checklist inicial do fluxo novo.
+  const hist=d.historico||{}
+  if(!hist.liberacao_em){
+   if(!d.planta_enviada_em)add(r,'Enviar planta baixa e informações','vendedor',d.planta_prazo)
+   if(!d.entrada_confirmada)add(r,'Conferir entrada e comprovante','financeiro',null)
+  }
+  if(d.tipo_venda==='Futura'&&!d.imovel_pronto_em&&!hist.liberacao_em){add(r,'Acompanhar aviso de imóvel pronto','vendedor',null);continue}
   if(d.liberacao_em&&!d.medicao_em)add(r,'Acompanhar medição com Rodrigo','correcao',d.medicao_prazo)
   if(d.medicao_em&&!d.correcao_em)add(r,'Concluir conferência e guias técnicas','correcao',d.correcao_prazo)
   if(d.correcao_em&&!d.aprovacao_em)add(r,'Obter aprovação e guias assinadas','correcao',null)
   if(d.aprovacao_em&&!d.implantacao_em)add(r,'Anexar XML final, aguardar OK da Leia e implantar','correcao',d.entrega_prazo)
-  if(d.implantacao_em&&!d.fabrica_paga)add(r,'Conferir pagamento da fábrica','financeiro',null)
+  if(d.implantacao_em&&!d.fabrica_paga&&!hist.implantacao_em)add(r,'Conferir pagamento da fábrica','financeiro',null)
   if(d.carregamento_em&&!d.cliente_recebe_em)add(r,'Confirmar com cliente que pode receber','logistica',d.entrega_prevista||d.entrega_prazo)
   if(d.cliente_recebe_em&&!d.saldo_confirmado)add(r,'Cobrar e conferir saldo final','financeiro',d.entrega_prevista?somarDias(d.entrega_prevista,-2):null)
   if(d.aprovacao_em&&!d.entrega_em)add(r,'Acompanhar entrega no prazo','logistica',d.entrega_prazo)
