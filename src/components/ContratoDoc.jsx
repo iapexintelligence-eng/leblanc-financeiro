@@ -30,7 +30,7 @@ export async function imprimirContrato(interno) {
   const itens = (d.itens || []).filter((it) => it.descricao || Number(it.valor) > 0)
   const linhasItens = itens.map((it, i) => `<tr>
     <td>${i + 1}</td><td>${Number(it.qtd) || 1}</td><td>${esc(it.descricao)}</td>
-    <td>${or(it.fornecedor)}</td><td>${or(it.linha)}</td></tr>`).join('')
+    <td>${or(it.linha)}</td></tr>`).join('')
   const parcelas = (d.parcelas || []).filter((p) => Number(p.valor) > 0)
   const linhasParc = parcelas.map((p) => `<tr><td>${p.numero}</td><td>${p.marco === 'dois_dias_antes_entrega' ? '2 dias corridos antes da entrega' : fmtDate(p.vencimento)}</td><td style="text-align:right">${brl(p.valor)}</td></tr>`).join('')
   const clausulas = corpo
@@ -82,9 +82,9 @@ export async function imprimirContrato(interno) {
   </table>
 
   <table class="mt">
-    <tr><th>Item</th><th>Qtd</th><th>Descrição / Ambiente</th><th>Fornecedor</th><th>Linha</th></tr>
-    ${linhasItens || '<tr><td colspan="5" class="muted">Sem itens.</td></tr>'}
-    <tr><td colspan="4" style="text-align:right"><b>Valor final contratado</b></td><td style="text-align:right"><b>${brl(total)}</b></td></tr>
+    <tr><th>Item</th><th>Qtd</th><th>Descrição / Ambiente</th><th>Linha</th></tr>
+    ${linhasItens || '<tr><td colspan="4" class="muted">Sem itens.</td></tr>'}
+    <tr><td colspan="3" style="text-align:right"><b>Valor final contratado</b></td><td style="text-align:right"><b>${brl(total)}</b></td></tr>
   </table>
 
   <table class="kv mt"><tr><td><b>Observação:</b> ${[esc(d.led_incluso), esc(d.observacao_ambientes)].filter(Boolean).join(' · ') || '—'}</td></tr></table>

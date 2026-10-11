@@ -46,7 +46,7 @@ export function calcularGratificacao(venda, deducoes) {
 export function contratoPublico(d) {
   const campos = ['numero','cliente_nome','cliente_cpf','cliente_rg','cliente_nascimento','cliente_telefone','cliente_email','cliente_profissao','endereco','bairro','cidade','uf','cep','entrega_endereco','vendedor','loja','data_contrato','tipo_contrato','modelo_contrato','led_incluso','observacao_ambientes','observacoes','condicao_pagamento','forma_pagamento','data_entrada','prazo_entrega']
   const out = Object.fromEntries(campos.map(k => [k, d[k] || '']))
-  out.itens = (d.itens || []).map(i => ({ qtd: i.qtd, descricao: i.descricao, fornecedor: i.fornecedor, linha: i.linha }))
+  out.itens = (d.itens || []).map(i => ({ qtd: i.qtd, descricao: i.descricao, linha: i.linha }))
   out.parcelas = (d.parcelas || []).map(p => ({ numero: p.numero, valor: p.valor, vencimento: p.vencimento, marco: p.marco }))
   out.total_pagar = dinheiro(out.parcelas.reduce((s,p) => s + Number(p.valor || 0), 0))
   return out

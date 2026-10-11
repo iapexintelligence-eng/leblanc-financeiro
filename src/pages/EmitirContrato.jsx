@@ -1,7 +1,7 @@
 import AditivosContrato from '../components/AditivosContrato.jsx'
 import { useSearchParams, Link } from 'react-router-dom'
 import { calcularProposta, dividirParcelas, VERSAO_REGRAS } from '../lib/regras.js'
-import { anexarJornada } from '../lib/jornada.js'
+import { anexarJornada, abrirDocumento } from '../lib/jornada.js'
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { brl, fmtDate, today, addMonths, addBusinessDays } from '../lib/format.js'
@@ -11,6 +11,7 @@ import { imprimirContrato } from '../components/ContratoDoc.jsx'
 import { CARTAO, simularCartao, simularFinanceira } from '../lib/taxas.js'
 import { useRole, podeTudo } from '../lib/useRole.js'
 import { parsePromobXML } from '../lib/promob.js'
+import { imprimirOrcamento } from '../lib/orcamentoPublico.js'
 
 const FORMAS_PG = ['Pix / À vista', 'Débito', 'Crédito (cartão)', 'Financeira Santander']
 const BANDEIRAS = Object.keys(CARTAO)
@@ -84,9 +85,12 @@ const inicial = () => ({
 })
 
 
-export default function EmitirContrato() {
+export default function EmitirContrato({ orcamento = false }) {
   const [f, setF] = useState(inicial())
   const [params] = useSearchParams()
+  const [orcamentoAtual, setOrcamentoAtual] = useState(null)
+  const [orcamentos, setOrcamentos] = useState([])
+  const [versoesOrcamento, setVersoesOrcamento] = useState([])
   const [aprovacoes,setAprovacoes] = useState([])
   const [vendedores, setVendedores] = useState([])
   const [modelos, setModelos] = useState([])
@@ -94,6 +98,7 @@ export default function EmitirContrato() {
   const [erro, setErro] = useState('')
   const [salvo, setSalvo] = useState(null)
   const [editId, setEditId] = useState(null)
+  const emOrcamento = orcamento && !editId
   const [lista, setLista] = useState([])
   const [original, setOriginal] = useState(null)
   const [historico, setHistorico] = useState([])
@@ -105,8 +110,49 @@ export default function EmitirContrato() {
   const [importInfo, setImportInfo] = useState('')
 
   const carregarLista = async () => {
-    const c = await crm.from('contratos').select('id, numero, cliente_nome, valor_final, status, created_at').order('created_at', { ascending: false }).limit(30)
+    let query = crm.from('contratos').select('id, numero, cliente_nome, valor_final, status, created_at').order('created_at', { ascending: false }).limit(30)
+    if(params.get('lead')) query=query.eq('dados_json->>lead_id',params.get('lead'))
+    const c = await query
     if (!c.error) setLista(c.data || [])
+    if(orcamento){
+      let q=supabase.from('comercial_orcamentos').select('*').order('atualizado_em',{ascending:false}).limit(100)
+      if(params.get('lead'))q=q.eq('lead_id',params.get('lead'))
+      const r=await q
+      if(r.error)setErro('Não foi possível carregar os orçamentos: '+r.error.message)
+      else setOrcamentos(r.data||[])
+    }
+  }
+
+  const abrirOrcamento = async (o) => {
+    if(o.contrato_id){await abrirContrato(o.contrato_id);return}
+    setEditId(null);setSalvo(null);setOriginal(null);setErro('');setOrcamentoAtual(o)
+    setF({...inicial(),...o.dados});setFormasPg(o.dados.formas_pagamento||[linhaPgVazia()])
+    const r=await supabase.from('comercial_orcamento_versoes').select('versao,criado_em,autor').eq('orcamento_id',o.id).order('versao',{ascending:false})
+    setVersoesOrcamento(r.data||[])
+  }
+
+  const salvarOrcamento = async () => {
+    if(params.get('crm')==='1' && !f.lead_id){setErro('Selecione o cliente no CRM antes de criar um orçamento.');return}
+    if(calculoErro){setErro(calculoErro);return}
+    setSaving(true);setErro('')
+    try {
+      const r=await supabase.rpc('orcamento_salvar',{p_id:orcamentoAtual?.id||null,p_versao:orcamentoAtual?.versao||0,p_dados:montarDados(f.numero||'')})
+      if(r.error)throw r.error
+      await abrirOrcamento(r.data);await carregarLista()
+      return r.data
+    }catch(e){setErro(e.message)}finally{setSaving(false)}
+  }
+
+  const converterOrcamento = async () => {
+    const faltam=['cliente_nome','cliente_cpf','cliente_telefone','endereco','bairro','cidade','uf','cep','vendedor'].filter(k=>!String(f[k]||'').trim())
+    if(faltam.length){setErro('Complete os dados para gerar o contrato: '+faltam.map(k=>CAMPO_LABEL[k]||k).join(', '));return}
+    const o=await salvarOrcamento();if(!o)return
+    setSaving(true)
+    try{
+      const r=await supabase.rpc('orcamento_converter',{p_id:o.id,p_versao:o.versao})
+      if(r.error)throw r.error
+      await abrirContrato(r.data.id);await carregarLista()
+    }catch(e){setErro(e.message)}finally{setSaving(false)}
   }
   const carregarHistorico = async (id) => {
     const h = await crm.from('contrato_historico').select('*').eq('contrato_id', id).order('editado_em', { ascending: false }).limit(50)
@@ -129,6 +175,14 @@ export default function EmitirContrato() {
   }
   const enviarArquivo = async (file, tipo) => {
     if (!file) return
+    if(emOrcamento){
+      setUploading(tipo);setErro('')
+      try{
+        const path=await anexarJornada(file)
+        setF(v=>({...v,arquivos_orcamento:[...(v.arquivos_orcamento||[]),{path,nome:file.name,tipo}]}))
+      }catch(e){setErro(e.message)}finally{setUploading('')}
+      return
+    }
     let id = editId
     if (!id) {
       if (!f.cliente_nome.trim()) { setErro('Informe o cliente e salve antes de anexar o arquivo.'); return }
@@ -193,7 +247,7 @@ export default function EmitirContrato() {
     })()
   }, [])
 
-  const novoContrato = () => { setFormasPg([linhaPgVazia()]);setAprovacoes([]);setF(inicial()); setEditId(null); setSalvo(null); setErro(''); setOriginal(null); setHistorico([]); setAnexos([]); setFluxo(null); setEnvio({ grupo: false, imagens: false }) }
+  const novoContrato = () => { setOrcamentoAtual(null);setVersoesOrcamento([]);setFormasPg([linhaPgVazia()]);setAprovacoes([]);setF({...inicial(),...(params.get('lead')?{lead_id:params.get('lead'),cliente_nome:f.cliente_nome,cliente_telefone:f.cliente_telefone,vendedor:f.vendedor}: {})}); setEditId(null); setSalvo(null); setErro(''); setOriginal(null); setHistorico([]); setAnexos([]); setFluxo(null); setEnvio({ grupo: false, imagens: false }) }
 
   const abrirContrato = async (id) => {
     setErro(''); setSalvo(null)
@@ -287,6 +341,7 @@ export default function EmitirContrato() {
   const montarDados = (numero) => ({ ...f, numero, total_pedido: totalPedido, formas_pagamento: formasPg, regras_versao: VERSAO_REGRAS })
 
   const salvar = async () => {
+    if(emOrcamento)return salvarOrcamento()
     setErro('')
     if(calculoErro){setErro(calculoErro);return}
     if(editId && original?.regras_versao!==VERSAO_REGRAS){setErro('Contrato histórico preservado. Faça uma revisão antes de migrar seus valores.');return}
@@ -306,6 +361,16 @@ export default function EmitirContrato() {
   const imprimir = () => {
     if(!salvo || salvo.status!=='Emitido'){setErro('Salve a proposta e conclua as autorizações antes de emitir o contrato.');return}
     imprimirContrato(salvo).catch(e=>setErro(e.message))
+  }
+  const imprimirProposta = () => {
+    try{
+      if(calculoErro)throw new Error(calculoErro)
+      if(f.itens_extras.length)throw new Error('Os kits aguardam tabela e regra de aplicação. Complete essa definição antes de apresentar o valor ao cliente.')
+      if(Math.abs(pgRestante)>0.01 || calcPg.some(r=>r.erro))throw new Error('Distribua o valor nas formas de pagamento e corrija a simulação antes de imprimir.')
+      const pagamentos=formasPg.map((l,i)=>`${l.forma}: ${calcPg[i].n}x de ${brl(calcPg[i].parcela)} (total ${brl(calcPg[i].valorCliente)})`)
+      if(f.parcelas?.some(p=>p.marco==='dois_dias_antes_entrega'))pagamentos.splice(0,pagamentos.length,`${f.entrada_percentual}% na venda e ${100-Number(f.entrada_percentual)}% dois dias corridos antes da entrega`)
+      imprimirOrcamento(f,pgCliente,pagamentos)
+    }catch(e){setErro(e.message)}
   }
   const aprovarDesconto = async () => {
     const pendente=aprovacoes.find(a=>!a.aprovado_em)
@@ -339,22 +404,29 @@ export default function EmitirContrato() {
     <div className="card" style={{ maxWidth: 1000 }}>
       <div className="between">
         <div>
-          <h3>{editId ? 'Editar contrato' : 'Emitir contrato'}</h3>
-          <div className="sub">{editId ? `Editando o contrato ${f.numero || ''} — complete e salve novamente.` : 'Preencha, salve no sistema e imprima o documento formatado.'}</div>
+          <h3>{emOrcamento ? 'Orçamento do cliente' : editId ? 'Editar contrato' : 'Emitir contrato'}</h3>
+          <div className="sub">{emOrcamento ? 'Monte a proposta e complete os dados do cliente. Salvar orçamento não gera cobrança nem confirma venda. O contrato usa o modelo já cadastrado da loja.' : editId ? `Editando o contrato ${f.numero || ''} — complete e salve novamente.` : 'Preencha, salve no sistema e imprima o documento formatado.'}</div>
         </div>
         <div className="tools">
-          {editId && <button className="btn ghost" onClick={novoContrato}>+ Novo (limpar)</button>}
-          <button className="btn ghost" onClick={imprimir}>Prévia da minuta / PDF</button>
-          <button className="btn" onClick={salvar} disabled={saving}><IcoPlus /> {saving ? 'Salvando…' : (editId ? 'Atualizar contrato' : 'Salvar contrato')}</button>
+          {(editId || orcamentoAtual) && <button className="btn ghost" onClick={novoContrato} disabled={saving}>+ Novo orçamento</button>}
+          {!emOrcamento && <button className="btn ghost" onClick={imprimir}>Prévia da minuta / PDF</button>}
+          <button className="btn" onClick={salvar} disabled={saving}><IcoPlus /> {saving ? 'Salvando…' : emOrcamento ? 'Salvar orçamento' : (editId ? 'Atualizar contrato' : 'Salvar contrato')}</button>
+          {emOrcamento && <button className="btn ghost" onClick={converterOrcamento} disabled={saving}>Gerar contrato com estes dados</button>}
+          {emOrcamento && <button className="btn ghost" onClick={imprimirProposta} disabled={saving}>Orçamento para o cliente / PDF</button>}
         </div>
       </div>
       {erro && <div className="login-err" style={{ margin: '12px 0' }}>{erro}</div>}
+      {emOrcamento && orcamentoAtual && <p role="status">Orçamento salvo · versão {orcamentoAtual.versao}. Alterações no formulário precisam ser salvas.</p>}
+      {orcamento && <details open style={{margin:'16px 0'}}><summary>Orçamentos deste atendimento ({orcamentos.length})</summary>
+        {orcamentos.map(o=><div key={o.id} className="between" style={{padding:8,borderBottom:'1px solid var(--line)'}}><span>{o.dados.cliente_nome} · versão {o.versao} · {brl(o.dados.valor_negociado)} · {o.contrato_id?'Contrato gerado':'Em negociação'}</span><button className="btn ghost sm" disabled={saving} onClick={()=>abrirOrcamento(o)}>{o.contrato_id?'Abrir contrato':'Continuar orçamento'}</button></div>)}
+      </details>}
+      {emOrcamento && versoesOrcamento.length>0 && <details><summary>Histórico do orçamento ({versoesOrcamento.length} versões)</summary>{versoesOrcamento.map(v=><p key={v.versao}>Versão {v.versao} · {new Date(v.criado_em).toLocaleString('pt-BR')}</p>)}</details>}
       {calculoErro&&<p className="login-err">{calculoErro}</p>}
       <p className="sub">Uso interno: Promob {brl(calculo.original)} + marketing automático de 15% ({brl(calculo.marketing)}). Base de desconto: {brl(totalPedido)}. Limite sem autorização: {LIMITE_DESCONTO}%.</p>
       {salvo && <div className="badge ok" style={{ margin: '12px 0', display: 'inline-block' }}>Contrato {salvo.numero} {salvo.status === 'Rascunho' ? 'salvo como RASCUNHO (você pode completar depois)' : 'salvo · confira a situação de aprovação e os recebíveis da jornada'}</div>}
 
       {lista.length > 0 && (
-        <details style={{ margin: '10px 0 16px', border: '1px solid var(--line)', borderRadius: 10, padding: '10px 14px' }}>
+        <details open={!orcamento} style={{ margin: '10px 0 16px', border: '1px solid var(--line)', borderRadius: 10, padding: '10px 14px' }}>
           <summary style={{ cursor: 'pointer', fontSize: 13 }}>Contratos salvos ({lista.length}) — clique para reabrir e completar depois</summary>
           <div className="table-wrap" style={{ boxShadow: 'none', marginTop: 10 }}>
             <table>
@@ -406,7 +478,7 @@ export default function EmitirContrato() {
         {importInfo && <div className="badge ok" style={{ display: 'inline-block', marginTop: 10 }}>{importInfo}</div>}
       </div>
 
-      <AditivosContrato key={editId||'sem-contrato'} contratoId={editId} />
+      {!emOrcamento && <AditivosContrato key={editId||'sem-contrato'} contratoId={editId} />}
       <div style={{ ...S }}>Pasta do cliente — arquivos</div>
       <div style={{ border: '1px solid var(--line)', borderRadius: 10, padding: 14 }}>
         <div className="row-2">
@@ -420,7 +492,9 @@ export default function EmitirContrato() {
           </div>
         </div>
         {uploading && <div className="sub" style={{ marginTop: 8 }}>Enviando arquivo ({uploading})…</div>}
-        {!editId && <div className="sub" style={{ marginTop: 8, color: 'var(--warn)' }}>Salve a proposta completa para vincular os documentos ao contrato.</div>}
+        {!editId && <div className="sub" style={{ marginTop: 8, color: 'var(--warn)' }}>{emOrcamento?'Após anexar, salve o orçamento para guardar os vínculos.':'Salve a proposta completa para vincular os documentos ao contrato.'}</div>}
+        {(f.arquivos_orcamento||[]).map((a,i)=><p key={a.path||i}>{a.nome} <button className="btn ghost sm" onClick={()=>abrirDocumento(a.path).catch(e=>setErro(e.message))}>Abrir anexo do orçamento</button></p>)}
+        {f.promob_arquivo && <button className="btn ghost sm" onClick={()=>abrirDocumento(f.promob_arquivo).catch(e=>setErro(e.message))}>Abrir XML original</button>}
         {anexos.length > 0 && (
           <div className="table-wrap" style={{ boxShadow: 'none', marginTop: 12 }}>
             <table>
@@ -647,11 +721,11 @@ export default function EmitirContrato() {
         </div>
       </div>
 
-      <div className="field" style={{ marginTop: 18 }}><label>Observações do contrato</label><textarea className="input" value={f.observacoes} onChange={(e) => set('observacoes', e.target.value)} /></div>
+      <div className="field" style={{ marginTop: 18 }}><label>Observações do contrato (visíveis ao cliente)</label><textarea className="input" value={f.observacoes} onChange={(e) => set('observacoes', e.target.value)} /></div>
 
       <div className="tools" style={{ marginTop: 8 }}>
-        <button className="btn" onClick={salvar} disabled={saving}>{saving ? 'Salvando…' : 'Salvar contrato'}</button>
-        <button className="btn ghost" onClick={imprimir}>Prévia da minuta / PDF</button>
+        <button className="btn" onClick={salvar} disabled={saving}>{saving ? 'Salvando…' : emOrcamento ? 'Salvar orçamento' : 'Salvar contrato'}</button>
+        {emOrcamento ? <button className="btn ghost" onClick={converterOrcamento} disabled={saving}>Gerar contrato com estes dados</button> : <button className="btn ghost" onClick={imprimir}>Prévia da minuta / PDF</button>}
       </div>
 
       <div style={S}>Checklist, medição e correção</div><p>O checklist e as liberações agora são registrados na <Link to="/jornada">Jornada do cliente</Link>. A medição tem 5 dias corridos; a conferência, 12 dias úteis após a medição.</p>

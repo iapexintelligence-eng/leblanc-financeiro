@@ -14,6 +14,7 @@ const GROUPS = [
   {to:'/jornada',icon:IcoProject,txt:'Jornada do cliente',roles:['vendedor','correcao','logistica','financeiro','gestor','qualidade']},
  ]},
  {label:'Setores',items:[
+  {to:'/orcamentos',icon:IcoSales,txt:'Orçamentos e contratos',roles:['vendedor','financeiro','gestor']},
   {to:'/vendas',icon:IcoSales,txt:'Vendas',roles:['vendedor']},
   {to:'/correcao',icon:IcoTool,txt:'Correção',roles:['correcao']},
   {to:'/liberacao',icon:IcoProject,txt:'Liberação',roles:['correcao','logistica']},

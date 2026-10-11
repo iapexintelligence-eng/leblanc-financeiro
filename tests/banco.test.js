@@ -276,6 +276,39 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  await assert.rejects(db.query("update le_admin.jornada_registros set dados='{}'"),/permission denied/)
  await db.exec('reset role')
 
+ // Orçamentos são rascunhos separados: sem recebíveis e com conversão idempotente.
+ await db.exec('create table leblanc.leads(id text primary key)')
+ await db.exec(await readFile(new URL('../supabase/migrations/20261011215211_orcamentos_crm.sql',import.meta.url),'utf8'))
+ await db.exec(`select set_config('test.uid','${gestor}',false)`)
+ const antes=(await db.query('select count(*)::int as n from le_admin.comercial_recebiveis')).rows[0].n
+ const od={...proposta,cliente_cpf:'00000000000',cliente_telefone:'41999999999',endereco:'Rua de teste, 1',bairro:'Teste',cidade:'Curitiba',uf:'PR',cep:'80000000',vendedor:'Vendedor teste'}
+ const os=async(d,id=null,v=0)=>(await db.query('select le_admin.orcamento_salvar($1,$2,$3) as o',[id,v,JSON.stringify(d)])).rows[0].o
+ const o=await os(od)
+ assert.equal(o.dados.valor_promob,50000)
+ assert.equal(o.dados.total_pedido,57500)
+ assert.equal(o.dados.valor_negociado,34500)
+ assert.equal((await db.query('select count(*)::int as n from le_admin.comercial_recebiveis')).rows[0].n,antes)
+ await assert.rejects(os(od,o.id,0),/outra pessoa/)
+ const o2=await os(od,o.id,1)
+ assert.equal(o2.versao,2)
+ await assert.rejects(db.query('select le_admin.orcamento_converter($1,$2)',[o.id,1]),/mudou/)
+ await db.exec(`select set_config('test.uid','${vendedor}',false);set role authenticated`)
+ assert.equal((await db.query('select count(*)::int as n from le_admin.comercial_orcamentos')).rows[0].n,0)
+ await assert.rejects(os(od,o.id,2),/indisponível/)
+ await assert.rejects(db.query('select le_admin.orcamento_converter($1,$2)',[o.id,2]),/indisponível/)
+ await assert.rejects(db.exec("update le_admin.comercial_orcamentos set dados='{}'"),/permission denied/)
+ await db.exec(`reset role;select set_config('test.uid','${gestor}',false)`)
+ const convertido=(await db.query('select le_admin.orcamento_converter($1,$2) as c',[o.id,2])).rows[0].c
+ const novamente=(await db.query('select le_admin.orcamento_converter($1,$2) as c',[o.id,2])).rows[0].c
+ assert.equal(convertido.id,novamente.id)
+ assert.equal(convertido.dados_json.orcamento_id,o.id)
+ await assert.rejects(os(od,o.id,2),/já convertido/)
+ const incompleto=await os({...od,cliente_cpf:''})
+ await assert.rejects(db.query('select le_admin.orcamento_converter($1,$2)',[incompleto.id,1]),/Complete/)
+ const excecao=await os({...od,desconto_valor:41,formas_pagamento:[{forma:'Pix / À vista',valor:33925}],parcelas:[{numero:1,valor:20355,marco:'venda'},{numero:2,valor:13570,marco:'dois_dias_antes_entrega'}]})
+ const pendente=(await db.query('select le_admin.orcamento_converter($1,$2) as c',[excecao.id,1])).rows[0].c
+ assert.equal(pendente.status,'Aguardando aprovação')
+ assert.equal((await db.query('select count(*)::int as n from le_admin.comercial_recebiveis where contrato_id=$1',[pendente.id])).rows[0].n,0)
  } finally {await db.close()}
 })
 

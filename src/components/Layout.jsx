@@ -6,6 +6,7 @@ import { signOut } from '../lib/useAuth.js'
 import { useRole } from '../lib/useRole.js'
 
 const TITLES = {
+ '/orcamentos':['Comercial','Orçamentos e contratos'],
  '/planilhas-historicas':['Financeiro · Leia','Planilhas históricas'],
  '/pendencias':['Equipe','Pendências e próximos passos'],
  '/revisao-mensal':['Financeiro · Leia','Revisão mensal'],
@@ -52,13 +53,14 @@ const TITLES = {
 const PAPEL_TXT = { administrativo: 'Administrativo', diretoria: 'Diretoria', correcao: 'Correção', montagem: 'Montagem', qualidade: 'Qualidade', vendedor: 'Vendedor' }
 
 export default function Layout() {
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
+  const noCRM = ['/orcamentos','contratos','/contratos'].includes(pathname) && new URLSearchParams(search).get('crm')==='1'
   const [crumb, title] = TITLES[pathname] || ['', '']
   const role = useRole()
   const iniciais = (role.nome || 'LB').slice(0, 2).toUpperCase()
   return (
     <div className="app">
-      <Sidebar papel={role.papel} />
+      {!noCRM && <Sidebar papel={role.papel} />}
       <div className="main">
         <header className="topbar">
           <div>

@@ -69,6 +69,7 @@ export default function App() {
         <Route path="/vendas-historico" element={<Vendas />} />
         <Route path="/novo-contrato" element={<EmitirContrato />} />
         <Route path="/contratos" element={<EmitirContrato />} />
+        <Route path="/orcamentos" element={<EmitirContrato orcamento />} />
         <Route path="/simulador" element={<Simulador />} />
         <Route path="/correcao" element={<Jornada setor="correcao" />} />
         <Route path="/acompanhamento" element={<Acompanhamento />} />
