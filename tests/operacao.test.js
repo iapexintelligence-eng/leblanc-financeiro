@@ -31,3 +31,23 @@ test('ficha importada gera só as pendências da planilha, sem prazos inventados
  assert.deepEqual(xs.map(x=>[x.titulo,x.papel,x.prazo]),[['Guias técnicas','correcao',null],['Assistência aberta','logistica',null]])
  assert.match(xs[0].origem,/Planilha de revisões · GIOVANNA · falta guia/)
 })
+
+test('previsão de montagem segue os prazos da loja e nunca antecipa etapa pendente',async()=>{
+ const {previsaoMontagem}=await import('../src/lib/operacao.js')
+ const hoje='2026-10-11',fer=['2026-10-12','2026-11-02','2026-11-15','2026-11-20']
+ assert.equal(previsaoMontagem({entrega_prazo:'2026-11-30',aprovacao_em:'2026-10-15'},{hoje,feriados:fer}).data,'2026-11-30')
+ const imp=previsaoMontagem({importacao_revisoes:{setor_codigo:'liberacao',assinatura:'2026-07-09'}},{hoje,feriados:fer})
+ assert.equal(imp.tipo,'estimado');assert.equal(imp.data,'2026-08-27')
+ assert.equal(previsaoMontagem({importacao_revisoes:{setor_codigo:'qualidade'}},{hoje}),null)
+ // Medida antiga: conferência vencida não volta ao passado; parte de hoje.
+ const m=previsaoMontagem({importacao_revisoes:{setor_codigo:'correcao',medida:'2026-06-01'}},{hoje,feriados:fer})
+ assert.ok(m.data>'2026-11-30')
+ assert.equal(previsaoMontagem({tipo_venda:'Futura'},{hoje}).tipo,'pendente')
+ assert.equal(previsaoMontagem({entrega_em:'2026-10-01'},{hoje}),null)
+})
+
+test('pedido já implantado sem data de assinatura não ganha data inventada',async()=>{
+ const {previsaoMontagem}=await import('../src/lib/operacao.js')
+ const r=previsaoMontagem({importacao_revisoes:{setor_codigo:'liberacao',situacao:'IMPLANTADO',medida:'2026-05-13'}},{hoje:'2026-10-11'})
+ assert.equal(r.data,null);assert.equal(r.tipo,'pendente')
+})

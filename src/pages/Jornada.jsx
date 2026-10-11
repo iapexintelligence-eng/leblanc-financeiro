@@ -2,7 +2,7 @@ import AditivosContrato from '../components/AditivosContrato.jsx'
 import XmlFinalConferencia from '../components/XmlFinalConferencia.jsx'
 import RegistroComplementos from '../components/RegistroComplementos.jsx'
 import { situacoesSeparadas, checklistPassagem } from '../lib/operacao.js'
-import { SETORES, noSetor } from '../lib/setores.js'
+import { SETORES, noSetor, prazoImportado } from '../lib/setores.js'
 import { jornadaDemo } from '../lib/jornadaDemo.js'
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -42,8 +42,10 @@ function ImportacaoRevisoes({imp}) {
  </div>
 }
 const inicial=(tipo)=>tipo==='pedido'?{tipo_venda:'Normal'}:tipo==='assistencia'?{identificada:hojeSP(),status:'Identificada',responsavel:'Glauci',causa:'A apurar'}:tipo==='frete'?{status:'Solicitado'}:{}
-function prazo(r) {
+function prazo(r,feriados=[]) {
  const d=r.dados
+ const est=r.tipo==='pedido'?prazoImportado(d,feriados):null
+ if(est) return est.prazo
  if(r.tipo==='assistencia') return d.status==='Resolvida'?null:d.vencimento
  if(r.tipo!=='pedido') return null
  if(d.entrega_em) return null
@@ -74,7 +76,7 @@ function situacao(r) {
 export default function Jornada({ tipoInicial='pedido', setor=null }) {
  const [params]=useSearchParams()
  const [abaFicha,setAbaFicha]=useState('Resumo')
- const [vendaFiltro,setVendaFiltro]=useState('Normal')
+ const [vendaFiltro,setVendaFiltro]=useState('Normal'),[soAtrasados,setSoAtrasados]=useState(false)
  const setorInfo=SETORES[setor]
  const [demo]=useState(()=>authOn?null:jornadaDemo())
  const [mes,setMes]=useState(hojeSP().slice(0,7)),[montadorFiltro,setMontadorFiltro]=useState('')
@@ -92,9 +94,10 @@ export default function Jornada({ tipoInicial='pedido', setor=null }) {
  useEffect(()=>setTipo(tipoInicial),[tipoInicial,setor])
  const mapa=Object.fromEntries(contratos.map(c=>[String(c.id),c]))
  const registros=dados?.registros||[],feriados=dados?.config.feriados||[]
- const lista=registros.filter(r=>r.tipo===tipo&&noSetor(r,setor)&&(setor!=='vendas'||(r.dados.tipo_venda||'Normal')===vendaFiltro)&&(!busca||`${mapa[r.contrato_id]?.cliente_nome||r.dados.cliente_nome||''} ${r.dados.montador_original||''} ${r.dados.prestador||''}`.toLowerCase().includes(busca.toLowerCase()))).sort((a,b)=>(prazo(a)||'9999').localeCompare(prazo(b)||'9999'))
+ const lista=registros.filter(r=>r.tipo===tipo&&noSetor(r,setor)&&(!soAtrasados||(prazo(r,feriados)&&prazo(r,feriados)<agora))&&(setor!=='vendas'||(r.dados.tipo_venda||'Normal')===vendaFiltro)&&(!busca||`${mapa[r.contrato_id]?.cliente_nome||r.dados.cliente_nome||''} ${r.dados.montador_original||''} ${r.dados.prestador||''}`.toLowerCase().includes(busca.toLowerCase()))).sort((a,b)=>(prazo(a,feriados)||'9999').localeCompare(prazo(b,feriados)||'9999'))
  const abertos=registros.filter(r=>r.tipo==='assistencia'&&r.dados.status!=='Resolvida')
  const atrasadas=abertos.filter(r=>prazo(r)&&prazo(r)<agora)
+ const pedidosAtrasados=registros.filter(r=>r.tipo==='pedido'&&noSetor(r,setor)&&prazo(r,feriados)&&prazo(r,feriados)<agora)
  const demanda={}
  registros.filter(r=>r.tipo==='pedido'&&r.dados.entrega_prazo&&!r.dados.montagem_concluida_em).forEach(r=>{const mes=(r.dados.entrega_prevista||r.dados.entrega_prazo).slice(0,7);demanda[mes]=(demanda[mes]||0)+1})
  const edita=authOn&&dados?.eu&&dados.eu.papel!=='montador'
@@ -109,7 +112,7 @@ export default function Jornada({ tipoInicial='pedido', setor=null }) {
   try {await salvarRegistro({...modal,dados:{...modal.dados,cliente_nome:mapa[modal.contrato_id]?.cliente_nome||modal.dados.cliente_nome}});setModal(null);await carregar()}catch(e){setErro(e.message)}finally{setSaving(false)}
  }
  async function anexo(k,file) {if(!file)return;setUpload(true);try{set(k,await anexarJornada(file))}catch(e){setErro(e.message)}finally{setUpload(false)}}
- const aviso=(r)=>alertaPrazo(prazo(r),{hoje:agora,feriados})
+ const aviso=(r)=>alertaPrazo(prazo(r,feriados),{hoje:agora,feriados})
  const diasMes = new Date(Number(mes.slice(0,4)),Number(mes.slice(5,7)),0).getDate()
  const contrato=modal?mapa[modal.contrato_id]:null
  const mail=contrato?`Nome: ${contrato.cliente_nome}\nEndereço: ${contrato.cliente_endereco||''}\nContato: ${contrato.cliente_telefone||''}\nAmbientes: ${contrato.projeto_ambientes||''}\n\nAnexar a planta baixa do Promob antes de enviar.`:''
@@ -132,10 +135,11 @@ export default function Jornada({ tipoInicial='pedido', setor=null }) {
   {(!setor||setor==='montagem')&&<div className="card" style={{marginBottom:16}}><h3>Previsão de montagens</h3><Link className="btn ghost" to="/capacidade-montagem">Capacidade e indisponibilidades</Link><p className="sub">Estimativa por entrega prevista, a partir dos 35 dias úteis após aprovação. Reservas internas não liberam a escala.</p>{Object.keys(demanda).length?Object.entries(demanda).sort().map(([mes,n])=><span key={mes} className="pill" style={{margin:4}}>{mes}: {n} pedido(s) previstos</span>):<p>Sem pedidos com aprovação e prazo de entrega registrados.</p>}</div>}
   {tipo==='assistencia'&&<div className="card" style={{marginBottom:16}}><h3>Assistências por mês e montagem</h3>{[...new Set(abertos.map(r=>r.dados.vencimento?.slice(0,7)).filter(Boolean))].sort().map(m=><p key={m}>{m}: {abertos.filter(r=>r.dados.vencimento?.startsWith(m)).length} assistência(s) em aberto com vencimento no mês</p>)}{[...new Set(registros.filter(r=>r.tipo==='assistencia').map(r=>r.dados.montador_original).filter(Boolean))].map(nome=><p key={nome}>{nome}: {registros.filter(r=>r.tipo==='assistencia'&&r.dados.montador_original===nome).length} ocorrência(s) em montagens de origem · causa apurada em cada registro</p>)}</div>}
   {tipo==='agenda'&&<div className="card" style={{marginBottom:16}}><div className="tools"><label>Mês <input type="month" className="input" value={mes} onChange={e=>setMes(e.target.value||hojeSP().slice(0,7))}/></label><select aria-label="Filtrar montador" className="input" value={montadorFiltro} onChange={e=>setMontadorFiltro(e.target.value)}><option value="">Todos os montadores</option>{dados?.pessoas.filter(p=>p.papel==='montador').map(p=><option key={p.usuario_id} value={p.usuario_id}>{p.nome}</option>)}</select></div><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:8,marginTop:12}}>{Array.from({length:diasMes},(_,i)=>{const dia=`${mes}-${String(i+1).padStart(2,'0')}`;const reservas=registros.filter(r=>r.tipo==='agenda'&&r.dados.inicio<=dia&&r.dados.fim>=dia&&(!montadorFiltro||r.dados.montador_id===montadorFiltro));return <div key={dia} style={{border:'1px solid var(--line)',padding:8,minHeight:74}}><b>{fmtDate(dia)}</b>{reservas.map(r=><button className="btn ghost sm" style={{display:'block',whiteSpace:'normal',marginTop:6}} key={r.id} onClick={()=>abrir(r)}>{dados?.pessoas.find(p=>p.usuario_id===r.dados.montador_id)?.nome||'Montador'} · {mapa[r.contrato_id]?.cliente_nome||r.dados.cliente_nome}<br/>{r.dados.confirmada?'Escala liberada':'Reserva interna'}</button>)}</div>})}</div></div>}
+  {tipo==='pedido'&&<div className="card" style={{marginBottom:12,borderColor:pedidosAtrasados.length?'var(--danger)':undefined}}><div className="between" style={{flexWrap:'wrap',gap:8}}><div><b style={{color:pedidosAtrasados.length?'var(--danger)':undefined}}>{pedidosAtrasados.length} cliente(s) com prazo vencido{setor?' neste setor':''}</b><div className="sub" style={{margin:0}}>Clientes vindos da planilha usam prazo estimado pelas datas registradas nela (medida, liberação ou assinatura do projeto) até a equipe registrar os marcos reais.</div></div><button className={'btn '+(soAtrasados?'':'ghost')} onClick={()=>setSoAtrasados(v=>!v)}>{soAtrasados?'Mostrar todos':'Ver só os atrasados'}</button></div></div>}
   <div className="section-head"><input aria-label="Buscar atendimento" className="input" placeholder="Buscar cliente, montador ou prestador" value={busca} onChange={e=>setBusca(e.target.value)}/>{edita&&<button className="btn" onClick={()=>abrir({tipo,contrato_id:'',dados:{...inicial(tipo),...(setor==='vendas'?{tipo_venda:vendaFiltro}:{})}})}>Novo registro</button>}</div>
   <div className="table-wrap"><table><thead><tr><th>Cliente / contrato</th><th>Situação</th><th>Prazo / período</th><th>Responsável / valor</th><th></th></tr></thead><tbody>
    {lista.length===0&&<tr><td colSpan="5" className="empty">Nenhum registro nesta visão.</td></tr>}
-   {lista.map(r=>{const a=aviso(r);return <tr key={r.id} style={{background:a?.nivel==='danger'?'var(--danger-bg)':undefined}}><td>{mapa[r.contrato_id]?.cliente_nome||r.dados.cliente_nome||r.contrato_id}<div className="sub">{mapa[r.contrato_id]?.numero}</div></td><td>{situacao(r)}</td><td>{tipo==='agenda'?`${fmtDate(r.dados.inicio)} a ${fmtDate(r.dados.fim)}`:<>{fmtDate(prazo(r))}{a&&<div><span className={'badge '+a.nivel}>{a.texto}</span></div>}</>}</td><td>{tipo==='frete'?`${r.dados.prestador} · ${brl(r.dados.valor)}`:r.dados.responsavel||dados?.pessoas.find(p=>p.usuario_id===r.dados.montador_id)?.nome||r.dados.conferente||'—'}</td><td><button className="btn ghost" onClick={()=>abrir(r)}>{edita?'Abrir':'Ver detalhes'}</button></td></tr>})}
+   {lista.map(r=>{const a=aviso(r);return <tr key={r.id} style={{background:a?.nivel==='danger'?'var(--danger-bg)':undefined}}><td>{mapa[r.contrato_id]?.cliente_nome||r.dados.cliente_nome||r.contrato_id}<div className="sub">{mapa[r.contrato_id]?.numero}</div></td><td>{situacao(r)}</td><td>{tipo==='agenda'?`${fmtDate(r.dados.inicio)} a ${fmtDate(r.dados.fim)}`:<>{fmtDate(prazo(r,feriados))}{a&&<div><span className={'badge '+a.nivel}>{a.texto}</span></div>}{r.tipo==='pedido'&&prazoImportado(r.dados,feriados)&&<div className="sub" style={{margin:0}}>Estimado pela planilha: {prazoImportado(r.dados,feriados).etapa}</div>}</>}</td><td>{tipo==='frete'?`${r.dados.prestador} · ${brl(r.dados.valor)}`:r.dados.responsavel||dados?.pessoas.find(p=>p.usuario_id===r.dados.montador_id)?.nome||r.dados.conferente||'—'}</td><td><button className="btn ghost" onClick={()=>abrir(r)}>{edita?'Abrir':'Ver detalhes'}</button></td></tr>})}
   </tbody></table></div>
   {modal&&<Modal wide title={TIPOS[modal.tipo]} onClose={()=>!saving&&!upload&&setModal(null)} footer={<><button className="btn ghost" onClick={()=>setModal(null)} disabled={saving||upload}>Fechar</button>{edita&&abaFicha==='Resumo'&&<button className="btn" onClick={salvar} disabled={saving||upload||!modal.contrato_id}>{saving?'Salvando…':'Salvar registro'}</button>}</>}>
    {erro&&<div className="login-err" role="alert">{erro}</div>}

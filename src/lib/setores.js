@@ -1,3 +1,4 @@
+import { somarUteis, somarDias } from './prazos.js'
 export const SETORES = {
  vendas:{titulo:'Vendas',descricao:'Propostas, contratos e checklist. Vendas futuras ficam separadas até a liberação do imóvel.',tipos:['pedido']},
  correcao:{titulo:'Correção',descricao:'Medição em até 5 dias corridos; conferência e guias em até 12 dias úteis após a medição.',tipos:['pedido']},
@@ -24,4 +25,20 @@ export function noSetor(registro,setor) {
  if(!setor)return true
  if(registro.tipo==='pedido')return setorPedido(registro.dados)===setor
  return SETORES[setor]?.tipos.includes(registro.tipo)||false
+}
+
+// Prazo estimado para fichas importadas, a partir das datas reais da planilha e dos prazos definitivos da loja.
+// Não substitui os marcos registrados na jornada: deixa de valer assim que houver marco real.
+export function prazoImportado(d, feriados = []) {
+ const imp=d?.importacao_revisoes
+ if(!imp||!setorImportado(d))return null
+ const ok=s=>/^\d{4}-\d{2}-\d{2}$/.test(s||'')
+ try{
+  if(imp.setor_codigo==='correcao'){
+   if(ok(imp.medida))return {prazo:somarUteis(imp.medida,12,feriados),etapa:'Conferência e guias · 12 dias úteis desde a medida'}
+   if(ok(imp.lib_medida))return {prazo:somarDias(imp.lib_medida,5),etapa:'Medição · 5 dias corridos desde a liberação'}
+  }
+  if(['liberacao','montagem'].includes(imp.setor_codigo)&&ok(imp.assinatura))return {prazo:somarUteis(imp.assinatura,35,feriados),etapa:'Entrega · 35 dias úteis desde a assinatura do projeto'}
+ }catch{return null}
+ return null
 }

@@ -25,3 +25,13 @@ test('ficha importada da planilha fica no setor de origem até haver marco real'
  assert.equal(setorPedido(d),'correcao')
  assert.equal(setorPedido({importacao_revisoes:{setor_codigo:'inexistente'}}),'vendas')
 })
+
+test('ficha importada ganha prazo estimado pelas datas da planilha',async()=>{
+ const {prazoImportado}=await import('../src/lib/setores.js')
+ assert.deepEqual(prazoImportado({importacao_revisoes:{setor_codigo:'correcao',medida:'2026-10-01'}},['2026-10-12']).prazo,'2026-10-20')
+ assert.equal(prazoImportado({importacao_revisoes:{setor_codigo:'correcao',lib_medida:'2026-10-09'}}).prazo,'2026-10-14')
+ assert.equal(prazoImportado({importacao_revisoes:{setor_codigo:'liberacao',assinatura:'2026-07-09'}}).prazo,'2026-08-27')
+ assert.equal(prazoImportado({importacao_revisoes:{setor_codigo:'qualidade',medida:'2026-07-09'}}),null)
+ assert.equal(prazoImportado({importacao_revisoes:{setor_codigo:'correcao',medida:'DEZEMBRO'}}),null)
+ assert.equal(prazoImportado({liberacao_em:'2026-10-01',importacao_revisoes:{setor_codigo:'correcao',medida:'2026-10-01'}}),null)
+})

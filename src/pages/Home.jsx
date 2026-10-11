@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine, Cell } from 'recharts'
+import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from 'recharts'
+import { metaDoMes, vendasConsolidadas } from '../lib/metas.js'
 import { supabase } from '../lib/supabase.js'
 import { brl, brlShort, fmtDate, today } from '../lib/format.js'
 
@@ -19,17 +20,17 @@ export default function Home() {
 
   useEffect(() => {
     (async () => {
-      const [vendas, receber, pagamentos, contas, cfg, hist] = await Promise.all([
+      const [vendas, receber, pagamentos, contas, cfg, contratos] = await Promise.all([
         supabase.from('vendas').select('valor_vendido, data_venda, vendedor').limit(2000),
         supabase.from('a_receber').select('id, cliente_nome, descricao, valor_parcela, data_prevista, data_recebimento, status').limit(5000),
         supabase.from('pagamentos').select('id, descricao, fornecedor, categoria, valor, data, data_vencimento, status').limit(5000),
         supabase.from('contas_bancarias').select('saldo, ativo'),
-        supabase.from('config_loja').select('chave, valor').eq('chave', 'meta_mensal').maybeSingle(),
-        supabase.from('vw_historico_mensal').select('mes, faturamento').order('mes', { ascending: false }).limit(6),
+        supabase.from('config_loja').select('chave, valor').like('chave', 'meta_mensal%'),
+        supabase.schema('leblanc').from('contratos').select('status, vendor, valor_final, created_at, dados_json').limit(5000),
       ])
       setD({
-        vendas: vendas.data || [], receber: receber.data || [], pagamentos: pagamentos.data || [],
-        contas: contas.data || [], meta: Number(cfg.data?.valor) || 0, hist: hist.data || [],
+        vendas: vendasConsolidadas(vendas.data || [], contratos.data || []), receber: receber.data || [], pagamentos: pagamentos.data || [],
+        contas: contas.data || [], config: cfg.data || [],
         erro: vendas.error?.message || receber.error?.message || pagamentos.error?.message || null,
       })
     })()
@@ -52,7 +53,8 @@ export default function Home() {
     const noMes = (dt) => (dt || '').slice(0, 7) === mes
     const vendasMes = d.vendas.filter((v) => noMes(v.data_venda))
     const vendido = vendasMes.reduce((s, v) => s + (Number(v.valor_vendido) || 0), 0)
-    const pct = d.meta ? vendido / d.meta : 0
+    const meta = metaDoMes(d.config, mes)
+    const pct = meta ? vendido / meta : 0
 
     const recMes = d.receber.filter((r) => noMes(r.data_prevista))
     const recTotal = recMes.reduce((s, r) => s + (Number(r.valor_parcela) || 0), 0)
@@ -70,7 +72,7 @@ export default function Home() {
     vendasMes.forEach((v) => { const n = v.vendedor || '— sem vendedor —'; porV[n] = (porV[n] || 0) + (Number(v.valor_vendido) || 0) })
     const ranking = Object.entries(porV).sort((a, b) => b[1] - a[1])
 
-    return { vendido, qtd: vendasMes.length, pct, recTotal, recRecebido, recPendente,
+    return { vendido, meta, qtd: vendasMes.length, pct, recTotal, recRecebido, recPendente,
       recPct: recTotal ? recRecebido / recTotal : 0, despTotal, despPago, despPendente,
       despPct: despTotal ? despPago / despTotal : 0, saldoMes, ranking }
   }, [d, mes])
@@ -128,8 +130,13 @@ export default function Home() {
 
   const chart = useMemo(() => {
     if (!d) return []
-    return [...d.hist].reverse().map((h) => ({ mes: rotuloMes(h.mes.slice(0, 7)), ym: h.mes.slice(0, 7), vendido: Number(h.faturamento) || 0 }))
-  }, [d])
+    // Seis meses até o mês selecionado, com a meta vigente em cada um.
+    return [-5, -4, -3, -2, -1, 0].map((i) => {
+      const ym = addMes(mes, i)
+      const vendido = d.vendas.filter((v) => (v.data_venda || '').slice(0, 7) === ym).reduce((s, v) => s + (Number(v.valor_vendido) || 0), 0)
+      return { mes: rotuloMes(ym), ym, vendido, meta: metaDoMes(d.config, ym) || null }
+    })
+  }, [d, mes])
 
   if (!d) return <div className="spinner-wrap">Carregando painel…</div>
   if (d.erro) return <div className="login-err">Erro ao carregar dados: {d.erro}</div>
@@ -211,7 +218,7 @@ export default function Home() {
 
       <div className="grid cols-4" style={{ marginBottom: 20 }}>
         <div className="card kpi"><div className="label">Vendido</div><div className="value">{brl(k.vendido)}</div><div className="delta">{k.qtd} contrato(s) no mês</div></div>
-        <div className="card kpi"><div className="label">Meta da loja</div><div className="value">{brl(d.meta)}</div><div className="delta">meta mensal</div></div>
+        <div className="card kpi"><div className="label">Meta da loja</div><div className="value">{brl(k.meta)}</div><div className="delta">meta mensal</div></div>
         <div className="card kpi"><div className="label">% Realizado</div><div className="value" style={{ color: k.pct >= 1 ? 'var(--ok)' : 'inherit' }}>{(k.pct * 100).toFixed(0)}%</div><div className="delta">{(k.pct * 100).toFixed(1)}% da meta do mês</div></div>
         <div className="card kpi"><div className="label">Saldo do mês</div><div className="value" style={{ color: k.saldoMes >= 0 ? 'var(--ok)' : 'var(--danger)' }}>{brl(k.saldoMes)}</div><div className="delta">{k.saldoMes >= 0 ? 'recebido acima do pago' : 'pago acima do recebido'}</div></div>
       </div>
@@ -221,19 +228,19 @@ export default function Home() {
         <PainelFinanceiro titulo="Despesa" cor="var(--danger)" total={k.despTotal} feitoLabel="Pago" feito={k.despPago} pendente={k.despPendente} pct={k.despPct} link="/pagamentos" />
         <div className="card">
           <div className="between"><h3 style={{ margin: 0 }}>Vendido x Meta</h3></div>
-          <div className="sub">Últimos 6 meses</div>
+          <div className="sub">6 meses até o mês selecionado</div>
           <div style={{ height: 190, marginTop: 8 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chart} margin={{ top: 8, right: 6, left: -10, bottom: 0 }}>
+              <ComposedChart data={chart} margin={{ top: 8, right: 6, left: -10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--line)" />
                 <XAxis dataKey="mes" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis tickFormatter={(v) => brlShort(v)} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={54} />
                 <Tooltip formatter={(v) => brl(v)} labelStyle={{ fontWeight: 600 }} />
-                {d.meta > 0 && <ReferenceLine y={d.meta} stroke="var(--danger)" strokeDasharray="4 4" label={{ value: 'Meta', position: 'right', fontSize: 10, fill: 'var(--danger)' }} />}
-                <Bar dataKey="vendido" radius={[5, 5, 0, 0]}>
+                <Line type="stepAfter" dataKey="meta" name="Meta" stroke="var(--danger)" strokeDasharray="4 4" dot={false} />
+                <Bar dataKey="vendido" name="Vendido" radius={[5, 5, 0, 0]}>
                   {chart.map((c) => <Cell key={c.ym} fill={c.ym === mes ? 'var(--brand, #5b5bd6)' : '#c7c9f2'} />)}
                 </Bar>
-              </BarChart>
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
         </div>

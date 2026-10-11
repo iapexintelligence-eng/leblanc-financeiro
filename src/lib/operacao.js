@@ -1,5 +1,5 @@
-import { hojeSP, somarDias, util } from './prazos.js'
-import { setorPedido, SETORES } from './setores.js'
+import { hojeSP, somarDias, somarUteis, util, dataValida } from './prazos.js'
+import { setorPedido, SETORES, prazoImportado } from './setores.js'
 
 export const PAPEIS={vendedor:'Vendas',correcao:'Conferência',logistica:'Glauci · logística',financeiro:'Leia · financeiro',gestor:'Gestão'}
 export const MARCOS={'':'Não bloqueia avanço',liberacao_em:'Liberação para medição',implantacao_em:'Implantação na fábrica',confirmada:'Liberação da escala',entrega_em:'Entrega',fotos_em:'Fotos'}
@@ -7,7 +7,7 @@ export function situacoesSeparadas(d) {
  return {comercial:d.tipo_venda==='Futura'&&!d.imovel_pronto_em?'Venda futura · aguarda imóvel':'Venda fechada',operacional:SETORES[setorPedido(d)]?.titulo||'Em acompanhamento',financeiro:d.saldo_confirmado?'Quitação conferida':d.entrada_confirmada?'Entrada conferida · saldo pendente':'Entrada pendente de conferência'}
 }
 const PAPEL_IMPORTADO={'Assistência aberta':'logistica','Aguardando imóvel / liberação para medição':'vendedor','Definir conferente':'gestor'}
-export function pendenciasAutomaticas(registros) {
+export function pendenciasAutomaticas(registros,feriados=[]) {
  const out=[]
  const add=(r,titulo,papel,prazo)=>out.push({id:`${r.id}-${titulo}`,registro_id:r.id,contrato_id:r.contrato_id,cliente:r.dados.cliente_nome,titulo,papel,prazo,origem:'Etapa da jornada'})
  for(const r of registros){const d=r.dados
@@ -17,7 +17,8 @@ export function pendenciasAutomaticas(registros) {
   const imp=d.importacao_revisoes
   if(imp&&!d.venda_data){
    // Situação trazida da planilha de revisões: não gera as etapas iniciais nem prazos inventados.
-   for(const p of imp.pendencias||[])out.push({id:`${r.id}-imp-${p}`,registro_id:r.id,contrato_id:r.contrato_id,cliente:d.cliente_nome,titulo:p,papel:PAPEL_IMPORTADO[p]||'correcao',prazo:null,origem:`Planilha de revisões${imp.conferente?' · '+imp.conferente:''}${imp.andamento?' · '+imp.andamento:''}`})
+   const est=prazoImportado(d,feriados)
+   for(const p of imp.pendencias||[])out.push({id:`${r.id}-imp-${p}`,registro_id:r.id,contrato_id:r.contrato_id,cliente:d.cliente_nome,titulo:p,papel:PAPEL_IMPORTADO[p]||'correcao',prazo:PAPEL_IMPORTADO[p]?null:est?.prazo||null,origem:`Planilha de revisões${imp.conferente?' · '+imp.conferente:''}${imp.andamento?' · '+imp.andamento:''}`})
    continue
   }
   if(!d.planta_enviada_em)add(r,'Enviar planta baixa e informações','vendedor',d.planta_prazo)
@@ -57,4 +58,30 @@ export function capacidadeMensal(registros,pessoas,indisponibilidades,mes,feriad
 }
 export function ordenarPendencias(lista,hoje=hojeSP()) {
  return [...lista].sort((a,b)=>(a.prazo||'9999').localeCompare(b.prazo||'9999')).map(i=>({...i,atrasada:!!i.prazo&&i.prazo<hoje}))
+}
+
+// Data a partir da qual o pedido pode ir para montagem (móveis entregues), pelos prazos definitivos da loja:
+// medição 5 dias corridos após a liberação, conferência 12 úteis após a medição, entrega 35 úteis após a aprovação do projeto.
+// Etapas ainda não realizadas nunca são posicionadas antes de hoje; o resultado é a data mais cedo possível.
+export function previsaoMontagem(d,{dataVenda=null,feriados=[],hoje=hojeSP()}={}) {
+ if(!d)return null
+ const imp=d.importacao_revisoes&&!d.venda_data&&!d.liberacao_em&&!d.medicao_em?d.importacao_revisoes:null
+ if(d.entrega_em||d.montagem_concluida_em)return null
+ if(imp&&['qualidade'].includes(imp.setor_codigo))return null
+ const max=(a,b)=>a>b?a:b
+ const fim=(aprov,base,tipo)=>({data:somarUteis(max(aprov,hoje),35,feriados),base,tipo})
+ try{
+  if(dataValida(d.entrega_prevista))return {data:d.entrega_prevista,base:'Entrega prevista registrada pela logística',tipo:'registrado'}
+  if(dataValida(d.entrega_prazo))return {data:d.entrega_prazo,base:`35 dias úteis desde a aprovação do projeto em ${d.aprovacao_em.split('-').reverse().join('/')}`,tipo:'registrado'}
+  if(imp&&dataValida(imp.assinatura))return {data:somarUteis(imp.assinatura,35,feriados),base:`35 dias úteis desde a assinatura do projeto em ${imp.assinatura.split('-').reverse().join('/')} (planilha)`,tipo:'estimado'}
+  if(imp&&/IMPLANTADO/i.test(imp.situacao||''))return {data:null,base:'Pedido já implantado na fábrica: registre o aviso de carregamento ou a entrega prevista para definir a data',tipo:'pendente'}
+  if(d.tipo_venda==='Futura'&&!d.imovel_pronto_em&&!d.liberacao_em)return {data:null,base:'Venda futura: aguarda o cliente avisar que o imóvel está pronto',tipo:'pendente'}
+  if(dataValida(d.correcao_em))return fim(d.correcao_em,'Projeto conferido; considera aprovação do cliente hoje + 35 dias úteis','estimado')
+  const medida=dataValida(d.medicao_em)?d.medicao_em:imp&&dataValida(imp.medida)?imp.medida:null
+  if(medida)return fim(somarUteis(medida,12,feriados),`Medida em ${medida.split('-').reverse().join('/')}: conferência em 12 dias úteis + 35 dias úteis após aprovação`,'estimado')
+  const lib=dataValida(d.liberacao_em)?d.liberacao_em:imp&&dataValida(imp.lib_medida)?imp.lib_medida:null
+  if(lib){const med=max(somarDias(lib,5),hoje);return fim(somarUteis(med,12,feriados),`Liberada para medição em ${lib.split('-').reverse().join('/')}: medição em 5 dias + 12 úteis de conferência + 35 úteis`,'estimado')}
+  const base=dataValida(dataVenda)?max(dataVenda,hoje):hoje
+  return fim(somarUteis(somarDias(base,5),12,feriados),'Ainda sem liberação para medição: cálculo a partir de hoje (5 + 12 + 35)','estimado')
+ }catch{return null}
 }
