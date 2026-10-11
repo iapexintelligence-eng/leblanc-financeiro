@@ -19,7 +19,7 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  alter table leblanc.contratos add constraint contratos_modelo_contrato_check check(modelo_contrato in ('leblanc','bartzen'));
  alter table leblanc.contratos add constraint contratos_forma_pagamento_check check(forma_pagamento in ('avista','cartao'));
  create table leblanc.contrato_historico(contrato_id uuid,numero text,acao text,descricao text,editado_por text,alteracoes jsonb);`)
- for(const name of ['20261002144759_jornada.sql','20261002144808_taxas.sql','20261002144904_comercial.sql','20261002144921_integracao.sql','20261002144930_colaboracao_e_revisao_mensal.sql','20261002144940_ativacao_compatibilidade_e_acessos.sql','20261002145427_aditivos_contratuais.sql'])await db.exec(await readFile(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'))
+ for(const name of ['20261002144759_jornada.sql','20261002144808_taxas.sql','20261002144904_comercial.sql','20261002144921_integracao.sql','20261002144930_colaboracao_e_revisao_mensal.sql','20261002144940_ativacao_compatibilidade_e_acessos.sql','20261002145427_aditivos_contratuais.sql','20261011193842_xml_final_conferencia.sql'])await db.exec(await readFile(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'))
  const gestor='00000000-0000-4000-8000-000000000001',vendedor='00000000-0000-4000-8000-000000000002',cid='00000000-0000-4000-8000-000000000010'
  await db.exec(`insert into auth.users(id) values('${gestor}'),('${vendedor}');
  insert into le_admin.jornada_acessos values('${gestor}','Gestão','gestor','Priscila',true),('${vendedor}','Venda','vendedor',null,true);
@@ -54,7 +54,67 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  await db.exec(`insert into auth.users(id) values('${montador}');insert into le_admin.jornada_acessos values('${montador}','Montador teste','montador',null,true);insert into storage.objects(bucket_id,name) values('jornada-documentos','teste/comprovante');`)
  let j=await save('pedido',{...pedido.dados,grupo_criado:true,imagens_enviadas:true,grupo_arquivo:'teste/comprovante',imagens_arquivo:'teste/comprovante',planta_arquivo:'teste/comprovante',planta_enviada_em:'2026-09-25',entrada_confirmada_arquivo:'teste/comprovante',entrada_confirmada:true,liberacao_em:'2026-09-25'},pedido.id,pedido.versao)
  assert.equal(j.dados.medicao_prazo,'2026-09-30')
- j=await save('pedido',{...j.dados,medicao_em:'2026-09-25',correcao_em:'2026-09-25',aprovacao_em:'2026-09-25',guias_arquivo:'teste/comprovante',implantacao_em:'2026-09-25',pedido_fabrica:'F-1'},j.id,j.versao)
+ j=await save('pedido',{...j.dados,medicao_em:'2026-09-25',correcao_em:'2026-09-25',aprovacao_em:'2026-09-25',guias_arquivo:'teste/comprovante',pedido_fabrica:'F-1'},j.id,j.versao)
+ // XML final corrigido e OK da Leia por versão antes da implantação.
+ await assert.rejects(save('pedido',{...j.dados,implantacao_em:'2026-09-25'},j.id,j.versao),/XML final corrigido e o OK/)
+ const xmlPath=gestor+'/final.xml',hashA='a'.repeat(64),hashB='b'.repeat(64)
+ await db.query("insert into storage.objects(bucket_id,name) values('jornada-documentos',$1)",[xmlPath])
+ const analise=async()=>(await db.query('select le_admin.xml_analise($1) as a',[cid])).rows[0].a
+ assert.equal((await analise()).resultado,'Bloqueado')
+ await assert.rejects(db.query('select le_admin.xml_registrar($1,$2,$3)',[cid,'final',JSON.stringify({arquivo:'outro/final.xml',conteudo_hash:hashA,total_tabela:50000})]),/Anexe o arquivo/)
+ await assert.rejects(db.query('select le_admin.xml_registrar($1,$2,$3)',[cid,'final',JSON.stringify({arquivo:xmlPath,conteudo_hash:hashA})]),/falha de leitura/)
+ const orig=(await db.query('select * from le_admin.xml_registrar($1,$2,$3)',[cid,'original',JSON.stringify({arquivo:xmlPath,nome_arquivo:'venda.xml',conteudo_hash:hashB,total_tabela:50000,ambientes:[{descricao:'Cozinha',valor:30000},{descricao:'Sala',valor:20000}]})])).rows[0]
+ assert.equal(orig.versao,1)
+ const fin1=(await db.query('select * from le_admin.xml_registrar($1,$2,$3)',[cid,'final',JSON.stringify({arquivo:xmlPath,nome_arquivo:'final.xml',conteudo_hash:hashA,total_tabela:52000,fornecedor:'Bartzen',ambientes:[{descricao:'Cozinha',valor:32000},{descricao:'Sala',valor:20000}]})])).rows[0]
+ await assert.rejects(db.query('select le_admin.xml_registrar($1,$2,$3)',[cid,'final',JSON.stringify({arquivo:xmlPath,conteudo_hash:hashA,total_tabela:52000})]),/versão vigente/)
+ let a1=await analise()
+ assert.equal(a1.resultado,'Precisa conferir')
+ assert.ok(a1.motivos.some(m=>/Custos não informados/.test(m.texto)))
+ assert.ok(a1.motivos.some(m=>/Total de tabela mudou/.test(m.texto)))
+ assert.equal(a1.comparacao.length,1)
+ assert.ok(a1.motivos.some(m=>/Margem mínima não configurada/.test(m.texto)))
+ // Prejuízo bloqueia o OK até autorização da aprovadora para estes valores.
+ const custos=async(c,v)=>(await db.query('select * from le_admin.xml_custos_salvar($1,$2,$3)',[fin1.id,JSON.stringify(c),v])).rows[0]
+ await assert.rejects(custos({fabrica:1,receita:100},0),/Justifique/)
+ let cu=await custos({fabrica:60000,kits:0,frete:0,montagem:0,taxas:0,receita:51750,receita_motivo:'Valor negociado do contrato'},0)
+ a1=await analise()
+ assert.equal(a1.resultado,'Bloqueado')
+ await assert.rejects(db.query('select le_admin.xml_conferir($1,$2,$3)',[fin1.id,a1.valores_hash,'']),/bloqueada/)
+ await db.query('select le_admin.xml_autorizar_excecao($1,$2,$3)',[fin1.id,a1.valores_hash,'Cliente estratégico'])
+ assert.notEqual((await analise()).resultado,'Bloqueado')
+ // Mudança de custos invalida a autorização e exige nova conferência.
+ await assert.rejects(custos({fabrica:20000},0),/outra pessoa/)
+ cu=await custos({fabrica:30000,kits:1000,frete:500,montagem:2000,taxas:800,receita:51750,receita_motivo:'Valor negociado do contrato'},cu.versao)
+ a1=await analise()
+ assert.equal(Number(a1.custo_total),34300)
+ assert.equal(Number(a1.margem),33.72)
+ await db.query('select le_admin.xml_margem_minima($1)',[40])
+ a1=await analise()
+ assert.ok(a1.motivos.some(m=>/abaixo do mínimo/.test(m.texto)))
+ await db.query('select le_admin.xml_margem_minima($1)',[25])
+ a1=await analise()
+ await assert.rejects(db.query('select le_admin.xml_conferir($1,$2,$3)',[fin1.id,'0'.repeat(32),'']),/Valores mudaram/)
+ await db.query('select le_admin.xml_conferir($1,$2,$3)',[fin1.id,a1.valores_hash,'Conferi os valores e a margem'])
+ assert.equal((await analise()).ok_valido,true)
+ cu=await custos({fabrica:31000,kits:1000,frete:500,montagem:2000,taxas:800,receita:51750,receita_motivo:'Valor negociado do contrato'},cu.versao)
+ a1=await analise()
+ assert.equal(a1.ok_valido,false)
+ assert.ok(a1.motivos.some(m=>/OK anterior invalidado/.test(m.texto)))
+ await assert.rejects(save('pedido',{...j.dados,implantacao_em:'2026-09-25'},j.id,j.versao),/OK da Leia/)
+ await db.query('select le_admin.xml_conferir($1,$2,$3)',[fin1.id,a1.valores_hash,'Reconferido'])
+ // Nova versão do XML final também invalida o OK.
+ const fin2=(await db.query('select * from le_admin.xml_registrar($1,$2,$3)',[cid,'final',JSON.stringify({arquivo:xmlPath,nome_arquivo:'final-v2.xml',conteudo_hash:'c'.repeat(64),total_tabela:52500,ambientes:[]})])).rows[0]
+ assert.equal(fin2.versao,2)
+ assert.equal((await analise()).ok_valido,false)
+ await assert.rejects(db.query('select le_admin.xml_custos_salvar($1,$2,$3)',[fin1.id,JSON.stringify({fabrica:1}),0]),/mais recente/)
+ await db.query('select le_admin.xml_custos_salvar($1,$2,$3)',[fin2.id,JSON.stringify({fabrica:31000,kits:1000,frete:500,montagem:2000,taxas:800,receita:51750,receita_motivo:'Valor negociado do contrato'}),0])
+ a1=await analise()
+ await db.query('select le_admin.xml_conferir($1,$2,$3)',[fin2.id,a1.valores_hash,'Versão 2 conferida'])
+ const painel=(await db.query('select le_admin.xml_painel() as p')).rows[0].p
+ assert.equal(painel[0].registro_id,j.id);assert.equal(painel[0].ok_valido,true)
+ j=await save('pedido',{...j.dados,implantacao_em:'2026-09-25'},j.id,j.versao)
+ assert.equal(j.dados.implantacao_em,'2026-09-25')
+ await assert.rejects(db.query('select le_admin.xml_registrar($1,$2,$3)',[cid,'final',JSON.stringify({arquivo:xmlPath,conteudo_hash:'d'.repeat(64),total_tabela:1})]),/já implantado/)
  const entrega=j.dados.entrega_prazo
  j=await save('pedido',{...j.dados,fabrica_paga:true,fabrica_paga_arquivo:'teste/comprovante',carregamento_em:'2026-09-25',cliente_recebe_em:'2026-09-25',aceite_arquivo:'teste/comprovante'},j.id,j.versao)
  assert.equal(j.dados.entrega_prazo,entrega)
@@ -128,6 +188,17 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  await assert.rejects(db.query('select le_admin.aditivo_anexar($1,$2,$3,$4,$5,$6,$7)',[cid,'2026-09-28','Duplicado',true,false,gestor+'/aditivo.pdf','aditivo.pdf']),/já está registrado/)
  await assert.rejects(db.query('select le_admin.aditivo_anexar($1,$2,$3,$4,$5,$6,$7)',[cid,'2026-09-28','Sem arquivo',false,false,'inexistente','x.pdf']),/documento assinado/)
  assert.equal((await db.query('select dados from le_admin.jornada_registros where id=$1',[j.id])).rows[0].dados.entrega_prazo,entrega)
+ // Conferente vê a situação do XML sem receita, custos ou margem; vendedor não acessa a conferência.
+ const conferente='00000000-0000-4000-8000-000000000004'
+ await db.exec(`insert into auth.users(id) values('${conferente}');insert into le_admin.jornada_acessos values('${conferente}','Conferente teste','correcao',null,true);select set_config('test.uid','${conferente}',false);`)
+ const vista=(await db.query('select le_admin.xml_analise($1) as a',[cid])).rows[0].a
+ assert.equal(vista.implantado,true);assert.equal(vista.custos,undefined);assert.equal(vista.margem,undefined)
+ await assert.rejects(db.query('select le_admin.xml_painel()'),/restrito/)
+ await assert.rejects(db.query('select le_admin.xml_conferir($1,$2,$3)',[fin2.id,'x','']),/Somente a Leia/)
+ await db.exec(`select set_config('test.uid','${vendedor}',false)`)
+ await assert.rejects(db.query('select le_admin.xml_analise($1)',[cid]),/não disponível/)
+ await db.exec(`select set_config('test.uid','${gestor}',false)`)
+ assert.equal((await db.query('select le_admin.xml_painel() as p')).rows[0].p.length,0)
  // Vendedor não lê contratos alheios nem altera registros por acesso direto.
  await db.exec(`grant usage on schema leblanc to authenticated;grant usage on schema auth to authenticated;select set_config('test.uid','${vendedor}',false);set role authenticated;`)
  assert.equal((await db.query('select count(*)::int as n from leblanc.contratos')).rows[0].n,0)

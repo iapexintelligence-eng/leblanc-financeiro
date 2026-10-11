@@ -5,9 +5,10 @@ import {supabase,authOn} from '../lib/supabase.js'
 import {todas,abrirDocumento} from '../lib/jornada.js'
 import {brl,fmtDate} from '../lib/format.js'
 import {calcularGratificacao} from '../lib/regras.js'
+import {RESULTADO_COR} from '../lib/xml.js'
 
 export default function ConferenciaFinanceira(){
- const [contratos,setContratos]=useState([]),[recebiveis,setRecebiveis]=useState([]),[aprovacoes,setAprovacoes]=useState([]),[conferencias,setConferencias]=useState([]),[sel,setSel]=useState(''),[deducoes,setDeducoes]=useState([{descricao:'Cartão / financeira',valor:''},{descricao:'Marketing apurado na venda',valor:''}]),[erro,setErro]=useState(''),[busy,setBusy]=useState(false),[eu,setEu]=useState(null)
+ const [contratos,setContratos]=useState([]),[recebiveis,setRecebiveis]=useState([]),[aprovacoes,setAprovacoes]=useState([]),[conferencias,setConferencias]=useState([]),[sel,setSel]=useState(''),[deducoes,setDeducoes]=useState([{descricao:'Cartão / financeira',valor:''},{descricao:'Marketing apurado na venda',valor:''}]),[erro,setErro]=useState(''),[busy,setBusy]=useState(false),[eu,setEu]=useState(null),[painel,setPainel]=useState([]),[margem,setMargem]=useState(''),[margemAtual,setMargemAtual]=useState(null)
  async function carregar(){try{
   const u=await supabase.auth.getUser()
   const a=await supabase.from('jornada_acessos').select('*').eq('usuario_id',u.data.user?.id).maybeSingle();setEu(a.data)
@@ -17,6 +18,8 @@ export default function ConferenciaFinanceira(){
    todas(()=>supabase.from('comercial_aprovacoes').select('*').order('id')),
    todas(()=>supabase.from('gratificacao_conferencias').select('*').order('contrato_id'))
   ]);setContratos(c);setRecebiveis(r);setAprovacoes(p);setConferencias(g)
+  const x=await supabase.rpc('xml_painel');setPainel(x.error?[]:x.data||[])
+  const cfg=await supabase.from('jornada_config').select('margem_minima').single();if(!cfg.error){setMargemAtual(cfg.data.margem_minima);setMargem(cfg.data.margem_minima??'')}
  }catch(e){setErro(e.message)}}
  useEffect(()=>{if(authOn)carregar()},[])
  const contrato=contratos.find(c=>String(c.id)===sel),d=contrato?.dados_json||{}
@@ -24,11 +27,15 @@ export default function ConferenciaFinanceira(){
  let previa=null
  try{previa=contrato&&completas?calcularGratificacao(contrato.valor_final,deducoes):null}catch{/* o servidor também valida */}
  async function conferir(){setBusy(true);setErro('');try{const r=await supabase.rpc('gratificacao_conferir',{p_contrato:sel,p_deducoes:deducoes});if(r.error)throw r.error;await carregar()}catch(e){setErro(e.message)}finally{setBusy(false)}}
+ async function salvarMargem(){setBusy(true);setErro('');try{const r=await supabase.rpc('xml_margem_minima',{p_margem:margem===''?null:Number(margem)});if(r.error)throw r.error;await carregar()}catch(e){setErro(e.message)}finally{setBusy(false)}}
  async function aprovar(id){setBusy(true);setErro('');try{const r=await supabase.rpc('comercial_aprovar',{p_id:id});if(r.error)throw r.error;await carregar()}catch(e){setErro(e.message)}finally{setBusy(false)}}
  return <>
   <div className="card"><h3>Conferência da Leia e autorizações</h3><p>Composição interna, documentos originais, recebíveis e gratificação por venda.</p><Link to="/jornada">Registrar comprovantes e liberar pagamentos na jornada</Link></div>
   {erro&&<p className="login-err" role="alert">{erro}</p>}
   {!authOn&&<p className="card">Prévia sem conexão. Os registros reais aparecem após a configuração do banco e dos acessos.</p>}
+  <div className="card" style={{marginTop:16}}><h3>XML final corrigido · OK da Leia antes da implantação</h3><p className="sub">Pedidos ainda não implantados com projeto em conferência, aprovado ou XML final anexado. O OK vale só para a versão do XML e dos valores conferidos.</p>
+   <div className="tools" style={{flexWrap:'wrap',marginBottom:12}}><label>Margem mínima (%) <input aria-label="Margem mínima" className="input" type="number" min="0" max="99.99" step="0.01" style={{width:110}} value={margem} disabled={!['financeiro','gestor'].includes(eu?.papel)} onChange={e=>setMargem(e.target.value)}/></label>{['financeiro','gestor'].includes(eu?.papel)&&<button className="btn ghost" disabled={busy||String(margem)===String(margemAtual??'')} onClick={salvarMargem}>Salvar margem mínima</button>}<span className="sub" style={{margin:0}}>{margemAtual==null?'Não configurada: a pré-análise apenas avisa, sem travar por margem.':`Vendas abaixo de ${Number(margemAtual).toLocaleString('pt-BR')}% ficam como "Precisa conferir".`}</span></div>
+   <div className="table-wrap"><table><thead><tr><th>Cliente</th><th>XML final</th><th>Pré-análise</th><th>Margem</th><th>OK da Leia</th><th>Entrega até</th><th></th></tr></thead><tbody>{painel.length===0&&<tr><td colSpan="7" className="empty">Nenhum pedido aguardando conferência de XML.</td></tr>}{painel.map(p=><tr key={p.contrato_id}><td>{p.cliente_nome||contratos.find(c=>String(c.id)===p.contrato_id)?.cliente_nome||p.contrato_id}</td><td>{p.final?`v${p.final.versao}`:<span className="badge danger">Ausente</span>}</td><td><span className={'badge '+(RESULTADO_COR[p.resultado]||'neutral')}>{p.resultado}</span></td><td>{p.margem==null?'—':`${Number(p.margem).toLocaleString('pt-BR')}%`}</td><td>{p.ok_valido?<span className="badge ok">Válido</span>:'Pendente'}</td><td>{fmtDate(p.entrega_prazo)}</td><td><Link className="btn ghost sm" to={`/jornada?registro=${p.registro_id}&aba=xml`}>Conferir</Link></td></tr>)}</tbody></table></div></div>
   <div className="card" style={{marginTop:16}}><h3>Autorizações pendentes</h3>{aprovacoes.filter(a=>!a.aprovado_em).map(a=>{const c=contratos.find(c=>String(c.id)===a.contrato_id);return <div key={a.id} style={{padding:12,borderBottom:'1px solid var(--line)'}}><b>{c?.cliente_nome} · {c?.numero} · {brl(c?.valor_final)}</b><p>{a.resumo}</p><p>Desconto solicitado: {c?.dados_json?.desconto_valor}{c?.dados_json?.desconto_tipo==='pct'?'%':' reais'} · Entrada: {c?.dados_json?.entrada_percentual||60}%</p>{eu?.aprovadora&&<button className="btn" disabled={busy} onClick={()=>aprovar(a.id)}>Autorizar como {eu.aprovadora}</button>}</div>})}{!aprovacoes.some(a=>!a.aprovado_em)&&<p>Nenhuma solicitação pendente.</p>}</div>
   <div className="card" style={{marginTop:16}}><label>Contrato para conferência</label><select className="input" value={sel} onChange={e=>{setSel(e.target.value);setDeducoes([{descricao:'Cartão / financeira',valor:''},{descricao:'Marketing apurado na venda',valor:''}])}}><option value="">Selecione</option>{contratos.map(c=><option value={String(c.id)} key={c.id}>{c.numero} · {c.cliente_nome}</option>)}</select>
    {contrato&&d.importacao&&<p>Contrato histórico: valores de Promob, kits, taxas e recebimentos ainda precisam de conferência. <Link to="/contratos-importados">Abrir documentos originais e aditivos</Link></p>}

@@ -19,7 +19,7 @@ export function pendenciasAutomaticas(registros) {
   if(d.liberacao_em&&!d.medicao_em)add(r,'Acompanhar medição com Rodrigo','correcao',d.medicao_prazo)
   if(d.medicao_em&&!d.correcao_em)add(r,'Concluir conferência e guias técnicas','correcao',d.correcao_prazo)
   if(d.correcao_em&&!d.aprovacao_em)add(r,'Obter aprovação e guias assinadas','correcao',null)
-  if(d.aprovacao_em&&!d.implantacao_em)add(r,'Implantar pedido aprovado','correcao',d.entrega_prazo)
+  if(d.aprovacao_em&&!d.implantacao_em)add(r,'Anexar XML final, aguardar OK da Leia e implantar','correcao',d.entrega_prazo)
   if(d.implantacao_em&&!d.fabrica_paga)add(r,'Conferir pagamento da fábrica','financeiro',null)
   if(d.carregamento_em&&!d.cliente_recebe_em)add(r,'Confirmar com cliente que pode receber','logistica',d.entrega_prevista||d.entrega_prazo)
   if(d.cliente_recebe_em&&!d.saldo_confirmado)add(r,'Cobrar e conferir saldo final','financeiro',d.entrega_prevista?somarDias(d.entrega_prevista,-2):null)
@@ -31,7 +31,7 @@ export function pendenciasAutomaticas(registros) {
 export function checklistPassagem(d) {
  return [
  ['Medição',!!(d.grupo_criado&&d.grupo_arquivo&&d.imagens_enviadas&&d.imagens_arquivo&&d.planta_enviada_em&&d.planta_arquivo&&d.entrada_confirmada&&(d.tipo_venda!=='Futura'||d.imovel_pronto_em)),'Checklist, planta e entrada conferida; imóvel pronto nas vendas futuras.'],
- ['Implantação',!!(d.aprovacao_em&&d.guias_arquivo),'Aprovação do cliente e guias técnicas assinadas.'],
+ ['Implantação',!!(d.aprovacao_em&&d.guias_arquivo),'Aprovação do cliente, guias técnicas assinadas, XML final corrigido e OK da Leia para a versão (conferido pelo servidor).'],
  ['Escala do montador',!!(d.saldo_confirmado&&d.saldo_confirmado_arquivo),'Comprovante e quitação conferida pelo financeiro.'],
  ]
 }
