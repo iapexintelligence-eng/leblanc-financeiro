@@ -36,9 +36,7 @@ $$;
 
 alter table le_admin.recebimentos enable row level security;
 alter table le_admin.recebimento_parcelas enable row level security;
-drop policy if exists recebimentos_ler on le_admin.recebimentos;
 create policy recebimentos_ler on le_admin.recebimentos for select to authenticated using (le_admin.recebimento_acesso());
-drop policy if exists recebimento_parcelas_ler on le_admin.recebimento_parcelas;
 create policy recebimento_parcelas_ler on le_admin.recebimento_parcelas for select to authenticated using (le_admin.recebimento_acesso());
 revoke all on le_admin.recebimentos,le_admin.recebimento_parcelas from anon,authenticated;
 grant select on le_admin.recebimentos,le_admin.recebimento_parcelas to authenticated;
@@ -141,7 +139,6 @@ begin
  end if;
  return new;
 end $$;
-drop trigger if exists recebimento_proteger_parcela on le_admin.a_receber;
 create trigger recebimento_proteger_parcela before update on le_admin.a_receber for each row execute function le_admin.recebimento_proteger_parcela();
 create or replace function le_admin.recebimento_proteger_exclusao() returns trigger
 language plpgsql security definer set search_path='' as $$
@@ -149,7 +146,6 @@ begin
  if exists(select 1 from le_admin.recebimento_parcelas where a_receber_id=old.id) then raise exception 'Parcela com recebimento lançado não pode ser excluída'; end if;
  return old;
 end $$;
-drop trigger if exists recebimento_proteger_exclusao on le_admin.a_receber;
 create trigger recebimento_proteger_exclusao before delete on le_admin.a_receber for each row execute function le_admin.recebimento_proteger_exclusao();
 
 -- O saldo do banco dos lançamentos novos é feito pela rotina; o gatilho antigo segue para baixas antigas.
