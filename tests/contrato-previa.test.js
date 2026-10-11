@@ -2,6 +2,15 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {gerarHtmlContrato} from '../src/lib/contratoHtml.js'
 
+test('minuta pendente preserva aviso de não aprovação no documento imprimível',()=>{
+ for(const status of ['Aguardando aprovação','rascunho',undefined]) {
+  const registro={status,itens:[],parcelas:[]}
+  assert.ok(gerarHtmlContrato(registro).includes('MINUTA NÃO APROVADA'))
+  assert.equal(registro.status,status)
+ }
+ assert.ok(!gerarHtmlContrato({status:'Emitido',itens:[],parcelas:[]}).includes('MINUTA NÃO APROVADA'))
+})
+
 test('prévia gera documento sem abrir janela e sem expor fornecedor ou composição interna',()=>{
  const html=gerarHtmlContrato({numero:'TESTE',cliente_nome:'Cliente <teste>',itens:[{qtd:1,descricao:'Cozinha',fornecedor:'Bartzen',valor:50000}],valor_promob:50000,acrescimo_marketing:7500,parcelas:[{numero:1,valor:20700,vencimento:'2026-10-11'},{numero:2,valor:13800,marco:'dois_dias_antes_entrega'}]})
  assert.ok(html.includes('Cliente &lt;teste&gt;'))

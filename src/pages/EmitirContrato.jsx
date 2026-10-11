@@ -360,7 +360,7 @@ export default function EmitirContrato({ orcamento = false }) {
     }catch(e){setErro(e.message)}finally{setSaving(false)}
   }
   const imprimir = () => {
-    if(!salvo || salvo.status!=='Emitido'){setErro('Salve a proposta e conclua as autorizações antes de emitir o contrato.');return}
+    if(!salvo){setErro('Salve as alterações do contrato antes de abrir a prévia.');return}
     try { setPreviaContrato(gerarHtmlContrato(salvo));setErro('') }
     catch(e){setErro(e.message)}
   }

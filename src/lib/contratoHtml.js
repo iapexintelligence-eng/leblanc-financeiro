@@ -12,6 +12,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<'
 const or = (v) => esc(v) || '—'
 
 export function gerarHtmlContrato(interno) {
+  const pendente = interno.status !== 'Emitido'
   const d=contratoPublico(interno)
   const corpo = MODELO_CONTRATO
 
@@ -58,6 +59,7 @@ export function gerarHtmlContrato(interno) {
   .muted { color: #999; } .mt { margin-top: 8px; }
   @media print { .noprint { display: none; } }
 </style></head><body>
+  ${pendente ? '<p style="border:2px solid #9a3412;padding:12px;text-align:center;color:#9a3412"><b>MINUTA NÃO APROVADA — somente para conferência, não válida para assinatura.</b><br>A emissão depende da conclusão das autorizações no sistema.</p>' : ''}
   <p style="border:1px solid #999;padding:8px;text-align:center"><b>MINUTA PARA REVISÃO — condições de garantia, cancelamento e crédito pendentes de consolidação antes da assinatura.</b></p>
   <div class="head">
     <div class="logo">LB</div>
