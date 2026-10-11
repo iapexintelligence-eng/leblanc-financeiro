@@ -24,3 +24,10 @@ test('pendências vencidas têm prioridade e datas ausentes ficam ao final',()=>
  const xs=ordenarPendencias([{id:1,prazo:null},{id:2,prazo:'2026-08-01'},{id:3,prazo:'2026-10-01'}],'2026-09-29')
  assert.deepEqual(xs.map(x=>x.id),[2,3,1]);assert.equal(xs[0].atrasada,true)
 })
+
+test('ficha importada gera só as pendências da planilha, sem prazos inventados',()=>{
+ const r={id:'i',tipo:'pedido',contrato_id:'c',dados:{cliente_nome:'Cliente',importacao_revisoes:{pendencias:['Guias técnicas','Assistência aberta'],conferente:'GIOVANNA',andamento:'falta guia'}}}
+ const xs=pendenciasAutomaticas([r])
+ assert.deepEqual(xs.map(x=>[x.titulo,x.papel,x.prazo]),[['Guias técnicas','correcao',null],['Assistência aberta','logistica',null]])
+ assert.match(xs[0].origem,/Planilha de revisões · GIOVANNA · falta guia/)
+})

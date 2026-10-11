@@ -5,7 +5,15 @@ export const SETORES = {
  montagem:{titulo:'Montagem',descricao:'Glauci acompanha o recebimento, organiza a entrega e agenda os montadores. A escala depende da quitação conferida.',tipos:['pedido','agenda','frete']},
  qualidade:{titulo:'Qualidade',descricao:'Conclusão da montagem, termo assinado, assistências em até 30 dias úteis e agendamento das fotos.',tipos:['pedido','assistencia']},
 }
+// Fichas importadas da planilha de revisões ficam no setor de origem até a equipe registrar marcos reais.
+const MARCOS_REAIS=['venda_data','liberacao_em','medicao_em','correcao_em','aprovacao_em','implantacao_em','fabrica_paga','carregamento_em','cliente_recebe_em','entrega_em','montagem_concluida_em','fotos_em']
+export function setorImportado(d) {
+ const s=d?.importacao_revisoes?.setor_codigo
+ return s&&SETORES[s]&&!MARCOS_REAIS.some(k=>d[k])?s:null
+}
 export function setorPedido(d) {
+ const importado=setorImportado(d)
+ if(importado)return importado
  if(d.entrega_em||d.montagem_concluida_em||d.fotos_em)return 'qualidade'
  if(d.carregamento_em||d.cliente_recebe_em)return 'montagem'
  if(d.correcao_em||d.aprovacao_em||d.implantacao_em||d.fabrica_paga)return 'liberacao'

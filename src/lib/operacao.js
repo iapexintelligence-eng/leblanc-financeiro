@@ -6,6 +6,7 @@ export const MARCOS={'':'Não bloqueia avanço',liberacao_em:'Liberação para m
 export function situacoesSeparadas(d) {
  return {comercial:d.tipo_venda==='Futura'&&!d.imovel_pronto_em?'Venda futura · aguarda imóvel':'Venda fechada',operacional:SETORES[setorPedido(d)]?.titulo||'Em acompanhamento',financeiro:d.saldo_confirmado?'Quitação conferida':d.entrada_confirmada?'Entrada conferida · saldo pendente':'Entrada pendente de conferência'}
 }
+const PAPEL_IMPORTADO={'Assistência aberta':'logistica','Aguardando imóvel / liberação para medição':'vendedor','Definir conferente':'gestor'}
 export function pendenciasAutomaticas(registros) {
  const out=[]
  const add=(r,titulo,papel,prazo)=>out.push({id:`${r.id}-${titulo}`,registro_id:r.id,contrato_id:r.contrato_id,cliente:r.dados.cliente_nome,titulo,papel,prazo,origem:'Etapa da jornada'})
@@ -13,6 +14,12 @@ export function pendenciasAutomaticas(registros) {
   if(r.tipo==='assistencia'&&d.status!=='Resolvida')add(r,d.proxima_acao||'Resolver assistência','logistica',d.vencimento)
   if(r.tipo==='frete'&&d.status==='Liberado para pagamento')add(r,'Pagar frete conferido','financeiro',d.prevista)
   if(r.tipo!=='pedido')continue
+  const imp=d.importacao_revisoes
+  if(imp&&!d.venda_data){
+   // Situação trazida da planilha de revisões: não gera as etapas iniciais nem prazos inventados.
+   for(const p of imp.pendencias||[])out.push({id:`${r.id}-imp-${p}`,registro_id:r.id,contrato_id:r.contrato_id,cliente:d.cliente_nome,titulo:p,papel:PAPEL_IMPORTADO[p]||'correcao',prazo:null,origem:`Planilha de revisões${imp.conferente?' · '+imp.conferente:''}${imp.andamento?' · '+imp.andamento:''}`})
+   continue
+  }
   if(!d.planta_enviada_em)add(r,'Enviar planta baixa e informações','vendedor',d.planta_prazo)
   if(!d.entrada_confirmada)add(r,'Conferir entrada e comprovante','financeiro',null)
   if(d.tipo_venda==='Futura'&&!d.imovel_pronto_em){add(r,'Acompanhar aviso de imóvel pronto','vendedor',null);continue}

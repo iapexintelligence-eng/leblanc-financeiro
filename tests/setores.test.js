@@ -16,3 +16,12 @@ test('pedido avança entre setores sem duplicar o registro e mantém venda futur
  assert.equal(noSetor({tipo:'agenda',dados:{}},'montagem'),true)
  assert.equal(noSetor({tipo:'frete',dados:{}},'montagem'),true)
 })
+
+test('ficha importada da planilha fica no setor de origem até haver marco real',()=>{
+ const d={importacao_revisoes:{setor_codigo:'qualidade'}}
+ assert.equal(setorPedido(d),'qualidade')
+ assert.equal(noSetor({tipo:'pedido',dados:d},'vendas'),false)
+ d.liberacao_em='2026-10-11'
+ assert.equal(setorPedido(d),'correcao')
+ assert.equal(setorPedido({importacao_revisoes:{setor_codigo:'inexistente'}}),'vendas')
+})

@@ -19,7 +19,7 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  alter table leblanc.contratos add constraint contratos_modelo_contrato_check check(modelo_contrato in ('leblanc','bartzen'));
  alter table leblanc.contratos add constraint contratos_forma_pagamento_check check(forma_pagamento in ('avista','cartao'));
  create table leblanc.contrato_historico(contrato_id uuid,numero text,acao text,descricao text,editado_por text,alteracoes jsonb);`)
- for(const name of ['20261002144759_jornada.sql','20261002144808_taxas.sql','20261002144904_comercial.sql','20261002144921_integracao.sql','20261002144930_colaboracao_e_revisao_mensal.sql','20261002144940_ativacao_compatibilidade_e_acessos.sql','20261002145427_aditivos_contratuais.sql','20261011193842_xml_final_conferencia.sql'])await db.exec(await readFile(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'))
+ for(const name of ['20261002144759_jornada.sql','20261002144808_taxas.sql','20261002144904_comercial.sql','20261002144921_integracao.sql','20261002144930_colaboracao_e_revisao_mensal.sql','20261002144940_ativacao_compatibilidade_e_acessos.sql','20261002145427_aditivos_contratuais.sql','20261011193842_xml_final_conferencia.sql','20261011201612_importacao_revisoes_preservada.sql'])await db.exec(await readFile(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'))
  const gestor='00000000-0000-4000-8000-000000000001',vendedor='00000000-0000-4000-8000-000000000002',cid='00000000-0000-4000-8000-000000000010'
  await db.exec(`insert into auth.users(id) values('${gestor}'),('${vendedor}');
  insert into le_admin.jornada_acessos values('${gestor}','Gestão','gestor','Priscila',true),('${vendedor}','Venda','vendedor',null,true);
@@ -188,6 +188,14 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  await assert.rejects(db.query('select le_admin.aditivo_anexar($1,$2,$3,$4,$5,$6,$7)',[cid,'2026-09-28','Duplicado',true,false,gestor+'/aditivo.pdf','aditivo.pdf']),/já está registrado/)
  await assert.rejects(db.query('select le_admin.aditivo_anexar($1,$2,$3,$4,$5,$6,$7)',[cid,'2026-09-28','Sem arquivo',false,false,'inexistente','x.pdf']),/documento assinado/)
  assert.equal((await db.query('select dados from le_admin.jornada_registros where id=$1',[j.id])).rows[0].dados.entrega_prazo,entrega)
+ // Bloco importado da planilha de revisões não é alterado nem removido por edições.
+ await db.query('update le_admin.jornada_registros set dados=dados||$2::jsonb where id=$1',[j.id,JSON.stringify({importacao_revisoes:{aba:'SETEMBRO',linha:3}})])
+ const comImp=(await db.query('select * from le_admin.jornada_registros where id=$1',[j.id])).rows[0]
+ const salvo=await save('pedido',{...comImp.dados,importacao_revisoes:{aba:'ALTERADA'}},comImp.id,comImp.versao)
+ assert.equal(salvo.dados.importacao_revisoes.aba,'SETEMBRO')
+ const sem={...salvo.dados};delete sem.importacao_revisoes
+ assert.equal((await save('pedido',sem,salvo.id,salvo.versao)).dados.importacao_revisoes.linha,3)
+ j=(await db.query('select * from le_admin.jornada_registros where id=$1',[j.id])).rows[0]
  // Conferente vê a situação do XML sem receita, custos ou margem; vendedor não acessa a conferência.
  const conferente='00000000-0000-4000-8000-000000000004'
  await db.exec(`insert into auth.users(id) values('${conferente}');insert into le_admin.jornada_acessos values('${conferente}','Conferente teste','correcao',null,true);select set_config('test.uid','${conferente}',false);`)
