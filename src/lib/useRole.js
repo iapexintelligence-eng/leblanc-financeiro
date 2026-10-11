@@ -14,10 +14,10 @@ export function useRole() {
       const { data: u } = await supabase.auth.getUser()
       const email = u?.user?.email
       if (!email) { setRole((r) => ({ ...r, loading: false })); return }
-      const { data: j } = await supabase.from('jornada_acessos').select('papel,nome').eq('usuario_id',u.user.id).eq('ativo',true).maybeSingle()
+      const { data: j } = await supabase.from('jornada_acessos').select('papel,nome,aprovadora').eq('usuario_id',u.user.id).eq('ativo',true).maybeSingle()
       const { data } = await supabase.from('usuarios_sistema').select('*').eq('email', email).eq('ativo', true).maybeSingle()
       // Falha fechada: um usuário sem função não recebe acesso administrativo.
-      setRole({ papel: j?.papel || data?.papel || null, setor: data?.setor || null, nome: j?.nome || data?.nome || email, email, loading: false })
+      setRole({ papel: j?.papel || data?.papel || null, aprovadora:j?.aprovadora||null, setor: data?.setor || null, nome: j?.nome || data?.nome || email, email, loading: false })
     })()
   }, [])
   return role

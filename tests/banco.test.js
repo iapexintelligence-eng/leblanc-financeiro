@@ -23,6 +23,7 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  create table le_admin.a_receber(id serial primary key,cliente_nome text,descricao text,valor_parcela numeric,data_prevista date,data_recebimento date,status text default 'Pendente',forma_recebimento text,observacoes text,conta_bancaria_id integer);`)
  for(const name of ['20261002144759_jornada.sql','20261002144808_taxas.sql','20261002144904_comercial.sql','20261002144921_integracao.sql','20261002144930_colaboracao_e_revisao_mensal.sql','20261002144940_ativacao_compatibilidade_e_acessos.sql','20261002145427_aditivos_contratuais.sql','20261011193842_xml_final_conferencia.sql','20261011201612_importacao_revisoes_preservada.sql','20261011220000_etapas_historicas.sql','20261011230000_recebimentos_com_comprovante.sql'])await db.exec(await readFile(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'))
  await db.exec(await readFile(new URL('../supabase/migrations/20261011223808_numeracao_contratos_diaria.sql',import.meta.url),'utf8'))
+ await db.exec(await readFile(new URL('../supabase/migrations/20261011225405_registro_liberacao_comercial.sql',import.meta.url),'utf8'))
  const gestor='00000000-0000-4000-8000-000000000001',vendedor='00000000-0000-4000-8000-000000000002',cid='00000000-0000-4000-8000-000000000010'
  await db.exec(`insert into auth.users(id) values('${gestor}'),('${vendedor}');
  insert into le_admin.jornada_acessos values('${gestor}','Gestão','gestor','Priscila',true),('${vendedor}','Venda','vendedor',null,true);
@@ -60,6 +61,23 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  await db.query('select le_admin.comercial_aprovar($1)',[ap.rows[0].id])
  const aprovado=await db.query('select status from leblanc.contratos where id=$1',[pend.rows[0].c.id])
  assert.equal(aprovado.rows[0].status,'Emitido')
+ const wh=(await db.query('select le_admin.comercial_salvar(null,$1) as c',[JSON.stringify(alta)])).rows[0].c
+ const wid=(await db.query('select id from le_admin.comercial_aprovacoes where contrato_id=$1',[wh.id])).rows[0].id
+ const liberar=(nome='Andressa',canal='WhatsApp',arquivo=null,data='2026-09-28')=>db.query('select le_admin.comercial_registrar_liberacao($1,$2,$3,$4,$5,$6)',[wid,nome,data,canal,arquivo,'Autorização sintética'])
+ await assert.rejects(liberar(),/comprovante/)
+ await assert.rejects(liberar('Outra pessoa'),/Priscila/)
+ await assert.rejects(liberar('Andressa','Sistema'),/próprio acesso/)
+ await assert.rejects(liberar('Andressa','WhatsApp',null,'2099-01-01'),/data futura/)
+ const provaLiberacao=gestor+'/autorizacao-teste.pdf'
+ await db.query("insert into storage.objects(bucket_id,name) values('jornada-documentos',$1)",[provaLiberacao])
+ await db.exec(`select set_config('test.uid','${vendedor}',false)`)
+ await assert.rejects(liberar('Andressa','WhatsApp',provaLiberacao),/diretoria/)
+ await db.exec(`select set_config('test.uid','${gestor}',false)`)
+ await liberar('Andressa','WhatsApp',provaLiberacao)
+ const audit=(await db.query('select * from le_admin.comercial_aprovacoes where id=$1',[wid])).rows[0]
+ assert.equal(audit.aprovadora,'Andressa');assert.equal(audit.aprovado_por,gestor);assert.equal(audit.canal_autorizacao,'WhatsApp');assert.equal(audit.comprovante_autorizacao,provaLiberacao)
+ assert.equal((await db.query('select status from leblanc.contratos where id=$1',[wh.id])).rows[0].status,'Emitido')
+ await assert.rejects(liberar('Andressa','WhatsApp',provaLiberacao),/preservado/)
  // Segurança e trilha completa com pessoas/arquivos sintéticos.
  const montador='00000000-0000-4000-8000-000000000003'
  await db.exec(`insert into auth.users(id) values('${montador}');insert into le_admin.jornada_acessos values('${montador}','Montador teste','montador',null,true);insert into storage.objects(bucket_id,name) values('jornada-documentos','teste/comprovante');`)

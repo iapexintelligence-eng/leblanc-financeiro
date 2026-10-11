@@ -1,4 +1,5 @@
 import AditivosContrato from '../components/AditivosContrato.jsx'
+import PendenciasContrato from '../components/PendenciasContrato.jsx'
 import { useSearchParams, Link } from 'react-router-dom'
 import { calcularProposta, dividirParcelas, VERSAO_REGRAS } from '../lib/regras.js'
 import { anexarJornada, abrirDocumento } from '../lib/jornada.js'
@@ -271,7 +272,7 @@ export default function EmitirContrato({ orcamento = false }) {
         observacoes: data.observacoes || '', itens: [{ ...itemVazio(), descricao: data.projeto_ambientes || '', valor: data.valor_final || '' }] })
     }
     setEditId(id)
-    const ap = await supabase.from('comercial_aprovacoes').select('*').eq('contrato_id',String(id)).order('criado_em',{ascending:false})
+    const ap = await supabase.rpc('comercial_liberacoes_contrato',{p_contrato:String(id)})
     setAprovacoes(ap.data||[])
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -350,7 +351,7 @@ export default function EmitirContrato({ orcamento = false }) {
       const c=res.data
       setEditId(c.id);setF({...inicial(),...c.dados_json});setOriginal(c.dados_json);setSalvo({...c.dados_json,id:c.id,status:c.status})
       await carregarLista();await carregarHistorico(c.id)
-      const ap=await supabase.from('comercial_aprovacoes').select('*').eq('contrato_id',String(c.id)).order('criado_em',{ascending:false});setAprovacoes(ap.data||[])
+      const ap=await supabase.rpc('comercial_liberacoes_contrato',{p_contrato:String(c.id)});setAprovacoes(ap.data||[])
       return c
     }catch(e){setErro(e.message)}finally{setSaving(false)}
   }
@@ -368,14 +369,6 @@ export default function EmitirContrato({ orcamento = false }) {
       if(f.parcelas?.some(p=>p.marco==='dois_dias_antes_entrega'))pagamentos.splice(0,pagamentos.length,`${f.entrada_percentual}% na venda e ${100-Number(f.entrada_percentual)}% dois dias corridos antes da entrega`)
       imprimirOrcamento(f,pgCliente,pagamentos)
     }catch(e){setErro(e.message)}
-  }
-  const aprovarDesconto = async () => {
-    const pendente=aprovacoes.find(a=>!a.aprovado_em)
-    if(!pendente){setErro('Salve a proposta para criar a solicitação de autorização.');return}
-    const r=await supabase.rpc('comercial_aprovar',{p_id:pendente.id})
-    if(r.error){setErro(r.error.message);return}
-    await abrirContrato(editId)
-    setErro('Autorização registrada. Salve a versão aprovada para emitir.')
   }
   const avista = () => {
     setSalvo(null)
@@ -401,7 +394,7 @@ export default function EmitirContrato({ orcamento = false }) {
     <div className="card" style={{ maxWidth: 1000 }}>
       {previaContrato && <div role="dialog" aria-modal="true" aria-label="Prévia do contrato" style={{position:'fixed',inset:0,zIndex:10000,background:'#fff',display:'flex',flexDirection:'column'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:16,padding:'12px 20px',borderBottom:'1px solid #ddd'}}>
-          <div><strong>Prévia do contrato</strong><p style={{margin:'4px 0',fontSize:12}}>Confira o documento. Ao final, use “Imprimir / Salvar como PDF”.</p></div>
+          <div><strong>Prévia do contrato</strong><p style={{margin:'4px 0',fontSize:12}}>{salvo?.status==='Aguardando aprovação'?'Para liberar: feche esta prévia e confira a lista “O que falta para liberar o contrato” no topo da tela.':'Confira o documento. Ao final, use “Imprimir / Salvar como PDF”.'}</p></div>
           <button className="btn ghost" autoFocus onClick={()=>setPreviaContrato('')}>Fechar prévia</button>
         </div>
         <iframe title="Documento do contrato" srcDoc={previaContrato} sandbox="allow-scripts allow-modals allow-same-origin" style={{width:'100%',flex:1,border:0,minHeight:0}} />
@@ -420,6 +413,7 @@ export default function EmitirContrato({ orcamento = false }) {
         </div>
       </div>
       {erro && <div className="login-err" style={{ margin: '12px 0' }}>{erro}</div>}
+      {!emOrcamento&&editId&&<PendenciasContrato dados={f} formas={formasPg} salvo={salvo} aprovacoes={aprovacoes} podeAutorizar={!!role.aprovadora} aprovadora={role.aprovadora} onConcluido={()=>abrirContrato(editId)}/>}
       {emOrcamento && orcamentoAtual && <p role="status">Orçamento salvo · versão {orcamentoAtual.versao}. Alterações no formulário precisam ser salvas.</p>}
       {orcamento && <details open style={{margin:'16px 0'}}><summary>Orçamentos deste atendimento ({orcamentos.length})</summary>
         {orcamentos.map(o=><div key={o.id} className="between" style={{padding:8,borderBottom:'1px solid var(--line)'}}><span>{o.dados.cliente_nome} · versão {o.versao} · {brl(o.dados.valor_negociado)} · {o.contrato_id?'Contrato gerado':'Em negociação'}</span><button className="btn ghost sm" disabled={saving} onClick={()=>abrirOrcamento(o)}>{o.contrato_id?'Abrir contrato':'Continuar orçamento'}</button></div>)}
@@ -569,7 +563,7 @@ export default function EmitirContrato({ orcamento = false }) {
         <div className="field"><label>Observação dos ambientes</label><input className="input" value={f.observacao_ambientes} onChange={(e) => set('observacao_ambientes', e.target.value)} placeholder="Ex.: tomadas por conta do cliente" /></div>
       </div>
 
-      <div style={S}>Ambientes / Itens</div>
+      <div id="ambientes-contrato" style={S}>Ambientes / Itens</div>
       <datalist id="lista-industrias">{INDUSTRIAS.map((n) => <option key={n} value={n} />)}</datalist>
       <div className="sub" style={{ marginTop: -4, marginBottom: 8 }}>No campo <b>Fornecedor</b> escolha a indústria (Bartzen, Menezes…) — pode digitar ou selecionar da lista.</div>
       <div className="table-wrap" style={{ boxShadow: 'none' }}>
@@ -595,7 +589,7 @@ export default function EmitirContrato({ orcamento = false }) {
         <div>Total do pedido: <b style={{ fontFamily: 'var(--serif)', fontSize: 18 }}>{brl(totalPedido)}</b></div>
       </div>
 
-      <div style={S}>Desconto ao cliente</div>
+      <div id="desconto-contrato" style={S}>Desconto ao cliente</div>
       <div className="row-3">
         <div className="field"><label>Desconto</label>
           <div className="flex">
@@ -605,18 +599,9 @@ export default function EmitirContrato({ orcamento = false }) {
         <div className="field"><label>Desconto aplicado</label><input className="input" value={`${brl(descontoValor)} · ${descontoPct.toFixed(1)}%`} disabled /></div>
         <div className="field"><label>Valor final</label><input className="input" value={brl(valorFinal)} disabled /></div>
       </div>
-      {precisaAprovacao && (
-        <div style={{ padding: '10px 14px', borderRadius: 8, marginBottom: 14, fontSize: 13, background: f.desconto_aprovado ? 'var(--ok-bg)' : 'var(--warn-bg)', color: f.desconto_aprovado ? 'var(--ok)' : 'var(--warn)' }}>
-          {f.desconto_aprovado
-            ? `✓ Desconto de ${descontoPct.toFixed(1)}% APROVADO pela diretoria${f.desconto_aprovado_por ? ` (${f.desconto_aprovado_por})` : ''}.`
-            : `⚠ Desconto de ${descontoPct.toFixed(1)}% acima do limite de ${LIMITE_DESCONTO}% — precisa de autorização da diretoria. Ao salvar, o contrato fica "Aguardando aprovação" e a diretoria é informada.`}
-          {!f.desconto_aprovado && podeTudo(role.papel) && (
-            <div style={{ marginTop: 8 }}><button className="btn sm" onClick={aprovarDesconto}>Autorizar desconto (diretoria)</button></div>
-          )}
-        </div>
-      )}
+      {precisaAprovacao && <p className="sub">Confira os motivos e as orientações na seção de liberação no topo do contrato.</p>}
 
-      <div style={S}>Pagamento — simulação</div>
+      <div id="pagamento-contrato" style={S}>Pagamento — simulação</div>
       <div className="row-2">
         <div className="field"><label>Condição de pagamento (texto que sai no contrato)</label><input className="input" value={f.condicao_pagamento} onChange={(e) => set('condicao_pagamento', e.target.value)} placeholder="Ex.: entrada 60% + 40%, ou 6x no cartão" /></div>
         <div className="field"><label>Data da entrada</label><input className="input" type="date" value={f.data_entrada} onChange={(e) => set('data_entrada', e.target.value)} /></div>
