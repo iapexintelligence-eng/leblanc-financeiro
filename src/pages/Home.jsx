@@ -22,7 +22,7 @@ export default function Home() {
     (async () => {
       const [vendas, receber, pagamentos, contas, cfg, contratos] = await Promise.all([
         supabase.from('vendas').select('valor_vendido, data_venda, vendedor').limit(2000),
-        supabase.from('a_receber').select('id, cliente_nome, descricao, valor_parcela, data_prevista, data_recebimento, status').limit(5000),
+        supabase.from('a_receber').select('id, cliente_nome, descricao, valor_parcela, valor_recebido, data_prevista, data_recebimento, status').limit(5000),
         supabase.from('pagamentos').select('id, descricao, fornecedor, categoria, valor, data, data_vencimento, status').limit(5000),
         supabase.from('contas_bancarias').select('saldo, ativo'),
         supabase.from('config_loja').select('chave, valor').like('chave', 'meta_mensal%'),
@@ -58,7 +58,7 @@ export default function Home() {
 
     const recMes = d.receber.filter((r) => noMes(r.data_prevista))
     const recTotal = recMes.reduce((s, r) => s + (Number(r.valor_parcela) || 0), 0)
-    const recRecebido = recMes.filter((r) => r.status === 'Recebido').reduce((s, r) => s + (Number(r.valor_parcela) || 0), 0)
+    const recRecebido = recMes.reduce((s, r) => s + (r.status === 'Recebido' ? Number(r.valor_parcela) || 0 : Number(r.valor_recebido) || 0), 0)
     const recPendente = Math.max(0, recTotal - recRecebido)
 
     const pagMes = d.pagamentos.filter((p) => noMes(p.data_vencimento || p.data))
@@ -88,7 +88,7 @@ export default function Home() {
     const pagar = pgs.filter((p) => (p.data_vencimento || p.data) < hoje).map(mapP).sort(ordena)
     const aVencer = pgs.filter((p) => (p.data_vencimento || p.data) >= hoje).map(mapP).sort(ordena)
     const receber = d.receber.filter((r) => pend(r.status) && r.status !== 'Recebido' && r.data_prevista && r.data_prevista < hoje)
-      .map((r) => ({ id: r.id, quem: r.cliente_nome || r.descricao || '—', venc: r.data_prevista, valor: n(r.valor_parcela) })).sort(ordena)
+      .map((r) => ({ id: r.id, quem: r.cliente_nome || r.descricao || '—', venc: r.data_prevista, valor: Math.max(0, n(r.valor_parcela) - n(r.valor_recebido)) })).sort(ordena)
     return { pagar, aVencer, receber,
       totalPagar: pagar.reduce((s, x) => s + x.valor, 0),
       totalAVencer: aVencer.reduce((s, x) => s + x.valor, 0),
@@ -119,10 +119,7 @@ export default function Home() {
     setD((s) => ({ ...s, receber: s.receber.map((r) => r.id === id ? { ...r, valor_parcela: v } : r) }))
     await supabase.from('a_receber').update({ valor_parcela: v }).eq('id', id)
   }
-  const marcarRecebido = async (id) => {
-    setD((s) => ({ ...s, receber: s.receber.map((r) => r.id === id ? { ...r, status: 'Recebido', data_recebimento: today() } : r) }))
-    await supabase.from('a_receber').update({ status: 'Recebido', data_recebimento: today() }).eq('id', id)
-  }
+
   const remarcarReceber = async (id, novaData) => {
     if (!novaData) return
     setD((s) => ({ ...s, receber: s.receber.map((r) => r.id === id ? { ...r, data_prevista: novaData } : r) }))
@@ -207,7 +204,7 @@ export default function Home() {
                       <td>{x.quem}</td>
                       <td><input className="input" type="number" step="0.01" defaultValue={x.valor} style={{ height: 28, padding: '2px 6px', fontSize: 12, width: 100, textAlign: 'right', color: 'var(--warn)' }} onBlur={(e) => { if (Number(e.target.value) !== x.valor) editarValorReceber(x.id, e.target.value) }} title="Editar valor" /></td>
                       <td><input className="input" type="date" defaultValue={x.venc} style={{ height: 28, padding: '2px 4px', fontSize: 12 }} onChange={(e) => remarcarReceber(x.id, e.target.value)} title="Remarcar data" /></td>
-                      <td><button className="btn ghost sm" onClick={() => marcarRecebido(x.id)}>Recebido</button></td>
+                      <td><Link className="btn ghost sm" to={`/recebiveis?lancar=${x.id}`}>Lançar recebimento</Link></td>
                     </tr>
                   ))}
                 </tbody></table>

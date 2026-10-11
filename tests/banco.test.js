@@ -18,8 +18,10 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  alter table leblanc.contratos add constraint contratos_status_check check(status in ('rascunho','ativo','quitado','cancelado'));
  alter table leblanc.contratos add constraint contratos_modelo_contrato_check check(modelo_contrato in ('leblanc','bartzen'));
  alter table leblanc.contratos add constraint contratos_forma_pagamento_check check(forma_pagamento in ('avista','cartao'));
- create table leblanc.contrato_historico(contrato_id uuid,numero text,acao text,descricao text,editado_por text,alteracoes jsonb);`)
- for(const name of ['20261002144759_jornada.sql','20261002144808_taxas.sql','20261002144904_comercial.sql','20261002144921_integracao.sql','20261002144930_colaboracao_e_revisao_mensal.sql','20261002144940_ativacao_compatibilidade_e_acessos.sql','20261002145427_aditivos_contratuais.sql','20261011193842_xml_final_conferencia.sql','20261011201612_importacao_revisoes_preservada.sql','20261011220000_etapas_historicas.sql'])await db.exec(await readFile(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'))
+ create table leblanc.contrato_historico(contrato_id uuid,numero text,acao text,descricao text,editado_por text,alteracoes jsonb);
+ create table le_admin.contas_bancarias(id integer primary key,nome text,banco text,saldo numeric,ativo boolean default true,updated_at timestamp,data_saldo_base date);
+ create table le_admin.a_receber(id serial primary key,cliente_nome text,descricao text,valor_parcela numeric,data_prevista date,data_recebimento date,status text default 'Pendente',forma_recebimento text,observacoes text,conta_bancaria_id integer);`)
+ for(const name of ['20261002144759_jornada.sql','20261002144808_taxas.sql','20261002144904_comercial.sql','20261002144921_integracao.sql','20261002144930_colaboracao_e_revisao_mensal.sql','20261002144940_ativacao_compatibilidade_e_acessos.sql','20261002145427_aditivos_contratuais.sql','20261011193842_xml_final_conferencia.sql','20261011201612_importacao_revisoes_preservada.sql','20261011220000_etapas_historicas.sql','20261011230000_recebimentos_com_comprovante.sql'])await db.exec(await readFile(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'))
  const gestor='00000000-0000-4000-8000-000000000001',vendedor='00000000-0000-4000-8000-000000000002',cid='00000000-0000-4000-8000-000000000010'
  await db.exec(`insert into auth.users(id) values('${gestor}'),('${vendedor}');
  insert into le_admin.jornada_acessos values('${gestor}','Gestão','gestor','Priscila',true),('${vendedor}','Venda','vendedor',null,true);
@@ -222,6 +224,35 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  await assert.rejects(hreg(h2.id,h2.versao,{cliente_recebe_em:'2026-08-01'},'Planilha CONTROLE DE REVISÕES'),/permissão/)
  await db.exec(`select set_config('test.uid','${gestor}',false)`)
  j=(await db.query('select * from le_admin.jornada_registros where id=$1',[j.id])).rows[0]
+ // Recebimento com comprovante: cartão quita várias parcelas de uma vez, parcial fica em aberto, estorno devolve.
+ await db.exec(`create trigger trg_saldo_recebimento after insert or update on le_admin.a_receber for each row execute function le_admin.fn_saldo_recebimento();
+ insert into le_admin.contas_bancarias(id,nome,saldo,data_saldo_base) values(1,'Sicoob',1000,'2026-01-01');
+ insert into le_admin.a_receber(id,cliente_nome,descricao,valor_parcela,data_prevista,conta_bancaria_id) values(101,'Cliente cartão','1/3',1000,'2026-09-10',1),(102,'Cliente cartão','2/3',1000,'2026-10-10',1),(103,'Cliente cartão','3/3',1000,'2026-11-10',1),(104,'Cliente pix','Saldo',5000,'2026-10-01',null);`)
+ await db.query("insert into storage.objects(bucket_id,name) values('jornada-documentos',$1),('jornada-documentos',$2),('jornada-documentos',$3)",[gestor+'/c1.pdf',gestor+'/c2.pdf',vendedor+'/c3.pdf'])
+ const lancar=(ids,data,valor,forma,conta,comp)=>db.query('select * from le_admin.recebimento_lancar($1,$2,$3,$4,$5,$6)',[ids,data,valor,forma,conta,comp]).then((q)=>q.rows[0])
+ await assert.rejects(lancar([101],'2026-10-05',1000,'Pix',1,null),/comprovante/)
+ await assert.rejects(lancar([101],'2026-10-05',1000,'Pix',1,vendedor+'/c3.pdf'),/comprovante/)
+ await assert.rejects(lancar([101,102,103],'2026-10-05',3000.5,'Cartão de crédito',1,gestor+'/c1.pdf'),/maior que o saldo/)
+ await assert.rejects(lancar([101],'2099-01-01',1000,'Pix',1,gestor+'/c1.pdf'),/futura/)
+ const cartao=await lancar([101,102,103],'2026-10-05',3000,'Cartão de crédito',1,gestor+'/c1.pdf')
+ assert.equal((await db.query("select count(*)::int n from le_admin.a_receber where id in (101,102,103) and status='Recebido' and valor_recebido=1000 and data_recebimento='2026-10-05'")).rows[0].n,3)
+ assert.equal(Number((await db.query('select saldo from le_admin.contas_bancarias where id=1')).rows[0].saldo),4000)
+ await assert.rejects(lancar([101],'2026-10-05',10,'Pix',1,gestor+'/c2.pdf'),/já está recebida/)
+ await assert.rejects(lancar([104],'2026-10-05',10,'Pix',1,gestor+'/c1.pdf'),/já foi usado/)
+ await assert.rejects(db.query("update le_admin.a_receber set status='Pendente' where id=101"),/estorne/)
+ const parcial=await lancar([104],'2026-10-06',2000,'Pix',null,gestor+'/c2.pdf')
+ const p104=(await db.query('select status,valor_recebido from le_admin.a_receber where id=104')).rows[0]
+ assert.equal(p104.status,'Parcial');assert.equal(Number(p104.valor_recebido),2000)
+ assert.equal(Number((await db.query('select saldo from le_admin.contas_bancarias where id=1')).rows[0].saldo),4000)
+ await assert.rejects(db.query('select le_admin.recebimento_estornar($1,$2)',[cartao.id,'']),/motivo/)
+ await db.query('select le_admin.recebimento_estornar($1,$2)',[cartao.id,'Lançado no cliente errado'])
+ assert.equal((await db.query("select count(*)::int n from le_admin.a_receber where id in (101,102,103) and status='Pendente' and valor_recebido=0 and data_recebimento is null")).rows[0].n,3)
+ assert.equal(Number((await db.query('select saldo from le_admin.contas_bancarias where id=1')).rows[0].saldo),1000)
+ await assert.rejects(db.query('select le_admin.recebimento_estornar($1,$2)',[cartao.id,'De novo']),/já estornado/)
+ await db.exec(`select set_config('test.uid','${vendedor}',false)`)
+ await assert.rejects(lancar([101],'2026-10-05',10,'Pix',1,vendedor+'/c3.pdf'),/financeiro/)
+ await db.exec(`select set_config('test.uid','${gestor}',false)`)
+ assert.ok(parcial.id)
  // Conferente vê a situação do XML sem receita, custos ou margem; vendedor não acessa a conferência.
  const conferente='00000000-0000-4000-8000-000000000004'
  await db.exec(`insert into auth.users(id) values('${conferente}');insert into le_admin.jornada_acessos values('${conferente}','Conferente teste','correcao',null,true);select set_config('test.uid','${conferente}',false);`)
