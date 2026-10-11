@@ -72,7 +72,8 @@ export default function Home() {
     vendasMes.forEach((v) => { const n = v.vendedor || '— sem vendedor —'; porV[n] = (porV[n] || 0) + (Number(v.valor_vendido) || 0) })
     const ranking = Object.entries(porV).sort((a, b) => b[1] - a[1])
 
-    return { vendido, meta, qtd: vendasMes.length, pct, recTotal, recRecebido, recPendente,
+    const semData = d.receber.filter((r) => !r.data_prevista && r.status !== 'Recebido')
+    return { semData, semDataTotal: semData.reduce((s, r) => s + (Number(r.valor_parcela) || 0), 0), vendido, meta, qtd: vendasMes.length, pct, recTotal, recRecebido, recPendente,
       recPct: recTotal ? recRecebido / recTotal : 0, despTotal, despPago, despPendente,
       despPct: despTotal ? despPago / despTotal : 0, saldoMes, ranking }
   }, [d, mes])
@@ -216,6 +217,7 @@ export default function Home() {
         </div>
       )}
 
+      {k.semData.length > 0 && <div className="card" style={{ marginBottom: 20 }}><div className="between" style={{ flexWrap: 'wrap', gap: 8 }}><div><b>{k.semData.length} parcela(s) a receber sem data prevista · {brl(k.semDataTotal)}</b><div className="sub" style={{ margin: 0 }}>Dependem da entrega, da montagem ou da liberação da financeira. Não entram na Receita de nenhum mês até receberem uma data.</div></div><Link className="btn ghost sm" to="/recebiveis">Definir datas</Link></div></div>}
       <div className="grid cols-4" style={{ marginBottom: 20 }}>
         <div className="card kpi"><div className="label">Vendido</div><div className="value">{brl(k.vendido)}</div><div className="delta">{k.qtd} contrato(s) no mês</div></div>
         <div className="card kpi"><div className="label">Meta da loja</div><div className="value">{brl(k.meta)}</div><div className="delta">meta mensal</div></div>
