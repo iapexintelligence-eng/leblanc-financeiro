@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase.js'
 import { brl, fmtDate, today, addMonths, addBusinessDays } from '../lib/format.js'
 import { registrarLog } from '../lib/log.js'
 import { IcoPlus } from '../components/Icons.jsx'
-import { imprimirContrato } from '../components/ContratoDoc.jsx'
+import { gerarHtmlContrato } from '../components/ContratoDoc.jsx'
 import { CARTAO, simularCartao, simularFinanceira } from '../lib/taxas.js'
 import { useRole, podeTudo } from '../lib/useRole.js'
 import { parsePromobXML } from '../lib/promob.js'
@@ -88,6 +88,7 @@ const inicial = () => ({
 export default function EmitirContrato({ orcamento = false }) {
   const [f, setF] = useState(inicial())
   const [params] = useSearchParams()
+  const [previaContrato, setPreviaContrato] = useState('')
   const [orcamentoAtual, setOrcamentoAtual] = useState(null)
   const [orcamentos, setOrcamentos] = useState([])
   const [versoesOrcamento, setVersoesOrcamento] = useState([])
@@ -360,7 +361,8 @@ export default function EmitirContrato({ orcamento = false }) {
   }
   const imprimir = () => {
     if(!salvo || salvo.status!=='Emitido'){setErro('Salve a proposta e conclua as autorizações antes de emitir o contrato.');return}
-    imprimirContrato(salvo).catch(e=>setErro(e.message))
+    try { setPreviaContrato(gerarHtmlContrato(salvo));setErro('') }
+    catch(e){setErro(e.message)}
   }
   const imprimirProposta = () => {
     try{
@@ -402,6 +404,13 @@ export default function EmitirContrato({ orcamento = false }) {
 
   return (
     <div className="card" style={{ maxWidth: 1000 }}>
+      {previaContrato && <div role="dialog" aria-modal="true" aria-label="Prévia do contrato" style={{position:'fixed',inset:0,zIndex:10000,background:'#fff',display:'flex',flexDirection:'column'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:16,padding:'12px 20px',borderBottom:'1px solid #ddd'}}>
+          <div><strong>Prévia do contrato</strong><p style={{margin:'4px 0',fontSize:12}}>Confira o documento. Ao final, use “Imprimir / Salvar como PDF”.</p></div>
+          <button className="btn ghost" autoFocus onClick={()=>setPreviaContrato('')}>Fechar prévia</button>
+        </div>
+        <iframe title="Documento do contrato" srcDoc={previaContrato} sandbox="allow-scripts allow-modals allow-same-origin" style={{width:'100%',flex:1,border:0,minHeight:0}} />
+      </div>}
       <div className="between">
         <div>
           <h3>{emOrcamento ? 'Orçamento do cliente' : editId ? 'Editar contrato' : 'Emitir contrato'}</h3>
