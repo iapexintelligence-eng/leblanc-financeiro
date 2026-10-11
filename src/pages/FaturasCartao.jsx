@@ -29,6 +29,7 @@ export default function FaturasCartao() {
   const [pendente, setPendente] = useState(null) // File aguardando senha
   const [senha, setSenha] = useState('')
   const [ocrProg, setOcrProg] = useState(null) // progresso do OCR (0..100) ou null
+  const [confirmaExcluir, setConfirmaExcluir] = useState(false)
   const fileRef = useRef(null)
 
   const carregar = async () => {
@@ -84,6 +85,14 @@ export default function FaturasCartao() {
     setRows((s) => s.map((x) => x.id === r.id ? { ...x, categoria } : x))
     const { error } = await supabase.from('fatura_rateio').update({ categoria }).eq('id', r.id)
     if (error) setErro(error.message)
+  }
+  // Exclui a fatura inteira (cartão + mês) para subir de novo. Itens já cobrados ficam.
+  const excluirFatura = async () => {
+    setErro('')
+    const { error } = await supabase.from('fatura_rateio').delete().eq('cartao', cartaoF).eq('mes_ref', mesF).eq('cobrado', false)
+    setConfirmaExcluir(false)
+    if (error) { setErro(error.message); return }
+    carregar()
   }
   const excluir = async (r) => {
     if (!window.confirm('Remover este item da fatura?')) return
@@ -202,6 +211,18 @@ export default function FaturasCartao() {
         </select>
       </div>
 
+      {cartaoF !== 'todos' && mesF && mesF !== 'todos' && (() => {
+        const daFatura = (rows || []).filter((r) => r.cartao === cartaoF && r.mes_ref === mesF)
+        const apagaveis = daFatura.filter((r) => !r.cobrado).length
+        if (!daFatura.length) return null
+        return <div className="tools" style={{ gap: 8, marginBottom: 12 }}>
+          {!confirmaExcluir
+            ? <button className="btn ghost sm" disabled={!apagaveis} onClick={() => setConfirmaExcluir(true)}><IcoTrash /> Excluir esta fatura para subir de novo ({apagaveis} itens)</button>
+            : <><span className="sub" style={{ margin: 0 }}>Excluir {apagaveis} itens de {cartaoF} · {rotuloMes(mesF)}?{daFatura.length > apagaveis ? ` ${daFatura.length - apagaveis} já cobrados ficam.` : ''}</span>
+              <button className="btn sm" onClick={excluirFatura}>Sim, excluir</button>
+              <button className="btn ghost sm" onClick={() => setConfirmaExcluir(false)}>Cancelar</button></>}
+        </div>
+      })()}
       {erro && !imp && <div className="login-err" style={{ marginBottom: 12 }}>{erro}</div>}
 
       <div className="grid cols-3" style={{ marginBottom: 12 }}>
