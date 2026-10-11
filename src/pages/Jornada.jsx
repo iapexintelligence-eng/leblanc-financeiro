@@ -2,7 +2,7 @@ import AditivosContrato from '../components/AditivosContrato.jsx'
 import XmlFinalConferencia from '../components/XmlFinalConferencia.jsx'
 import RegistroComplementos from '../components/RegistroComplementos.jsx'
 import { situacoesSeparadas, checklistPassagem } from '../lib/operacao.js'
-import { SETORES, noSetor, prazoImportado } from '../lib/setores.js'
+import { SETORES, noSetor, prazoImportado, setorImportado } from '../lib/setores.js'
 import { jornadaDemo } from '../lib/jornadaDemo.js'
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -42,6 +42,7 @@ function ImportacaoRevisoes({imp}) {
  </div>
 }
 const inicial=(tipo)=>tipo==='pedido'?{tipo_venda:'Normal'}:tipo==='assistencia'?{identificada:hojeSP(),status:'Identificada',responsavel:'Glauci',causa:'A apurar'}:tipo==='frete'?{status:'Solicitado'}:{}
+const diasDesde=(a,b)=>Math.max(0,Math.round((new Date(b+'T12:00:00Z')-new Date(a+'T12:00:00Z'))/86400000))
 function prazo(r,feriados=[]) {
  const d=r.dados
  const est=r.tipo==='pedido'?prazoImportado(d,feriados):null
@@ -69,7 +70,7 @@ function situacao(r) {
  if(d.correcao_em) return 'Aguardando aprovação do cliente'
  if(d.medicao_em) return 'Conferência e guias'
  if(d.liberacao_em) return 'Aguardando medição'
- if(d.importacao_revisoes&&!d.venda_data) return 'Planilha: '+([d.importacao_revisoes.situacao,d.importacao_revisoes.status].filter(Boolean).join(' · ')||'em conferência')
+ if(setorImportado(d)) return 'Planilha: '+([d.importacao_revisoes.situacao,d.importacao_revisoes.status].filter(Boolean).join(' · ')||'em conferência')
  if(d.tipo_venda==='Futura'&&!d.imovel_pronto_em) return 'Venda futura: aguardando cliente'
  return 'Checklist e entrada'
 }
@@ -84,7 +85,7 @@ export default function Jornada({ tipoInicial='pedido', setor=null }) {
  async function carregar() {
   try {
    const j=await carregarJornada(); setDados(j)
-   if(j.eu?.papel!=='montador') setContratos(await todas(()=>supabase.schema('leblanc').from('contratos').select('id,numero,cliente_nome,cliente_endereco,cliente_telefone,projeto_ambientes,vendor').order('id')))
+   if(j.eu?.papel!=='montador') setContratos(await todas(()=>supabase.schema('leblanc').from('contratos').select('id,numero,cliente_nome,cliente_endereco,cliente_telefone,projeto_ambientes,vendor,created_at,data_contrato:dados_json->>data_contrato').order('id')))
    const res=await supabase.rpc('jornada_gerar_alertas'); if(res.error) throw res.error
    setErro('')
   } catch(e) {setErro(`Não foi possível carregar a jornada: ${e.message}. Se esta é a primeira ativação, confira a migração e seu acesso.`)}
@@ -112,6 +113,7 @@ export default function Jornada({ tipoInicial='pedido', setor=null }) {
   try {await salvarRegistro({...modal,dados:{...modal.dados,cliente_nome:mapa[modal.contrato_id]?.cliente_nome||modal.dados.cliente_nome}});setModal(null);await carregar()}catch(e){setErro(e.message)}finally{setSaving(false)}
  }
  async function anexo(k,file) {if(!file)return;setUpload(true);try{set(k,await anexarJornada(file))}catch(e){setErro(e.message)}finally{setUpload(false)}}
+ const vendidoEm=(r)=>r.dados.venda_data||mapa[r.contrato_id]?.data_contrato||null
  const aviso=(r)=>alertaPrazo(prazo(r,feriados),{hoje:agora,feriados})
  const diasMes = new Date(Number(mes.slice(0,4)),Number(mes.slice(5,7)),0).getDate()
  const contrato=modal?mapa[modal.contrato_id]:null
@@ -139,11 +141,11 @@ export default function Jornada({ tipoInicial='pedido', setor=null }) {
   <div className="section-head"><input aria-label="Buscar atendimento" className="input" placeholder="Buscar cliente, montador ou prestador" value={busca} onChange={e=>setBusca(e.target.value)}/>{edita&&<button className="btn" onClick={()=>abrir({tipo,contrato_id:'',dados:{...inicial(tipo),...(setor==='vendas'?{tipo_venda:vendaFiltro}:{})}})}>Novo registro</button>}</div>
   <div className="table-wrap"><table><thead><tr><th>Cliente / contrato</th><th>Situação</th><th>Prazo / período</th><th>Responsável / valor</th><th></th></tr></thead><tbody>
    {lista.length===0&&<tr><td colSpan="5" className="empty">Nenhum registro nesta visão.</td></tr>}
-   {lista.map(r=>{const a=aviso(r);return <tr key={r.id} style={{background:a?.nivel==='danger'?'var(--danger-bg)':undefined}}><td>{mapa[r.contrato_id]?.cliente_nome||r.dados.cliente_nome||r.contrato_id}<div className="sub">{mapa[r.contrato_id]?.numero}</div></td><td>{situacao(r)}</td><td>{tipo==='agenda'?`${fmtDate(r.dados.inicio)} a ${fmtDate(r.dados.fim)}`:<>{fmtDate(prazo(r,feriados))}{a&&<div><span className={'badge '+a.nivel}>{a.texto}</span></div>}{r.tipo==='pedido'&&prazoImportado(r.dados,feriados)&&<div className="sub" style={{margin:0}}>Estimado pela planilha: {prazoImportado(r.dados,feriados).etapa}</div>}</>}</td><td>{tipo==='frete'?`${r.dados.prestador} · ${brl(r.dados.valor)}`:r.dados.responsavel||dados?.pessoas.find(p=>p.usuario_id===r.dados.montador_id)?.nome||r.dados.conferente||'—'}</td><td><button className="btn ghost" onClick={()=>abrir(r)}>{edita?'Abrir':'Ver detalhes'}</button></td></tr>})}
+   {lista.map(r=>{const a=aviso(r);return <tr key={r.id} style={{background:a?.nivel==='danger'?'var(--danger-bg)':undefined}}><td>{mapa[r.contrato_id]?.cliente_nome||r.dados.cliente_nome||r.contrato_id}<div className="sub">{mapa[r.contrato_id]?.numero}{r.tipo==='pedido'&&vendidoEm(r)&&<> · vendido em {fmtDate(vendidoEm(r))} · há {diasDesde(vendidoEm(r),agora)} dias</>}</div></td><td>{situacao(r)}</td><td>{tipo==='agenda'?`${fmtDate(r.dados.inicio)} a ${fmtDate(r.dados.fim)}`:<>{fmtDate(prazo(r,feriados))}{a&&<div><span className={'badge '+a.nivel}>{a.texto}</span></div>}{r.tipo==='pedido'&&prazoImportado(r.dados,feriados)&&<div className="sub" style={{margin:0}}>Estimado pela planilha: {prazoImportado(r.dados,feriados).etapa}</div>}</>}</td><td>{tipo==='frete'?`${r.dados.prestador} · ${brl(r.dados.valor)}`:r.dados.responsavel||dados?.pessoas.find(p=>p.usuario_id===r.dados.montador_id)?.nome||r.dados.conferente||'—'}</td><td><button className="btn ghost" onClick={()=>abrir(r)}>{edita?'Abrir':'Ver detalhes'}</button></td></tr>})}
   </tbody></table></div>
   {modal&&<Modal wide title={TIPOS[modal.tipo]} onClose={()=>!saving&&!upload&&setModal(null)} footer={<><button className="btn ghost" onClick={()=>setModal(null)} disabled={saving||upload}>Fechar</button>{edita&&abaFicha==='Resumo'&&<button className="btn" onClick={salvar} disabled={saving||upload||!modal.contrato_id}>{saving?'Salvando…':'Salvar registro'}</button>}</>}>
    {erro&&<div className="login-err" role="alert">{erro}</div>}
-   <div className="field"><label>Contrato</label><select className="input" value={modal.contrato_id} disabled={!!modal.id||!edita} onChange={e=>setModal(m=>({...m,contrato_id:e.target.value}))}><option value="">Selecione</option>{contratos.map(c=><option key={c.id} value={String(c.id)}>{c.numero} · {c.cliente_nome}</option>)}</select></div>
+   <div className="field"><label>Contrato</label><select className="input" value={modal.contrato_id} disabled={!!modal.id||!edita} onChange={e=>{const c=mapa[e.target.value];setModal(m=>({...m,contrato_id:e.target.value,dados:m.tipo==='pedido'&&!m.dados.venda_data&&c?.data_contrato?{...m.dados,venda_data:c.data_contrato}:m.dados}))}}><option value="">Selecione</option>{contratos.map(c=><option key={c.id} value={String(c.id)}>{c.numero} · {c.cliente_nome}</option>)}</select></div>
    {modal.tipo==='pedido'&&<div className="grid cols-3" style={{margin:'16px 0'}}>{Object.entries(situacoesSeparadas(modal.dados)).map(([k,v])=><div className="card" key={k}><small>{k==='comercial'?'Comercial':k==='operacional'?'Operacional':'Financeiro'}</small><p>{v}</p></div>)}</div>}
    <div className="tools" style={{margin:'12px 0'}}>{['Resumo',...(modal.tipo==='pedido'?['XML final e conferência']:[]),'Arquivos, tarefas e histórico','Aditivos'].map(a=><button className={'btn '+(abaFicha===a?'':'ghost')} key={a} onClick={()=>setAbaFicha(a)}>{a}</button>)}</div>
    {abaFicha==='XML final e conferência'?<XmlFinalConferencia key={modal.contrato_id} contratoId={modal.contrato_id} eu={dados?.eu} pessoas={dados?.pessoas}/>:abaFicha==='Aditivos'?<AditivosContrato key={modal.contrato_id} contratoId={modal.contrato_id}/>:abaFicha!=='Resumo'?<RegistroComplementos key={modal.id||'novo'} registro={modal} registros={registros} pessoas={dados?.pessoas} eu={dados?.eu} setor={setor||'vendas'}/>:<>

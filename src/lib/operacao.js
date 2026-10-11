@@ -1,5 +1,5 @@
 import { hojeSP, somarDias, somarUteis, util, dataValida } from './prazos.js'
-import { setorPedido, SETORES, prazoImportado } from './setores.js'
+import { setorPedido, SETORES, prazoImportado, setorImportado } from './setores.js'
 
 export const PAPEIS={vendedor:'Vendas',correcao:'Conferência',logistica:'Glauci · logística',financeiro:'Leia · financeiro',gestor:'Gestão'}
 export const MARCOS={'':'Não bloqueia avanço',liberacao_em:'Liberação para medição',implantacao_em:'Implantação na fábrica',confirmada:'Liberação da escala',entrega_em:'Entrega',fotos_em:'Fotos'}
@@ -15,7 +15,7 @@ export function pendenciasAutomaticas(registros,feriados=[]) {
   if(r.tipo==='frete'&&d.status==='Liberado para pagamento')add(r,'Pagar frete conferido','financeiro',d.prevista)
   if(r.tipo!=='pedido')continue
   const imp=d.importacao_revisoes
-  if(imp&&!d.venda_data){
+  if(imp&&setorImportado(d)){
    // Situação trazida da planilha de revisões: não gera as etapas iniciais nem prazos inventados.
    const est=prazoImportado(d,feriados)
    for(const p of imp.pendencias||[])out.push({id:`${r.id}-imp-${p}`,registro_id:r.id,contrato_id:r.contrato_id,cliente:d.cliente_nome,titulo:p,papel:PAPEL_IMPORTADO[p]||'correcao',prazo:PAPEL_IMPORTADO[p]?null:est?.prazo||null,origem:`Planilha de revisões${imp.conferente?' · '+imp.conferente:''}${imp.andamento?' · '+imp.andamento:''}`})
@@ -65,7 +65,7 @@ export function ordenarPendencias(lista,hoje=hojeSP()) {
 // Etapas ainda não realizadas nunca são posicionadas antes de hoje; o resultado é a data mais cedo possível.
 export function previsaoMontagem(d,{dataVenda=null,feriados=[],hoje=hojeSP()}={}) {
  if(!d)return null
- const imp=d.importacao_revisoes&&!d.venda_data&&!d.liberacao_em&&!d.medicao_em?d.importacao_revisoes:null
+ const imp=d.importacao_revisoes&&setorImportado(d)?d.importacao_revisoes:null
  if(d.entrega_em||d.montagem_concluida_em)return null
  if(imp&&['qualidade'].includes(imp.setor_codigo))return null
  const max=(a,b)=>a>b?a:b

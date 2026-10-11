@@ -7,7 +7,7 @@ export const SETORES = {
  qualidade:{titulo:'Qualidade',descricao:'Conclusão da montagem, termo assinado, assistências em até 30 dias úteis e agendamento das fotos.',tipos:['pedido','assistencia']},
 }
 // Fichas importadas da planilha de revisões ficam no setor de origem até a equipe registrar marcos reais.
-const MARCOS_REAIS=['venda_data','liberacao_em','medicao_em','correcao_em','aprovacao_em','implantacao_em','fabrica_paga','carregamento_em','cliente_recebe_em','entrega_em','montagem_concluida_em','fotos_em']
+const MARCOS_REAIS=['liberacao_em','medicao_em','correcao_em','aprovacao_em','implantacao_em','fabrica_paga','carregamento_em','cliente_recebe_em','entrega_em','montagem_concluida_em','fotos_em']
 export function setorImportado(d) {
  const s=d?.importacao_revisoes?.setor_codigo
  return s&&SETORES[s]&&!MARCOS_REAIS.some(k=>d[k])?s:null

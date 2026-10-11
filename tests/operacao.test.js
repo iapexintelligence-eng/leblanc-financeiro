@@ -26,7 +26,7 @@ test('pendências vencidas têm prioridade e datas ausentes ficam ao final',()=>
 })
 
 test('ficha importada gera só as pendências da planilha, sem prazos inventados',()=>{
- const r={id:'i',tipo:'pedido',contrato_id:'c',dados:{cliente_nome:'Cliente',importacao_revisoes:{pendencias:['Guias técnicas','Assistência aberta'],conferente:'GIOVANNA',andamento:'falta guia'}}}
+ const r={id:'i',tipo:'pedido',contrato_id:'c',dados:{cliente_nome:'Cliente',importacao_revisoes:{setor_codigo:'correcao',pendencias:['Guias técnicas','Assistência aberta'],conferente:'GIOVANNA',andamento:'falta guia'}}}
  const xs=pendenciasAutomaticas([r])
  assert.deepEqual(xs.map(x=>[x.titulo,x.papel,x.prazo]),[['Guias técnicas','correcao',null],['Assistência aberta','logistica',null]])
  assert.match(xs[0].origem,/Planilha de revisões · GIOVANNA · falta guia/)
@@ -50,4 +50,11 @@ test('pedido já implantado sem data de assinatura não ganha data inventada',as
  const {previsaoMontagem}=await import('../src/lib/operacao.js')
  const r=previsaoMontagem({importacao_revisoes:{setor_codigo:'liberacao',situacao:'IMPLANTADO',medida:'2026-05-13'}},{hoje:'2026-10-11'})
  assert.equal(r.data,null);assert.equal(r.tipo,'pendente')
+})
+
+test('data do fechamento não tira a ficha importada do setor nem cria pendências iniciais',async()=>{
+ const {setorPedido}=await import('../src/lib/setores.js')
+ const d={venda_data:'2026-09-22',importacao_revisoes:{setor_codigo:'correcao',pendencias:['Guias técnicas']}}
+ assert.equal(setorPedido(d),'correcao')
+ assert.deepEqual(pendenciasAutomaticas([{id:'x',tipo:'pedido',dados:d}]).map(p=>p.titulo),['Guias técnicas'])
 })
