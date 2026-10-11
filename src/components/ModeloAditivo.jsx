@@ -1,0 +1,15 @@
+import {useState} from 'react'
+import {supabase} from '../lib/supabase.js'
+import {hojeSP} from '../lib/prazos.js'
+import {gerarHtmlAditivo} from '../lib/aditivoHtml.js'
+export default function ModeloAditivo({contratoId,pode}) {
+ const [d,setD]=useState({tipo:'pagamento',data:hojeSP(),objeto:'',pagamento:'',valor_anterior:'',valor_adicional:''})
+ const [html,setHtml]=useState(''),[erro,setErro]=useState(''),[busy,setBusy]=useState(false)
+ const set=(k,v)=>{setD(s=>({...s,[k]:v}));setHtml('')}
+ async function gerar(){setErro('');setBusy(true);try{
+  const r=await supabase.schema('leblanc').from('contratos').select('numero,cliente_nome,cliente_cpf,cliente_endereco,dados_json').eq('id',contratoId).single()
+  if(r.error)throw r.error
+  setHtml(gerarHtmlAditivo(r.data,d))
+ }catch(e){setErro(e.message)}finally{setBusy(false)}}
+ return <details style={{margin:'20px 0'}}><summary>Criar minuta de aditivo ou adendo</summary><p>Use o modelo de alteração de pagamento ou de acréscimo ao projeto. Preencha somente as condições acordadas. Depois da assinatura, anexe o PDF na seção abaixo.</p><fieldset disabled={!pode||busy} style={{border:0,padding:0}}><div className="field"><label>Modelo</label><select className="input" value={d.tipo} onChange={e=>set('tipo',e.target.value)}><option value="pagamento">Aditivo — alteração de pagamento</option><option value="acrescimo">Adendo — acréscimos ao projeto</option></select></div><div className="field"><label>Data do documento</label><input className="input" type="date" value={d.data} onChange={e=>set('data',e.target.value)}/></div><div className="field"><label>Objeto e alterações acordadas</label><textarea className="input" value={d.objeto} onChange={e=>set('objeto',e.target.value)}/></div><div className="field"><label>Condições de pagamento — parcelas, valores e vencimentos</label><textarea className="input" value={d.pagamento} onChange={e=>set('pagamento',e.target.value)}/></div>{d.tipo==='acrescimo'&&<div className="grid2"><div className="field"><label>Valor anterior do contrato (R$)</label><input className="input" type="number" min="0" step="0.01" value={d.valor_anterior} onChange={e=>set('valor_anterior',e.target.value)}/></div><div className="field"><label>Valor adicional deste adendo (R$)</label><input className="input" type="number" min="0.01" step="0.01" value={d.valor_adicional} onChange={e=>set('valor_adicional',e.target.value)}/></div></div>}<button className="btn ghost" onClick={gerar} disabled={!pode||busy}>{busy?'Preparando…':'Prévia do aditivo / adendo'}</button></fieldset>{erro&&<p role="alert" className="login-err">{erro}</p>}{html&&<div role="dialog" aria-modal="true" aria-label="Prévia do aditivo" style={{position:'fixed',inset:0,zIndex:10001,background:'white',display:'flex',flexDirection:'column'}}><div className="between" style={{padding:12}}><b>Prévia do aditivo / adendo</b><button className="btn ghost" onClick={()=>setHtml('')}>Fechar prévia do aditivo</button></div><iframe title="Documento do aditivo" srcDoc={html} sandbox="allow-scripts allow-modals allow-same-origin" style={{flex:1,width:'100%',border:0}}/></div>}</details>
+}

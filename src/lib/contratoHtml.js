@@ -1,121 +1,32 @@
-import { MODELO_CONTRATO } from './modeloContrato.js'
+import { PAGINAS_CONTRATO } from './modeloContrato.js'
 import { contratoPublico } from './regras.js'
 import { brl, fmtDate } from './format.js'
 
-
-const EMPRESA = {
-  nome: 'LE BLANC MOVEIS E INTERIORES LTDA', cnpj: '33.834.316/0001-38',
-  end: 'Rua Augusto Stresser, 1109 · Juvevê · Curitiba/PR · CEP 80040-310', tel: '41 99796-9618 · 41 3253-9983',
-  site: 'www.leblancinteriores.com', email: 'gerencia@leblancinteriores.com',
+export const EMPRESA_CONTRATO = 'LE BLANC MÓVEIS E INTERIORES LTDA'
+export const ENDERECO_CONTRATO = 'Rua Augusto Stresser, 1109 - Alto da Glória - Curitiba/PR'
+export const esc = s => String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
+const texto = s => esc(s || '—').replace(/\n/g,'<br>')
+export const enderecoCliente = d => [d.endereco,d.bairro,[d.cidade,d.uf].filter(Boolean).join('/'),d.cep].filter(Boolean).join(', ')
+export function assinaturas(d) {
+ return `<h1>Assinaturas</h1><div class="assinaturas"><div>${EMPRESA_CONTRATO}<small>CONTRATADA</small></div><div>${esc(d.cliente_nome)}<small>CONTRATANTE</small></div><div>TESTEMUNHA 1<small>Nome: __________________________<br>RG: ____________________________<br>CPF: ___________________________</small></div><div>TESTEMUNHA 2<small>Nome: __________________________<br>RG: ____________________________<br>CPF: ___________________________</small></div></div>`
 }
-const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
-const or = (v) => esc(v) || '—'
-
+export function documentoLeBlanc(d,paginas,{pendente=false,titulo='Contrato',aviso='MINUTA NÃO APROVADA — somente para conferência, não válida para assinatura.'}={}) {
+ const numero=esc(d.numero||'A gerar ao salvar')
+ return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(titulo)} ${numero}</title><style>
+ @page{size:A4;margin:12mm 17mm}*{box-sizing:border-box}body{margin:0;background:#eae8e5;color:#171717;font:11pt/1.38 Arial,Helvetica,sans-serif}.pagina{width:210mm;min-height:297mm;margin:20px auto;padding:12mm 17mm;background:white;display:flex;flex-direction:column;break-after:page}.pagina:last-of-type{break-after:auto}.cabecalho{display:flex;justify-content:space-between;align-items:center;font-size:8pt;margin-bottom:14px;letter-spacing:1px}.marca{font-family:Georgia,serif;letter-spacing:5px;font-size:27pt}.marca small{display:block;font:6.5pt Arial;letter-spacing:2px;margin-top:5px}.numero{text-align:right;font:15pt Georgia;overflow-wrap:anywhere;max-width:55%}.numero small{display:block;font:7pt Arial;color:#777}.conteudo{flex:1}.rodape{display:flex;justify-content:space-between;gap:10px;border-top:1px solid #ccc;padding-top:9px;margin-top:18px;font-size:6.5pt;color:#666}.grade{display:grid;grid-template-columns:1fr 1fr;gap:16px 25px}.grade.tres{grid-template-columns:1fr 1fr 1fr}.campo small{display:block;color:#777;text-transform:uppercase;font-size:7pt;letter-spacing:1px;margin-bottom:4px}.inteira{grid-column:1/-1}h1{font:25pt Georgia,serif;margin:10px 0 22px}h2{font-size:11pt;font-weight:600;margin:15px 0 8px;break-after:avoid}h3{font-size:9pt;font-weight:500;letter-spacing:1.4px;text-transform:uppercase;margin:23px 0 15px}p{margin:0 0 10px;overflow-wrap:anywhere}.clausula{text-align:justify;font-size:10.5pt;line-height:1.35}.total{display:flex;justify-content:space-between;align-items:center;background:#f4f3f0;padding:12px;margin:22px 0}.total b{font:23pt Georgia}table{width:100%;border-collapse:collapse;font-size:10pt;margin:12px 0}thead{display:table-header-group}th{background:#f4f3f0;font-weight:500;text-align:left}td,th{padding:8px;border-bottom:1px solid #ddd;overflow-wrap:anywhere}tr{break-inside:avoid}.assinaturas{display:grid;grid-template-columns:1fr 1fr;gap:75px 35px;margin-top:85px}.assinaturas div{border-top:1px solid;padding-top:9px;font-size:9pt}.assinaturas small{display:block;line-height:1.8;margin-top:4px}.aviso{border:1px solid #9a3412;color:#9a3412;padding:8px;font-size:9pt;margin-bottom:14px}.noprint{position:sticky;top:0;background:#171717;color:white;padding:12px;text-align:center}.noprint button{padding:10px 20px;border:0;background:white;cursor:pointer}.separador{border:0;border-top:1px solid #ddd;margin:20px 0}
+ @media print{body{background:white}.pagina{width:auto;min-height:273mm;margin:0;padding:0;box-shadow:none}.noprint{display:none}.total,th{print-color-adjust:exact}}
+ </style></head><body><div class="noprint"><button onclick="window.print()">Imprimir / Salvar como PDF</button></div>${paginas.map((p,i)=>`<section class="pagina"><header class="cabecalho">${i===0?'<div class="marca">LE BLANC<small>MÓVEIS PLANEJADOS</small></div>':'<span>LE BLANC</span>'}<div class="numero"><small>${esc(titulo).toUpperCase()}</small>${numero}</div></header><main class="conteudo">${pendente?`<div class="aviso">${esc(aviso)}</div>`:''}${p}</main><footer class="rodape"><span>LE BLANC / ${esc(d.cliente_nome)}</span><span>Rubricas: __________________</span><span>${String(i+1).padStart(2,'0')} / ${String(paginas.length).padStart(2,'0')}</span></footer></section>`).join('')}</body></html>`
+}
+const campo=(label,value,inteira=false)=>`<div class="campo ${inteira?'inteira':''}"><small>${esc(label)}</small>${texto(value)}</div>`
 export function gerarHtmlContrato(interno) {
-  const pendente = interno.status !== 'Emitido'
-  const d=contratoPublico(interno)
-  const corpo = MODELO_CONTRATO
-
-  const total = d.total_pagar, totalPagar=d.total_pagar
-  const endCliente = [d.endereco, d.bairro, d.cidade, d.uf].filter(Boolean).join(', ')
-  const ambientesTxt = (d.itens || []).filter((it) => it.descricao).map((it) => it.descricao).join('; ')
-  const eAvista = /vista|pix/i.test(d.forma_pagamento || '') || /vista/i.test(d.condicao_pagamento || '')
-  const preencher = (t) => (t || '')
-    .replace(/\{\{\s*cliente_nome\s*\}\}/gi, d.cliente_nome || '')
-    .replace(/\{\{\s*cliente_cpf\s*\}\}/gi, d.cliente_cpf || '')
-    .replace(/\{\{\s*cliente_telefone\s*\}\}/gi, d.cliente_telefone || '')
-    .replace(/\{\{\s*cliente_endereco\s*\}\}/gi, endCliente)
-    .replace(/\{\{\s*projeto_ambientes\s*\}\}/gi, ambientesTxt)
-  const itens = (d.itens || []).filter((it) => it.descricao || Number(it.valor) > 0)
-  const linhasItens = itens.map((it, i) => `<tr>
-    <td>${i + 1}</td><td>${Number(it.qtd) || 1}</td><td>${esc(it.descricao)}</td>
-    <td>${or(it.linha)}</td></tr>`).join('')
-  const parcelas = (d.parcelas || []).filter((p) => Number(p.valor) > 0)
-  const linhasParc = parcelas.map((p) => `<tr><td>${p.numero}</td><td>${p.marco === 'dois_dias_antes_entrega' ? '2 dias corridos antes da entrega' : fmtDate(p.vencimento)}</td><td style="text-align:right">${brl(p.valor)}</td></tr>`).join('')
-  const clausulas = corpo
-    ? preencher(corpo).split(/\n\n+/).map((p) => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`).join('')
-    : '<p class="muted">Cláusulas do modelo não cadastradas.</p>'
-
-  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
-<title>Contrato ${esc(d.numero)} — ${esc(d.cliente_nome)}</title>
-<style>
-  @page { size: A4; margin: 12mm; }
-  * { box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; color: #111; font-size: 11px; line-height: 1.45; }
-  .head { display: flex; justify-content: space-between; align-items: center; border: 1px solid #111; padding: 8px 12px; }
-  .head .logo { font-family: Georgia, serif; font-size: 20px; letter-spacing: 2px; border: 1px solid #111; padding: 6px 12px; }
-  .head .co { text-align: center; flex: 1; }
-  .head .co b { font-size: 12px; } .head .co div { font-size: 10px; color: #333; }
-  .head .num { text-align: right; font-size: 11px; } .head .num b { font-size: 15px; }
-  table { width: 100%; border-collapse: collapse; margin: 0; }
-  th, td { border: 1px solid #888; padding: 4px 6px; font-size: 10.5px; text-align: left; vertical-align: top; }
-  th { background: #eee; font-size: 9.5px; text-transform: uppercase; letter-spacing: .5px; }
-  .kv td { padding: 4px 6px; } .kv b { color: #333; }
-  h1 { font-size: 13px; text-align: center; margin: 16px 0 10px; }
-  .clauses p { margin: 0 0 6px; text-align: justify; font-size: 10.5px; }
-  .sign { display: flex; justify-content: space-between; margin-top: 44px; }
-  .sign div { width: 45%; border-top: 1px solid #111; padding-top: 5px; text-align: center; font-size: 10px; }
-  .note { text-align: center; font-weight: bold; font-size: 10.5px; margin-top: 16px; }
-  .muted { color: #999; } .mt { margin-top: 8px; }
-  @media print { .noprint { display: none; } }
-</style></head><body>
-  ${pendente ? '<p style="border:2px solid #9a3412;padding:12px;text-align:center;color:#9a3412"><b>MINUTA NÃO APROVADA — somente para conferência, não válida para assinatura.</b><br>A emissão depende da conclusão das autorizações no sistema.</p>' : ''}
-  <p style="border:1px solid #999;padding:8px;text-align:center"><b>MINUTA PARA REVISÃO — condições de garantia, cancelamento e crédito pendentes de consolidação antes da assinatura.</b></p>
-  <div class="head">
-    <div class="logo">LB</div>
-    <div class="co"><b>${EMPRESA.nome}</b><div>CNPJ: ${EMPRESA.cnpj}</div><div>${EMPRESA.end}</div><div>Tel: ${EMPRESA.tel}</div><div>${EMPRESA.site} · ${EMPRESA.email}</div></div>
-    <div class="num">CONTRATO N.º<br><b>${esc(d.numero)}</b></div>
-  </div>
-
-  <table class="kv mt"><tr>
-    <td><b>Responsável pela venda:</b> ${or(d.vendedor)}</td>
-    <td><b>Loja:</b> ${or(d.loja)}</td>
-    <td><b>Data:</b> ${fmtDate(d.data_contrato)}</td>
-    <td><b>Tipo:</b> ${or(d.tipo_contrato)}</td>
-  </tr></table>
-
-  <table class="kv">
-    <tr><td colspan="2"><b>Cliente:</b> ${or(d.cliente_nome)}</td><td><b>CPF/CNPJ:</b> ${or(d.cliente_cpf)}</td><td><b>Nasc.:</b> ${d.cliente_nascimento ? fmtDate(d.cliente_nascimento) : '—'}</td></tr>
-    <tr><td><b>RG/Insc.:</b> ${or(d.cliente_rg)}</td><td><b>Telefone:</b> ${or(d.cliente_telefone)}</td><td><b>E-mail:</b> ${or(d.cliente_email)}</td><td><b>Profissão:</b> ${or(d.cliente_profissao)}</td></tr>
-    <tr><td colspan="3"><b>Endereço:</b> ${or(d.endereco)} · ${or(d.bairro)}</td><td><b>${or(d.cidade)}/${or(d.uf)}</b> ${esc(d.cep)}</td></tr>
-    <tr><td colspan="3"><b>Entrega:</b> ${or(d.entrega_endereco || d.endereco)}</td><td><b>Prazo:</b> ${or(d.prazo_entrega)}</td></tr>
-  </table>
-
-  <table class="mt">
-    <tr><th>Item</th><th>Qtd</th><th>Descrição / Ambiente</th><th>Linha</th></tr>
-    ${linhasItens || '<tr><td colspan="4" class="muted">Sem itens.</td></tr>'}
-    <tr><td colspan="3" style="text-align:right"><b>Valor final contratado</b></td><td style="text-align:right"><b>${brl(total)}</b></td></tr>
-  </table>
-
-  <table class="kv mt"><tr><td><b>Observação:</b> ${[esc(d.led_incluso), esc(d.observacao_ambientes)].filter(Boolean).join(' · ') || '—'}</td></tr></table>
-
-  <table class="kv mt"><tr>
-    <td><b>Total a ser pago:</b> ${brl(totalPagar)}</td>
-    <td><b>Data da entrada:</b> ${d.data_entrada ? fmtDate(d.data_entrada) : '—'}</td>
-    <td><b>Condição de pagamento:</b> ${or(d.condicao_pagamento)}</td>
-    <td><b>Forma de pagamento:</b> ${or(d.forma_pagamento)}</td>
-  </tr></table>
-  ${eAvista ? '<table class="kv"><tr><td><b>Pagamento à vista:</b> o saldo restante deverá ser quitado até 2 (dois) dias corridos antes da data prevista para a entrega dos móveis.</td></tr></table>' : ''}
-
-  <table class="mt">
-    <tr><th>Parcela</th><th>Vencimento</th><th style="text-align:right">Valor</th></tr>
-    ${linhasParc || '<tr><td colspan="3" class="muted">Sem parcelas.</td></tr>'}
-  </table>
-
-  <h1>CONTRATO DE COMPRA E VENDA DE PRODUTO E DE PRESTAÇÃO DE SERVIÇO</h1>
-  <div class="clauses">${clausulas}</div>
-
-  <div class="note">PARA PAGAMENTOS À VISTA, A SEGUNDA PARCELA DEVERÁ SER QUITADA ATÉ 2 (DOIS) DIAS CORRIDOS ANTES DA DATA PREVISTA PARA A ENTREGA DOS MÓVEIS, CONDIÇÃO INDISPENSÁVEL PARA O INÍCIO DA MONTAGEM.</div>
-
-  <div class="sign">
-    <div>CONTRATADA: ${EMPRESA.nome}</div>
-    <div>CONTRATANTE: ${or(d.cliente_nome)}</div>
-  </div>
-
-  <div class="noprint" style="text-align:center;margin-top:22px">
-    <button onclick="window.print()" style="padding:10px 22px;font-size:14px;cursor:pointer">Imprimir / Salvar como PDF</button>
-  </div>
-</body></html>`
-
-  return html
+ const d=contratoPublico(interno),end=enderecoCliente(d)
+ const preencher=t=>t.replace(/\{\{cliente_nome\}\}/g,()=>d.cliente_nome||'—').replace(/\{\{cliente_cpf\}\}/g,()=>d.cliente_cpf||'—').replace(/\{\{cliente_endereco\}\}/g,()=>end||'—')
+ const clausulas=PAGINAS_CONTRATO.map(blocos=>blocos.map(b=>b.startsWith('CLÁUSULA')?`<h2>${esc(b)}</h2>`:`<p class="clausula">${esc(preencher(b))}</p>`).join(''))
+ const valorMoveis=Number(interno.valor_negociado)
+ const temValorMoveis=interno.valor_negociado!=null&&Number.isFinite(valorMoveis)
+ const capa=`<h1>Contrato de compra e venda</h1><p style="font-size:8pt;letter-spacing:1px;color:#666">DE PRODUTO E DE PRESTAÇÃO DE SERVIÇO</p><div class="grade tres" style="margin-top:24px">${campo('Data do contrato',fmtDate(d.data_contrato))}${campo('Responsável pela venda',d.vendedor)}${campo('Loja',d.loja)}</div><hr class="separador"><h3>01 · Cliente e entrega</h3><div class="grade">${campo('Cliente',d.cliente_nome)}${campo('CPF / CNPJ',d.cliente_cpf)}${d.cliente_rg?campo('RG / Inscrição',d.cliente_rg):''}${d.cliente_email?campo('E-mail',d.cliente_email):''}${campo('Telefone',d.cliente_telefone)}${d.cliente_nascimento?campo('Nascimento',fmtDate(d.cliente_nascimento)):''}${campo('Endereço do cliente',end,true)}${campo('Endereço de instalação',d.entrega_endereco||end,true)}</div><div class="total"><span>${temValorMoveis?'VALOR DOS MÓVEIS':'VALOR TOTAL'}</span><b>${brl(temValorMoveis?valorMoveis:d.total_pagar)}</b></div><h3>02 · Condições de pagamento</h3><p>${texto(d.condicao_pagamento)}</p><p>${texto(d.forma_pagamento)}</p>${d.data_entrada?`<p>Data da entrada: ${fmtDate(d.data_entrada)}.</p>`:''}<p>Total a ser pago conforme parcelas: <b>${brl(d.total_pagar)}</b>.</p><p>Prazos de fornecimento e montagem conforme a cláusula 3.3.</p><hr class="separador"><p style="font-size:8pt">${EMPRESA_CONTRATO} · CNPJ 33.834.316/0001-38<br>${ENDERECO_CONTRATO}</p>`
+ const escopo=`<h1>Ambientes e condições do projeto</h1><h3>03 · Ambientes contratados</h3><table><thead><tr><th>Item</th><th>Qtd.</th><th>Ambiente / Produto</th><th>Linha</th></tr></thead><tbody>${d.itens.map((it,i)=>`<tr><td>${i+1}</td><td>${esc(it.qtd||1)}</td><td>${texto(it.descricao)}</td><td>${texto(it.linha)}</td></tr>`).join('')}</tbody></table><h3>04 · Condições específicas do projeto</h3><p>${texto(d.led_incluso)}</p>${d.observacao_ambientes?`<p>${texto(d.observacao_ambientes)}</p>`:''}${d.observacoes?`<p>${texto(d.observacoes)}</p>`:''}`
+ const pagamentos=[]
+ for(let i=0;i<d.parcelas.length;i+=20)pagamentos.push(`<h1>Quadro de pagamento</h1><p>Condição: ${texto(d.condicao_pagamento)}</p><table><thead><tr><th>Parcela</th><th>Data / Vencimento</th><th>Valor</th></tr></thead><tbody>${d.parcelas.slice(i,i+20).map(p=>`<tr><td>${esc(p.numero)}</td><td>${p.marco==='dois_dias_antes_entrega'?'Até 2 dias corridos antes da entrega dos móveis':fmtDate(p.vencimento)}</td><td>${brl(p.valor)}</td></tr>`).join('')}</tbody></table><p>Total contratado: <b>${brl(d.total_pagar)}</b></p>`)
+ return documentoLeBlanc(d,[capa,escopo,...pagamentos,...clausulas,assinaturas(d)],{pendente:interno.status!=='Emitido'})
 }

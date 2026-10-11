@@ -1,32 +1,116 @@
-// Minuta operacional baseada no contrato de cliente fornecido e nas regras de 28/09.
-// Garantias específicas, cancelamento e condições de crédito precisam da revisão final.
-// Referência para revisão: https://www.planalto.gov.br/ccivil_03/leis/l8078compilado.htm
-export const MODELO_CONTRATO = `1. PARTES E DOCUMENTOS
-São partes deste instrumento LE BLANC MÓVEIS E INTERIORES LTDA., CNPJ 33.834.316/0001-38, com endereço na Rua Augusto Stresser, 1109, Juvevê, Curitiba/PR, CEP 80040-310, e o cliente identificado no quadro inicial. O quadro comercial, a relação de ambientes, o projeto aprovado e as guias técnicas assinadas integram a contratação.
-
-2. OBJETO
-O fornecimento compreende os móveis planejados dos ambientes relacionados e os serviços expressamente descritos no quadro comercial e no projeto aprovado. Imagens ilustrativas não incluem automaticamente eletrodomésticos, elementos decorativos, pedras, iluminação ou outros itens. A inclusão de LED, material elétrico, instalação e demais serviços deve ser expressa nas observações e no projeto.
-
-3. VALOR E PAGAMENTO
-O preço final e as parcelas são os apresentados no quadro comercial. Na condição padrão à vista, 60% são devidos no fechamento e 40% até dois dias corridos antes da entrega. Condições diferentes devem constar expressamente do quadro aprovado. Cartão e financiamento seguem a condição contratada e os documentos da operação, que devem informar ao cliente os valores e encargos aplicáveis. A confirmação financeira necessária à montagem considera o cumprimento da obrigação com a loja, e não a antecipação de parcelas futuras devidas à operadora ou financeira.
-
-4. MEDIÇÃO E CONFERÊNCIA
-Após a liberação para medição, a visita técnica será realizada em até cinco dias corridos. A conferência e a confecção das guias técnicas têm prazo de até doze dias úteis contados da realização da medição. O cliente deverá disponibilizar acesso ao imóvel e informações necessárias ao projeto. A equipe encaminhará o projeto para aprovação e as guias para assinatura.
-
-5. APROVAÇÃO, PRODUÇÃO E ENTREGA
-O prazo de entrega dos móveis no endereço contratado é de até trinta e cinco dias úteis contados da aprovação do projeto pelo cliente. O pedido é implantado após aprovação e assinatura das guias. A loja coordena os procedimentos com a fábrica, o transporte e o contato para confirmação de recebimento. As datas de implantação e de pagamento à fábrica não reiniciam o prazo de entrega. Para contagem operacional dos dias úteis, considera-se o calendário de Curitiba/PR, excluídos sábados, domingos e feriados.
-
-6. VENDA FUTURA
-Na venda futura, o cliente comunica quando o imóvel estiver pronto para medição. O aviso e a liberação ficam registrados, seguindo-se medição, conferência, aprovação e entrega nos marcos descritos neste instrumento. O prazo de entrega não começa na assinatura inicial da venda futura, mas na aprovação do projeto pelo cliente.
-
-7. ENTREGA E MONTAGEM
-A logística confirma previamente a disponibilidade do cliente para receber. O local deverá estar acessível, com condições para entrega e instalação e com as informações técnicas necessárias. Inclusões e exclusões de serviços devem ser expressas no projeto e nas observações. A agenda de montagem será confirmada após a conferência financeira da quitação exigível perante a loja. Ao concluir a montagem, as partes registram a conclusão e eventuais pendências no termo correspondente.
-
-8. ALTERAÇÕES, PENDÊNCIAS E ATENDIMENTO
-Alterações solicitadas após a aprovação devem ser documentadas, com descrição, eventual diferença de preço e efeitos no cronograma, para concordância das partes. Problemas identificados na entrega ou montagem serão registrados e acompanhados até a resolução. A assinatura do termo de montagem com ressalvas não encerra as pendências nele indicadas nem afasta direitos do cliente.
-
-9. GARANTIAS E CONDIÇÕES COMPLEMENTARES
-As garantias específicas de produtos, componentes e serviços devem constar dos termos correspondentes entregues ao cliente, preservadas as garantias e os direitos previstos na legislação aplicável. Antes da assinatura, esta minuta requer a consolidação dos termos de garantia, das condições de cancelamento e, quando houver crédito, das informações e documentos da operação. Não se incorporam automaticamente multas ou exclusões de responsabilidade de versões anteriores.
-
-10. REGISTROS E FOTOGRAFIAS
-As comunicações, aprovações e documentos serão mantidos no atendimento do cliente. Após a finalização dos serviços e pendências, eventual visita para fotografias será combinada com o cliente. O agendamento de fotos não constitui autorização automática de divulgação de imagens.`
+// Base integral dos modelos fornecidos pela loja; dados pessoais parametrizados.
+// A identificação da indústria permanece interna conforme orientação da loja.
+export const PAGINAS_CONTRATO = [
+  [
+    "CLÁUSULA PRIMEIRA - DAS PARTES",
+    "1.1 CONTRATANTE: {{cliente_nome}}, CPF/CNPJ: {{cliente_cpf}}, com endereço {{cliente_endereco}}, doravante denominada simplesmente CONTRATANTE.",
+    "1.2 CONTRATADA: LE BLANC MÓVEIS E INTERIORES LTDA, pessoa jurídica de direito privado, inscrita no CNPJ/MF sob o nº 33.834.316/0001-38, com sede à Rua Augusto Stresser, 1109, Alto da Glória, Curitiba/PR, doravante denominada simplesmente CONTRATADA.",
+    "1.3 A CONTRATANTE, na melhor forma de direito, contrata a CONTRATADA em caráter irrevogável e irretratável, para vender, faturar e prestar serviços relacionados aos produtos descritos no pedido anexo, conforme as cláusulas e condições abaixo.",
+    "CLÁUSULA SEGUNDA - DO OBJETO E DO PREÇO",
+    "2.1 O presente contrato tem como OBJETO a compra e venda de móveis planejados em MDF ou MDP, que serão devidamente aplicados conforme a necessidade estrutural de cada projeto. Os móveis serão instalados pela CONTRATADA no endereço indicado pela CONTRATANTE, de acordo com os pedidos e projetos aprovados, que são partes integrantes deste contrato.",
+    "2.2 SERVIÇOS: O contrato inclui atendimento e interpretação das necessidades da cliente, demonstração de produtos na loja, orientação técnica e comercial, desenvolvimento de projetos, conferência das medidas do local de montagem, fornecimento de acessórios, transporte e montagem, desde a pré-venda até a conclusão da instalação, conforme projetos anexos enviados por e-mail, vistados e em concordância pelas partes.",
+    "2.3 Todos os faturamentos de produtos, transportes e serviços serão realizados direta e exclusivamente pela CONTRATADA e pagos a ela pelo CONTRATANTE ou por um Agente Financeiro por ele contratado.",
+    "2.4 Não integram este contrato o fornecimento de elementos decorativos, como eletrodomésticos, granitos, tapetes, cortinas, espelhos, vidros, etc., que podem estar presentes nos projetos apenas a título de ilustração.",
+    "2.5 Não serão de responsabilidade da CONTRATADA a instalação ou alteração de pontos elétricos ou hidráulicos, ou qualquer outra atividade não concretamente relacionada no pedido ou adendo deste instrumento.",
+    "2.6 Caso o projeto final seja modificado a pedido do CONTRATANTE durante sua execução, e essa alteração implique em diferença de preços, a CONTRATADA está autorizada a emitir, a qualquer tempo, título correspondente à diferença de valores."
+  ],
+  [
+    "CLÁUSULA TERCEIRA - CONDIÇÕES DE FORNECIMENTO E GARANTIA",
+    "3.1 Após a assinatura deste contrato, as partes se obrigam ao seu cumprimento de forma irrevogável e irretratável. Fica vedado o cancelamento da venda por desistência ou arrependimento de qualquer das partes, nos termos do parágrafo 2º do artigo 40 do Código de Defesa do Consumidor (CDC).",
+    "3.2 Por se tratar de mercadoria sob encomenda, não será admitida a desistência da compra ou alteração do projeto aprovado por e-mail após o envio do pedido ao fabricante. Caso o pedido ainda não tenha sido enviado, o cancelamento resultará na aplicação de uma multa de 30% sobre o valor total do contrato, destinada a cobrir despesas com levantamento de medidas, confecção de projeto, conferência, comissões de vendedores, marketing, compra de material, despesas administrativas e demais encargos operacionais.",
+    "3.3 Os produtos serão entregues no prazo de 35 dias úteis a partir da data da assinatura do projeto final, sendo que a equipe de correção de projetos tem o prazo de 12 dias úteis, após a confirmação das medidas técnicas, para enviar o projeto para confirmação da CONTRATANTE. O prazo de entrega poderá ser prorrogado por caso fortuito ou força maior, limitado a 180 dias úteis, após o qual a CONTRATANTE poderá rescindir o contrato, recebendo os valores pagos de forma simples, exceto em caso de má-fé comprovada. Os serviços de montagem serão iniciados em até 5 dias úteis após a confirmação da entrega dos móveis no local. Se algum componente sofrer avaria durante o transporte ou montagem, ele será trocado ou reparado em até 30 dias úteis a partir da constatação do fato.",
+    "3.4 É de responsabilidade da CONTRATANTE deixar o local de entrega e montagem disponível e nas condições necessárias, incluindo liberação de acessos (elevadores, energia elétrica, etc.) e o fornecimento das plantas hidráulicas e elétricas no início da montagem. Havendo necessidade de remoção de rodapé, a CONTRATADA não se responsabiliza pela recolocação.",
+    "3.5 No caso de apartamentos, se alguma peça não couber no elevador ou escadas, o custo do serviço de içamento por empresa especializada em mudanças será por conta da CONTRATANTE.",
+    "3.6 Em caso de reformas, os ambientes deverão estar completamente limpos e as obras concluídas. A desmontagem e transporte de móveis já existentes é de responsabilidade da CONTRATANTE.",
+    "3.7 Na impossibilidade de acesso ao local na data estabelecida, a CONTRATANTE deverá providenciar um depósito alternativo para a entrega imediata, arcando com os ônus respectivos. A nova data de entrega e montagem deverá respeitar uma nova programação logística da CONTRATADA.",
+    "3.8 A CONTRATANTE autoriza empregados, síndico, zelador ou funcionários do imóvel a assinar Notas Fiscais de entrega e formulário de conclusão dos"
+  ],
+  [
+    "serviços, ressalvando eventuais divergências de projeto ou qualidade.",
+    "3.9 A CONTRATANTE é responsável por verificar a altura dos armários e abertura de portas antes de executar rebaixos, sancas de gesso, instalações de luminárias, cortinas, etc.",
+    "3.10 Fica aos cuidados da CONTRATANTE a retirada, antes da entrega dos móveis, de molduras de gesso, rodapés ou qualquer outro acabamento que interfira na instalação. A CONTRATADA não se responsabiliza por eventuais danos caso seus técnicos precisem removê-los.",
+    "3.11 Até a data da instalação, a CONTRATANTE deverá ter no imóvel os eletrodomésticos com as medidas previstas no projeto, além das plantas elétricas, hidráulicas, de gás e outras tubulações não aparentes. A falta de eletrodomésticos como fogão e forno impossibilita a montagem da cozinha. A inobservância dessas obrigações desobriga a CONTRATADA de qualquer responsabilidade por incompatibilidades ou danos nas instalações.",
+    "3.12 Na eventual hipótese de se verificarem incompatibilidades, ausência de componentes ou necessidade de reformulações durante a montagem, os produtos complementares envolverão uma nova contratação.",
+    "3.13 A execução do projeto pode gerar resíduos e pó. A montagem por ambiente pode levar de 3 a 5 dias, dependendo da extensão do projeto. Após a conclusão, os técnicos da CONTRATADA farão a limpeza dos resíduos e deslocarão as embalagens para locais previamente indicados pela CONTRATANTE.",
+    "3.14 Obrigações da CONTRATADA: a) Atender, nos prazos convencionados, as solicitações de entrega, montagem e instalação, bem como prestar assistência técnica por defeitos de fabricação. b) Notificar a CONTRATANTE sobre prorrogações no prazo de montagem por motivo de caso fortuito ou força maior. c) Transmitir ao fabricante, no prazo de 10 dias, as irregularidades nos produtos fornecidos. d) Executar a montagem dos móveis com a melhor técnica e zelo, seguindo os parâmetros dos fabricantes. e) Providenciar a substituição de bens ou partes com defeito de fabricação, transporte ou montagem.",
+    "3.15 A CONTRATADA se exime de responsabilidade por: a) Sobras de obras, paredes frágeis ou de má qualidade que impeçam a sustentação dos móveis. b) Desníveis nas paredes que impossibilitem a instalação segura dos móveis. c) Focos de umidade, exposição excessiva ao sol/luminosidade ou infestação por insetos que possam danificar os bens.",
+    "3.16 Os produtos possuem uma garantia legal contra defeitos aparentes de 90 dias a partir da entrega e emissão da Nota Fiscal. A garantia contratual é de 10 anos para o móvel, 2 anos para puxadores, dobradiças e aramados e 90 dias para fitas de LED, contra defeitos de fabricação."
+  ],
+  [
+    "3.17 São causas de exclusão da garantia: desgaste natural, descoloração pelo tempo, diferenças de tonalidade, uso em condições anormais (sobrecarga de peso, incidência de fogo, umidade, contato prolongado com água, produtos abrasivos, maresia, ferrugem, fungos, cupins, brocas), montagem ou desmontagem por pessoas não credenciadas pela CONTRATADA e falta de manutenção periódica.",
+    "3.18 A CONTRATADA não está autorizada a manipular tubulações elétricas, hidráulicas, telefônicas, etc. É responsabilidade da CONTRATANTE contratar profissionais especializados e realizar dedetização, pois avarias decorrentes desses fatores não são cobertas pela garantia.",
+    "3.19 A garantia contra defeitos de montagem é de 90 dias a partir da assinatura do termo de conclusão do serviço. Após esse prazo, a CONTRATADA prestará assistência técnica mediante a cobrança de Taxa de Visita, além do custo de peças e produtos necessários aos reparos.",
+    "3.20 Não serão aceitos acordos verbais feitos por consultores de vendas ou instaladores. Qualquer ajuste só terá validade se formalizado por escrito e assinado pelas partes ou via meio eletrônico reconhecido pela CONTRATADA.",
+    "CLÁUSULA QUARTA - DOS PAGAMENTOS",
+    "4.1 Os pagamentos devem ser feitos nas datas estipuladas, independentemente do faturamento das mercadorias ou da finalização dos serviços, exceto se for acordado por escrito que o pagamento será feito mediante a entrega dos móveis.",
+    "4.2 Atrasos ou suspensões na entrega por culpa da CONTRATANTE a sujeitarão a eventuais reajustes de preço. Nenhuma suspensão ou atraso será motivo para cancelamento da compra.",
+    "4.3 Greves ou falta de matérias-primas não constituirão descumprimento contratual, podendo implicar uso de material similar ou dilatação de prazos de entrega e pagamento.",
+    "4.4 Os pagamentos obedecerão rigorosamente às parcelas, formas, valores e datas descritas no pedido anexo.",
+    "4.5 O atraso no pagamento sujeita a CONTRATANTE ao pagamento da(s) parcela(s) vencida(s) com correção monetária, juros de 1% ao mês e multa contratual de 10% sobre o montante em aberto.",
+    "4.6 Se os débitos não forem quitados, a CONTRATANTE será constituída em mora, com vencimento antecipado do total da dívida após 15 dias de atraso da 1ª parcela. A CONTRATADA fica autorizada a comunicar os órgãos de proteção ao crédito e a ajuizar ação de execução, com acréscimo de despesas, incluindo honorários de advogado de 20% sobre o valor devido."
+  ],
+  [
+    "4.7 Se a CONTRATANTE optar por financiamento, os títulos serão entregues ao Agente Financeiro. A CONTRATANTE isenta a CONTRATADA de quaisquer ocorrências relativas a pagamentos e títulos, devendo eventuais divergências ser resolvidas diretamente com o Agente Financeiro.",
+    "4.8 O descumprimento do prazo de entrega ou início de montagem por parte da CONTRATADA a sujeita a juros de mora de 0,5% (meio por cento) ao dia sobre o valor já pago pela CONTRATANTE.",
+    "4.9 Caso o valor tenha sido financiado, a devolução de parcelas pagas antes do envio do pedido à fábrica será no valor que a CONTRATADA recebeu da instituição financeira, e não no valor pago pela CONTRATANTE a esta.",
+    "4.10 Nos contratos à vista com pagamento de entrada e saldo 2 dias antes da entrega, caso a CONTRATANTE não quite o saldo na data estipulada, a montagem não será iniciada e o prazo só contará a partir da liquidação, respeitando uma nova programação logística.",
+    "CLÁUSULA QUINTA - DA CESSÃO",
+    "5.1 A CONTRATANTE declara estar ciente de que a CONTRATADA poderá ceder o crédito decorrente da venda parcelada para uma Instituição Financeira, que ficará sub-rogada em todos os direitos da cedente, inclusive o de receber o valor das parcelas. A cessão de crédito será sujeita à aprovação da financeira.",
+    "CLÁUSULA SEXTA - DA RESERVA DE DOMÍNIO",
+    "6.1 No caso de inadimplência no parcelamento direto, a CONTRATADA poderá optar pela rescisão do contrato ou pela cobrança judicial dos títulos.",
+    "6.2 Este pacto de reserva de domínio, aqui expressamente instituído, é aplicável somente a parcelamentos diretos com a CONTRATADA.",
+    "6.3 Em parcelamentos via financeira, a cobrança e eventual execução são de responsabilidade da instituição financeira. No caso de parcelamento direto, se a CONTRATANTE faltar com o pagamento, será constituída em mora e obrigada a restituir os bens, amigavelmente ou conforme o Código de Processo Civil.",
+    "6.4 A falência da CONTRATANTE também resolve o contrato, podendo a CONTRATADA reivindicar os bens.",
+    "6.5 Enquanto não tiver pago integralmente o preço, a CONTRATANTE se obriga a manter os bens em perfeito estado de conservação.",
+    "6.6 A CONTRATADA tem o direito de ceder ou transferir os direitos e ações deste contrato, sem necessidade de consentimento prévio da CONTRATANTE.",
+    "6.7 Ocorrendo rescisão por culpa da CONTRATANTE, será avaliada a depreciação do objeto restituído, sendo descontado o valor restante e o valor das prestações vencidas e não pagas, acrescido dos encargos de financiamento."
+  ],
+  [
+    "6.8 Uma vez pagas todas as parcelas, os bens passam a integrar o patrimônio da CONTRATANTE, livres de quaisquer ônus.",
+    "CLÁUSULA SÉTIMA - DA ENTREGA FUTURA",
+    "7.1 Entende-se por Venda Futura aquela que não pode ser conferida de imediato, seja porque a obra não está concluída ou por solicitação da CONTRATANTE.",
+    "7.2 O prazo de entrega deverá ser acordado na negociação. A CONTRATANTE deverá solicitar a conferência de medidas com antecedência mínima de 45 dias para a adequação do projeto às medidas finais da obra.",
+    "7.3 Caso a alteração implique em restituição de valores, esta será efetivada mediante a aquisição e/ou troca por produtos da indústria contratada.",
+    "7.4 Se o projeto for modificado a pedido da CONTRATANTE, a CONTRATADA poderá emitir o título correspondente à diferença de preço.",
+    "CLÁUSULA OITAVA - DO PRODUTO DE MOSTRUÁRIO",
+    "8.1 No caso de aquisição de produtos do mostruário, a CONTRATANTE está ciente de que o mobiliário será entregue nas condições em que se encontra no showroom.",
+    "8.2 O mobiliário pode conter riscos, batidas e outras avarias, por se tratar de produto em demonstração.",
+    "CLÁUSULA NONA - DAS DISPOSIÇÕES GERAIS",
+    "9.1 A eventual tolerância ou concessão de uma das partes não implicará em alteração ou novação contratual e não impedirá o exercício dos direitos assegurados.",
+    "9.2 Na falta de pagamento pela CONTRATANTE, a CONTRATADA está autorizada a executar este contrato com os encargos previstos, pelos meios legais cabíveis, como execução judicial, protesto e inscrição em cadastros de inadimplentes, observando prazos e procedimentos legais.",
+    "9.3 O presente acordo é sigiloso e respeita a Lei Geral de Proteção de Dados (LGPD).",
+    "CLÁUSULA DÉCIMA - FIAÇÃO ELÉTRICA",
+    "10.1 Não está incluído neste contrato o fornecimento, instalação, adaptação ou alteração de fiação elétrica, pontos de energia, conduítes ou similares. Tais serviços deverão ser contratados pela CONTRATANTE com profissional habilitado."
+  ],
+  [
+    "CLÁUSULA DÉCIMA PRIMEIRA - SERVIÇOS EXTRAS COMBINADOS COM MONTADORES",
+    "11.1 Qualquer serviço não previsto no projeto e acordado diretamente entre a CONTRATANTE e o montador ou ajudante será de responsabilidade exclusiva dessas partes, sem qualquer responsabilidade para a CONTRATADA.",
+    "CLÁUSULA DÉCIMA SEGUNDA - CONTRATAÇÃO PRESENCIAL",
+    "12.1 A CONTRATANTE declara ter comparecido presencialmente à loja, recebido atendimento e aprovado o contrato antes da assinatura, o que afasta a aplicação do art. 49 do CDC (direito de arrependimento de 7 dias).",
+    "CLÁUSULA DÉCIMA TERCEIRA - DO FORO",
+    "13.1 Nas relações de consumo, prevalece o foro do domicílio do consumidor. Nas demais, as partes elegem o Foro da Comarca de Curitiba/PR para dirimir quaisquer dúvidas decorrentes deste instrumento.",
+    "CLÁUSULA DÉCIMA QUARTA - VALIDADE DE COMUNICAÇÕES ELETRÔNICAS E WHATSAPP",
+    "14.1 As partes reconhecem a validade jurídica de comunicações trocadas por e-mail ou aplicativos de mensagens instantâneas (como WhatsApp), especialmente no que diz respeito a aprovações de projeto, envio de plantas, documentos, agendamentos e validações contratuais, desde que realizadas a partir de número ou e-mail previamente cadastrados.",
+    "14.2 Prints de tela, áudios e conversas poderão ser utilizados como prova da manifestação de vontade das partes para fins de execução contratual.",
+    "CLÁUSULA DÉCIMA QUINTA - RESPONSABILIDADE PELAS MEDIDAS FINAIS",
+    "15.1 A CONTRATANTE declara estar ciente de que a execução correta dos móveis planejados depende da conferência técnica das medidas do ambiente pela equipe da CONTRATADA. Caso a CONTRATANTE opte por não agendar essa conferência ou realize alterações posteriores por conta própria, a responsabilidade por incompatibilidades será exclusivamente sua.",
+    "15.2 Caso a CONTRATANTE envie medidas sem visita técnica, assume integralmente os riscos de incompatibilidades, erros de instalação e avarias."
+  ],
+  [
+    "CLÁUSULA DÉCIMA SEXTA - PROTEÇÃO DE DADOS (LGPD)",
+    "16.1 Nos termos da Lei nº 13.709/2018, a CONTRATADA informa que os dados pessoais fornecidos pela CONTRATANTE serão coletados e tratados exclusivamente para a execução do presente contrato, incluindo emissão de documentos fiscais, comunicação, entrega e prestação de serviços.",
+    "16.2 Os dados poderão ser compartilhados com parceiros, fornecedores e prestadores de serviço da CONTRATADA, estritamente necessários para o cumprimento das obrigações contratuais, os quais também deverão observar os princípios da LGPD.",
+    "16.3 A CONTRATANTE poderá, a qualquer momento, exercer seus direitos previstos no artigo 18 da LGPD, como acesso, correção, exclusão, portabilidade e revogação de consentimento, mediante solicitação ao e-mail: contato@leblancmoveis.com.br.",
+    "16.4 A CONTRATADA se compromete a adotar medidas técnicas e administrativas de segurança para proteger os dados pessoais contra acessos não autorizados, perdas ou qualquer forma de tratamento inadequado.",
+    "16.5 Os dados serão mantidos por 120 dias após a conclusão do contrato, exclusivamente para trâmites administrativos, fiscais e operacionais, sendo depois excluídos ou anonimizados, salvo exigência legal de prazo maior.",
+    "16.6 O projeto técnico desenvolvido pela CONTRATADA é protegido pela legislação de direitos autorais (Lei nº 9.610/98) e não poderá ser reproduzido, compartilhado, modificado ou executado por terceiros sem autorização expressa e formal da CONTRATADA.",
+    "CLÁUSULA DÉCIMA SÉTIMA - DIREITOS AUTORAIS DO PROJETO",
+    "17.1 Em caso de violação, a CONTRATANTE responderá por perdas e danos, além de eventuais sanções cíveis e criminais previstas na legislação vigente.",
+    "CLÁUSULA DÉCIMA OITAVA - ASSINATURA ELETRÔNICA",
+    "18.1 As partes reconhecem a validade jurídica deste contrato quando assinado eletronicamente, por meio de plataformas digitais, sistemas de CRM ou mesmo por aceitação via e-mail ou aplicativo de mensagens, nos termos da Medida Provisória nº 2.200-2/2001 e do Código Civil.",
+    "18.2 A assinatura eletrônica possui os mesmos efeitos legais da assinatura manuscrita.",
+    "CLÁUSULA DÉCIMA NONA - DISPOSIÇÕES FINAIS",
+    "19.1 Este contrato poderá ser aditado por meio de termos complementares, inclusive por e-mail, desde que haja manifestação expressa das partes."
+  ]
+]
+export const MODELO_CONTRATO = PAGINAS_CONTRATO.flat().join("\n\n")

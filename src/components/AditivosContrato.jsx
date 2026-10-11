@@ -3,6 +3,7 @@ import {authOn,supabase} from '../lib/supabase.js'
 import {todas} from '../lib/jornada.js'
 import {hojeSP} from '../lib/prazos.js'
 import {fmtDate} from '../lib/format.js'
+import ModeloAditivo from './ModeloAditivo.jsx'
 export default function AditivosContrato({contratoId}){
  const [rows,setRows]=useState([]),[eu,setEu]=useState(null),[erro,setErro]=useState(''),[busy,setBusy]=useState(false),[arquivo,setArquivo]=useState(null),[data,setData]=useState(hojeSP()),[descricao,setDescricao]=useState(''),[valor,setValor]=useState(false),[prazo,setPrazo]=useState(false)
  const valido=contratoId&&/^[0-9a-f-]{36}$/i.test(contratoId)
@@ -21,6 +22,7 @@ export default function AditivosContrato({contratoId}){
  return <section className="card" style={{margin:'16px 0'}}><h3>Aditivos do contrato</h3><p>Guarde cada aditivo assinado junto ao contrato original, com data, motivo e responsável pelo registro.</p>
  <p className="sub">Anexar o aditivo não muda automaticamente os valores, parcelas ou prazos. Alterações financeiras e operacionais precisam de conferência específica.</p>
  {!valido&&<p className="sub">Selecione um contrato salvo para consultar e anexar os aditivos.</p>}
+ {valido&&<ModeloAditivo key={contratoId} contratoId={contratoId} pode={pode}/>}
  {erro&&<div className="login-err" role="alert">{erro}</div>}
  {rows.map(r=><article key={r.id} style={{padding:'14px 0',borderBottom:'1px solid var(--line)'}}><b>Aditivo {r.numero} · assinado em {fmtDate(r.data_assinatura)}</b><p style={{whiteSpace:'pre-wrap'}}>{r.descricao}</p>{(r.altera_valor||r.altera_prazo)&&<p className="badge warn">Conferir {r.altera_valor?'valores':''}{r.altera_valor&&r.altera_prazo?' e ':''}{r.altera_prazo?'prazos':''} antes de atualizar o atendimento</p>}<p className="sub">Registrado em {new Date(r.criado_em).toLocaleString('pt-BR')} · responsável identificado no histórico</p><button className="btn ghost" onClick={()=>abrir(r)}>Abrir {r.nome_arquivo}</button></article>)}
  {valido&&!rows.length&&!erro&&<p>Nenhum aditivo anexado a este contrato.</p>}

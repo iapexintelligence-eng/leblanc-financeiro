@@ -22,6 +22,7 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  create table le_admin.contas_bancarias(id integer primary key,nome text,banco text,saldo numeric,ativo boolean default true,updated_at timestamp,data_saldo_base date);
  create table le_admin.a_receber(id serial primary key,cliente_nome text,descricao text,valor_parcela numeric,data_prevista date,data_recebimento date,status text default 'Pendente',forma_recebimento text,observacoes text,conta_bancaria_id integer);`)
  for(const name of ['20261002144759_jornada.sql','20261002144808_taxas.sql','20261002144904_comercial.sql','20261002144921_integracao.sql','20261002144930_colaboracao_e_revisao_mensal.sql','20261002144940_ativacao_compatibilidade_e_acessos.sql','20261002145427_aditivos_contratuais.sql','20261011193842_xml_final_conferencia.sql','20261011201612_importacao_revisoes_preservada.sql','20261011220000_etapas_historicas.sql','20261011230000_recebimentos_com_comprovante.sql'])await db.exec(await readFile(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'))
+ await db.exec(await readFile(new URL('../supabase/migrations/20261011223808_numeracao_contratos_diaria.sql',import.meta.url),'utf8'))
  const gestor='00000000-0000-4000-8000-000000000001',vendedor='00000000-0000-4000-8000-000000000002',cid='00000000-0000-4000-8000-000000000010'
  await db.exec(`insert into auth.users(id) values('${gestor}'),('${vendedor}');
  insert into le_admin.jornada_acessos values('${gestor}','Gestão','gestor','Priscila',true),('${vendedor}','Venda','vendedor',null,true);
@@ -45,6 +46,13 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  const proposta={modelo_contrato:'Le Blanc',forma_pagamento:'Pix / À vista',regras_versao:'2026-09-28',numero:'COMERCIAL',cliente_nome:'Sintético',itens:[{valor:50000,qtd:1,fornecedor:'Bartzen'}],desconto_tipo:'pct',desconto_valor:40,formas_pagamento:[{forma:'Pix / À vista',valor:34500}],parcelas:[{numero:1,valor:20700,vencimento:'2026-09-28'},{numero:2,valor:13800,marco:'dois_dias_antes_entrega'}]}
  const novo=await db.query('select le_admin.comercial_salvar(null,$1) as c',[JSON.stringify(proposta)])
  assert.equal(Number(novo.rows[0].c.valor_final),34500)
+ const criarNumero=async(data)=>(await db.query('select le_admin.comercial_salvar(null,$1) as c',[JSON.stringify({...proposta,data_contrato:data})])).rows[0].c
+ const dia1=await criarNumero('2027-03-01'),dia2=await criarNumero('2027-03-01'),outroDia=await criarNumero('2027-03-02')
+ assert.equal(dia1.numero,'20270301-01');assert.equal(dia2.numero,'20270301-02');assert.equal(outroDia.numero,'20270302-01')
+ const editado=(await db.query('select le_admin.comercial_salvar($1,$2) as c',[dia1.id,JSON.stringify({...dia1.dados_json,numero:'ALTERAR-NAO'})])).rows[0].c
+ assert.equal(editado.numero,dia1.numero);assert.equal(editado.dados_json.numero,dia1.numero)
+ await db.exec("insert into leblanc.contratos(numero,cliente_nome) values('20270303-99','Histórico sintético')")
+ assert.equal((await criarNumero('2027-03-03')).numero,'20270303-100')
  const alta={...proposta,numero:'ALTA',desconto_valor:45,formas_pagamento:[{forma:'Pix / À vista',valor:31625}],parcelas:[{numero:1,valor:31625,vencimento:'2026-09-28'}]}
  const pend=await db.query('select le_admin.comercial_salvar(null,$1) as c',[JSON.stringify(alta)])
  assert.equal(pend.rows[0].c.status,'Aguardando aprovação')
@@ -302,6 +310,8 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  const novamente=(await db.query('select le_admin.orcamento_converter($1,$2) as c',[o.id,2])).rows[0].c
  assert.equal(convertido.id,novamente.id)
  assert.equal(convertido.dados_json.orcamento_id,o.id)
+ assert.match(convertido.numero,/^\d{8}-\d{2,}$/)
+ assert.equal(convertido.numero,novamente.numero)
  await assert.rejects(os(od,o.id,2),/já convertido/)
  const incompleto=await os({...od,cliente_cpf:''})
  await assert.rejects(db.query('select le_admin.orcamento_converter($1,$2)',[incompleto.id,1]),/Complete/)

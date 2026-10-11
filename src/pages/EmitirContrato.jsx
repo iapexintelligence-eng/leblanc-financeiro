@@ -334,11 +334,6 @@ export default function EmitirContrato({ orcamento = false }) {
     })) }))
   }
 
-  const gerarNumero = () => {
-    const d = new Date()
-    return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}${String(d.getSeconds()).padStart(2, '0')}`
-  }
-
   const montarDados = (numero) => ({ ...f, numero, total_pedido: totalPedido, formas_pagamento: formasPg, regras_versao: VERSAO_REGRAS })
 
   const salvar = async () => {
@@ -349,7 +344,7 @@ export default function EmitirContrato({ orcamento = false }) {
     if(f.itens_extras.length){setErro('Kits ainda aguardam tabela e regra de desconto. Não é possível emitir com valores provisórios.');return}
     setSaving(true)
     try {
-      const numero=f.numero||gerarNumero()
+      const numero=f.numero||'' // O servidor atribui data + sequência diária ao novo contrato.
       const res=await supabase.rpc('comercial_salvar',{p_id:editId?String(editId):null,p_dados:montarDados(numero)})
       if(res.error)throw res.error
       const c=res.data
@@ -525,6 +520,7 @@ export default function EmitirContrato({ orcamento = false }) {
       </div>
 
       <div style={S}>Dados do contrato</div>
+      <div className="field"><label>Número do contrato</label><input className="input" readOnly value={f.numero||'Gerado ao salvar: data + sequência do dia (AAAAMMDD-01)'} /></div>
       <div className="row-3">
         <div className="field"><label>Responsável pela venda</label>
           <select className="input" value={f.vendedor} onChange={(e) => set('vendedor', e.target.value)}>
