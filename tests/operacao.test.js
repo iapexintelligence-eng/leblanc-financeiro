@@ -67,3 +67,17 @@ test('etapas lançadas como já realizadas levam a ficha ao fluxo normal sem che
  const imp={...d,correcao_em:'2026-06-10',aprovacao_em:'2026-06-20',implantacao_em:'2026-07-01',entrega_prazo:'2026-08-10',historico:{...d.historico,correcao_em:{},aprovacao_em:{},implantacao_em:{}}}
  assert.ok(!pendenciasAutomaticas([{id:'x',tipo:'pedido',dados:imp}]).some(p=>/fábrica/.test(p.titulo)))
 })
+
+test('pasta liberada: Rodrigo agenda em 5 dias corridos e depois registra a medida',async()=>{
+ const {noSetor}=await import('../src/lib/setores.js')
+ const lib={liberacao_em:'2026-10-13',medicao_prazo:'2026-10-18',entrada_confirmada:true,planta_enviada_em:'2026-10-10'}
+ const p1=pendenciasAutomaticas([{id:'a',tipo:'pedido',dados:lib}])
+ assert.deepEqual(p1.map(p=>[p.titulo,p.papel,p.prazo]),[['Agendar a medida técnica com o cliente','medidor','2026-10-18']])
+ const p2=pendenciasAutomaticas([{id:'a',tipo:'pedido',dados:{...lib,medicao_agendada:'2026-10-16'}}])
+ assert.deepEqual(p2.map(p=>[p.papel,p.prazo]),[['medidor','2026-10-16']])
+ const p3=pendenciasAutomaticas([{id:'a',tipo:'pedido',dados:{...lib,medicao_agendada:'2026-10-16',medicao_em:'2026-10-16',correcao_em:'2026-10-28',correcao_prazo:'2026-11-03'}}])
+ assert.ok(p3.some(p=>p.titulo==='Agendar com o cliente a assinatura das guias técnicas na loja'&&p.papel==='correcao'))
+ // Rodrigo vê a venda desde o fechamento, mesmo antes da pasta liberada.
+ assert.equal(noSetor({tipo:'pedido',dados:{venda_data:'2026-10-12'}},'medicao'),true)
+ assert.equal(noSetor({tipo:'pedido',dados:{...lib,medicao_em:'2026-10-16'}},'medicao'),false)
+})

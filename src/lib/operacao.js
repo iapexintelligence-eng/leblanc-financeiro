@@ -1,7 +1,7 @@
 import { hojeSP, somarDias, somarUteis, util, dataValida } from './prazos.js'
 import { setorPedido, SETORES, prazoImportado, setorImportado } from './setores.js'
 
-export const PAPEIS={vendedor:'Vendas',correcao:'Conferência',logistica:'Glauci · logística',financeiro:'Leia · financeiro',gestor:'Gestão'}
+export const PAPEIS={vendedor:'Vendas',medidor:'Rodrigo · medida técnica',correcao:'Conferência',logistica:'Glauci · logística',financeiro:'Leia · financeiro',gestor:'Gestão'}
 export const MARCOS={'':'Não bloqueia avanço',liberacao_em:'Liberação para medição',implantacao_em:'Implantação na fábrica',confirmada:'Liberação da escala',entrega_em:'Entrega',fotos_em:'Fotos'}
 export function situacoesSeparadas(d) {
  return {comercial:d.tipo_venda==='Futura'&&!d.imovel_pronto_em?'Venda futura · aguarda imóvel':'Venda fechada',operacional:SETORES[setorPedido(d)]?.titulo||'Em acompanhamento',financeiro:d.saldo_confirmado?'Quitação conferida':d.entrada_confirmada?'Entrada conferida · saldo pendente':d.historico?.liberacao_em?'Entrada anterior ao sistema · saldo a conferir':'Entrada pendente de conferência'}
@@ -28,9 +28,10 @@ export function pendenciasAutomaticas(registros,feriados=[]) {
    if(!d.entrada_confirmada)add(r,'Conferir entrada e comprovante','financeiro',null)
   }
   if(d.tipo_venda==='Futura'&&!d.imovel_pronto_em&&!hist.liberacao_em){add(r,'Acompanhar aviso de imóvel pronto','vendedor',null);continue}
-  if(d.liberacao_em&&!d.medicao_em)add(r,'Acompanhar medição com Rodrigo','correcao',d.medicao_prazo)
+  if(d.liberacao_em&&!d.medicao_em&&!d.medicao_agendada)add(r,'Agendar a medida técnica com o cliente','medidor',d.medicao_prazo)
+  if(d.liberacao_em&&!d.medicao_em&&d.medicao_agendada)add(r,'Fazer a medida técnica agendada e registrar a conclusão','medidor',d.medicao_agendada)
   if(d.medicao_em&&!d.correcao_em)add(r,'Concluir conferência e guias técnicas','correcao',d.correcao_prazo)
-  if(d.correcao_em&&!d.aprovacao_em)add(r,'Obter aprovação e guias assinadas','correcao',null)
+  if(d.correcao_em&&!d.aprovacao_em)add(r,d.guias_agendadas?'Cliente assina as guias técnicas na loja':'Agendar com o cliente a assinatura das guias técnicas na loja','correcao',d.guias_agendadas||null)
   if(d.aprovacao_em&&!d.implantacao_em)add(r,'Anexar XML final, aguardar OK da Leia e implantar','correcao',d.entrega_prazo)
   if(d.implantacao_em&&!d.fabrica_paga&&!hist.implantacao_em)add(r,'Conferir pagamento da fábrica','financeiro',null)
   if(d.carregamento_em&&!d.cliente_recebe_em)add(r,'Confirmar com cliente que pode receber','logistica',d.entrega_prevista||d.entrega_prazo)

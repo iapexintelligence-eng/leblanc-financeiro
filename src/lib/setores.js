@@ -1,8 +1,9 @@
 import { somarUteis, somarDias } from './prazos.js'
 export const SETORES = {
  vendas:{titulo:'Vendas',descricao:'Propostas, contratos e checklist. Vendas futuras ficam separadas até a liberação do imóvel.',tipos:['pedido']},
- correcao:{titulo:'Correção',descricao:'Medição em até 5 dias corridos; conferência e guias em até 12 dias úteis após a medição.',tipos:['pedido']},
- liberacao:{titulo:'Liberação',descricao:'Aprovação e guias assinadas, implantação pelo conferente e pagamento da fábrica pela Leia.',tipos:['pedido']},
+ medicao:{titulo:'Medida técnica',descricao:'Vendas fechadas aguardando a medida. Quando o vendedor libera a pasta do cliente, Rodrigo tem 5 dias corridos para agendar a medida; depois registra a conclusão, que inicia os 12 dias úteis da Giovanna.',tipos:['pedido']},
+ correcao:{titulo:'Correção',descricao:'Pasta liberada pelo vendedor: Rodrigo agenda a medida técnica em até 5 dias corridos. Concluída a medida, Giovanna tem 12 dias úteis para conferência e guias e depois agenda a assinatura das guias na loja.',tipos:['pedido']},
+ liberacao:{titulo:'Liberação',descricao:'Guias técnicas assinadas na loja (início dos 35 dias úteis), implantação pelo conferente e pagamento da fábrica pela Leia.',tipos:['pedido']},
  montagem:{titulo:'Montagem',descricao:'Glauci acompanha o recebimento, organiza a entrega e agenda os montadores. A escala depende da quitação conferida.',tipos:['pedido','agenda','frete']},
  qualidade:{titulo:'Qualidade',descricao:'Conclusão da montagem, termo assinado, assistências em até 30 dias úteis e agendamento das fotos.',tipos:['pedido','assistencia']},
 }
@@ -23,6 +24,7 @@ export function setorPedido(d) {
 }
 export function noSetor(registro,setor) {
  if(!setor)return true
+ if(setor==='medicao')return registro.tipo==='pedido'&&!registro.dados.medicao_em&&!registro.dados.importacao_revisoes?.medida&&['vendas','correcao'].includes(setorPedido(registro.dados))
  if(registro.tipo==='pedido')return setorPedido(registro.dados)===setor
  return SETORES[setor]?.tipos.includes(registro.tipo)||false
 }

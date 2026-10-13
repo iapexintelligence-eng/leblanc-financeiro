@@ -21,7 +21,7 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  create table leblanc.contrato_historico(contrato_id uuid,numero text,acao text,descricao text,editado_por text,alteracoes jsonb);
  create table le_admin.contas_bancarias(id integer primary key,nome text,banco text,saldo numeric,ativo boolean default true,updated_at timestamp,data_saldo_base date);
  create table le_admin.a_receber(id serial primary key,cliente_nome text,descricao text,valor_parcela numeric,data_prevista date,data_recebimento date,status text default 'Pendente',forma_recebimento text,observacoes text,conta_bancaria_id integer);`)
- for(const name of ['20261002144759_jornada.sql','20261002144808_taxas.sql','20261002144904_comercial.sql','20261002144921_integracao.sql','20261002144930_colaboracao_e_revisao_mensal.sql','20261002144940_ativacao_compatibilidade_e_acessos.sql','20261002145427_aditivos_contratuais.sql','20261011193842_xml_final_conferencia.sql','20261011201612_importacao_revisoes_preservada.sql','20261011220000_etapas_historicas.sql','20261011230000_recebimentos_com_comprovante.sql','20261013140000_vendedor_ve_suas_vendas.sql'])await db.exec(await readFile(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'))
+ for(const name of ['20261002144759_jornada.sql','20261002144808_taxas.sql','20261002144904_comercial.sql','20261002144921_integracao.sql','20261002144930_colaboracao_e_revisao_mensal.sql','20261002144940_ativacao_compatibilidade_e_acessos.sql','20261002145427_aditivos_contratuais.sql','20261011193842_xml_final_conferencia.sql','20261011201612_importacao_revisoes_preservada.sql','20261011220000_etapas_historicas.sql','20261011230000_recebimentos_com_comprovante.sql','20261013140000_vendedor_ve_suas_vendas.sql','20261013150000_medicao_tecnica_rodrigo.sql'])await db.exec(await readFile(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'))
  await db.exec(await readFile(new URL('../supabase/migrations/20261011223808_numeracao_contratos_diaria.sql',import.meta.url),'utf8'))
  await db.exec(await readFile(new URL('../supabase/migrations/20261011225405_registro_liberacao_comercial.sql',import.meta.url),'utf8'))
  const gestor='00000000-0000-4000-8000-000000000001',vendedor='00000000-0000-4000-8000-000000000002',cid='00000000-0000-4000-8000-000000000010'
@@ -279,6 +279,27 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  await assert.rejects(lancar([101],'2026-10-05',10,'Pix',1,vendedor+'/c3.pdf'),/financeiro/)
  await db.exec(`select set_config('test.uid','${gestor}',false)`)
  assert.ok(parcial.id)
+ // Medição técnica: Rodrigo vê fichas liberadas e registra só agendamento e conclusão da medida.
+ const medidor='00000000-0000-4000-8000-000000000005',cidM='00000000-0000-4000-8000-000000000050',cidN='00000000-0000-4000-8000-000000000051'
+ await db.exec(`insert into auth.users(id) values('${medidor}');insert into le_admin.jornada_acessos values('${medidor}','Rodrigo','medidor',null,true);
+ insert into leblanc.contratos(id,numero,cliente_nome,cliente_endereco) values('${cidM}','M1','Cliente medição','Rua A, 1'),('${cidN}','M2','Cliente sem pasta','Rua B, 2');`)
+ const fM=(await db.query("insert into le_admin.jornada_registros(tipo,contrato_id,dados,criado_por) values('pedido',$1,$2,$3) returning *",[cidM,JSON.stringify({cliente_nome:'Cliente medição',liberacao_em:'2026-10-01',medicao_prazo:'2026-10-06',historico:{liberacao_em:{data:'2026-10-01'}}}),gestor])).rows[0]
+ const fN=(await db.query("insert into le_admin.jornada_registros(tipo,contrato_id,dados,criado_por) values('pedido',$1,'{}',$2) returning *",[cidN,gestor])).rows[0]
+ await db.exec(`grant usage on schema leblanc to authenticated;grant usage on schema auth to authenticated;select set_config('test.uid','${medidor}',false);set role authenticated;`)
+ const vistos=(await db.query("select contrato_id from le_admin.jornada_registros where tipo='pedido'")).rows.map((r)=>r.contrato_id)
+ assert.ok(vistos.includes(cidM)&&vistos.includes(cidN))
+ assert.ok((await db.query('select numero from leblanc.contratos')).rows.some((r)=>r.numero==='M2'))
+ await db.exec('reset role')
+ const savM=(d,id,v)=>db.query('select * from le_admin.jornada_salvar($1,$2,$3,$4,$5)',['pedido',cidM,JSON.stringify(d),id,v]).then((q)=>q.rows[0])
+ const m1=await savM({...fM.dados,medicao_agendada:'2026-10-05'},fM.id,fM.versao)
+ assert.equal(m1.dados.medicao_agendada,'2026-10-05')
+ await assert.rejects(savM({...m1.dados,correcao_em:'2026-10-09'},m1.id,m1.versao),/apenas agendamento/)
+ await assert.rejects(savM({...m1.dados,observacao:'x'},m1.id,m1.versao),/apenas agendamento/)
+ const m2=await savM({...m1.dados,medicao_em:'2026-10-05'},m1.id,m1.versao)
+ assert.ok(m2.dados.correcao_prazo)
+ await assert.rejects(db.query('select * from le_admin.jornada_salvar($1,$2,$3)',['pedido',cidN,'{}']),/apenas agendamento/)
+ await assert.rejects(db.query('select * from le_admin.jornada_salvar($1,$2,$3,$4,$5)',['pedido',cidN,'{"medicao_agendada":"2026-10-20"}',fN.id,fN.versao]),/pasta do cliente/)
+ await db.exec(`select set_config('test.uid','${gestor}',false)`)
  // Conferente vê a situação do XML sem receita, custos ou margem; vendedor não acessa a conferência.
  const conferente='00000000-0000-4000-8000-000000000004'
  await db.exec(`insert into auth.users(id) values('${conferente}');insert into le_admin.jornada_acessos values('${conferente}','Conferente teste','correcao',null,true);select set_config('test.uid','${conferente}',false);`)

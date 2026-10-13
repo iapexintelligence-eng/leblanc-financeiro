@@ -15,6 +15,7 @@ const TITLES = {
  '/historico-operacional':['Consulta','Histórico operacional anterior'],
  '/conferencia-financeira':['Financeiro · Leia','Conferência, margens e autorizações'],
  '/jornada':['Operação','Jornada do cliente'],
+ '/medicao':['Setores','Medida técnica'],
  '/fretes':['Logística','Fretes por viagem'],
  '/agenda-operacional':['Logística','Escalas e previsão'],
  '/assistencias-operacionais':['Pós-venda','Prazos de assistências'],
@@ -50,7 +51,7 @@ const TITLES = {
   '/relatorios': ['Análise', 'Relatórios'],
 }
 
-const PAPEL_TXT = { administrativo: 'Administrativo', diretoria: 'Diretoria', correcao: 'Correção', montagem: 'Montagem', qualidade: 'Qualidade', vendedor: 'Vendedor' }
+const PAPEL_TXT = { medidor: 'Medida técnica', logistica: 'Logística', financeiro: 'Financeiro', gestor: 'Gestão', montador: 'Montador', administrativo: 'Administrativo', diretoria: 'Diretoria', correcao: 'Correção', montagem: 'Montagem', qualidade: 'Qualidade', vendedor: 'Vendedor' }
 
 export default function Layout() {
   const { pathname, search } = useLocation()

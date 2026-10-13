@@ -9,13 +9,14 @@ import {
 // sem roles = só administrativo/diretoria.
 const GROUPS = [
  {label:'Visão geral',items:[
-  {to:'/pendencias',icon:IcoProject,txt:'Pendências da equipe',roles:['vendedor','correcao','logistica','financeiro','gestor']},
+  {to:'/pendencias',icon:IcoProject,txt:'Pendências da equipe',roles:['medidor','vendedor','correcao','logistica','financeiro','gestor']},
   {to:'/',icon:IcoHome,txt:'Visão Geral',end:true},
-  {to:'/jornada',icon:IcoProject,txt:'Jornada do cliente',roles:['vendedor','correcao','logistica','financeiro','gestor','qualidade']},
+  {to:'/jornada',icon:IcoProject,txt:'Jornada do cliente',roles:['medidor','vendedor','correcao','logistica','financeiro','gestor','qualidade']},
  ]},
  {label:'Setores',items:[
   {to:'/orcamentos',icon:IcoSales,txt:'Orçamentos e contratos',roles:['vendedor','financeiro','gestor']},
   {to:'/vendas',icon:IcoSales,txt:'Vendas',roles:['vendedor']},
+  {to:'/medicao',icon:IcoTool,txt:'Medida técnica',roles:['medidor','correcao']},
   {to:'/correcao',icon:IcoTool,txt:'Correção',roles:['correcao']},
   {to:'/liberacao',icon:IcoProject,txt:'Liberação',roles:['correcao','logistica']},
   {to:'/capacidade-montagem',icon:IcoPeople,txt:'Capacidade de montagem',roles:['logistica','gestor']},
@@ -50,7 +51,7 @@ const GROUPS = [
 ]
 
 // Página inicial e rotas extras (fora do menu) de cada setor.
-export const INICIO = { vendedor: '/orcamentos', correcao: '/correcao', logistica: '/montagem', montagem: '/montagem', qualidade: '/qualidade', montador: '/montagem' }
+export const INICIO = { medidor: '/medicao', vendedor: '/orcamentos', correcao: '/correcao', logistica: '/montagem', montagem: '/montagem', qualidade: '/qualidade', montador: '/montagem' }
 const EXTRAS = {
   vendedor: ['/contratos', '/novo-contrato', '/simulador'],
   logistica: ['/fretes', '/agenda', '/agenda-operacional', '/assistencias-operacionais'],
