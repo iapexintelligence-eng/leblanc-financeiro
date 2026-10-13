@@ -101,7 +101,7 @@ export function datasPedido(d, { vendidoEm = null, feriados = [] } = {}) {
   const de = (real, plan) => real ? { data: real, planilha: false } : plan ? { data: plan, planilha: true } : { data: null, planilha: false }
   const venda = de(d.venda_data || vendidoEm, null)
   const liberacao = de(d.liberacao_em, imp.lib_medida)
-  const medida = de(d.medicao_agendada, imp.medida)
+  const medida = de(d.medicao_agendada || d.medicao_em, imp.medida)
   const correcao = de(d.medicao_em, imp.medida)
   const assinatura = de(d.aprovacao_em, imp.assinatura)
   const etapas = [
