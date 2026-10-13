@@ -21,7 +21,7 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  create table leblanc.contrato_historico(contrato_id uuid,numero text,acao text,descricao text,editado_por text,alteracoes jsonb);
  create table le_admin.contas_bancarias(id integer primary key,nome text,banco text,saldo numeric,ativo boolean default true,updated_at timestamp,data_saldo_base date);
  create table le_admin.a_receber(id serial primary key,cliente_nome text,descricao text,valor_parcela numeric,data_prevista date,data_recebimento date,status text default 'Pendente',forma_recebimento text,observacoes text,conta_bancaria_id integer);`)
- for(const name of ['20261002144759_jornada.sql','20261002144808_taxas.sql','20261002144904_comercial.sql','20261002144921_integracao.sql','20261002144930_colaboracao_e_revisao_mensal.sql','20261002144940_ativacao_compatibilidade_e_acessos.sql','20261002145427_aditivos_contratuais.sql','20261011193842_xml_final_conferencia.sql','20261011201612_importacao_revisoes_preservada.sql','20261011220000_etapas_historicas.sql','20261011230000_recebimentos_com_comprovante.sql','20261013140000_vendedor_ve_suas_vendas.sql','20261013150000_medicao_tecnica_rodrigo.sql','20261013160000_gerente_vendas_fabricio.sql'])await db.exec(await readFile(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'))
+ for(const name of ['20261002144759_jornada.sql','20261002144808_taxas.sql','20261002144904_comercial.sql','20261002144921_integracao.sql','20261002144930_colaboracao_e_revisao_mensal.sql','20261002144940_ativacao_compatibilidade_e_acessos.sql','20261002145427_aditivos_contratuais.sql','20261011193842_xml_final_conferencia.sql','20261011201612_importacao_revisoes_preservada.sql','20261011220000_etapas_historicas.sql','20261011230000_recebimentos_com_comprovante.sql','20261013140000_vendedor_ve_suas_vendas.sql','20261013150000_medicao_tecnica_rodrigo.sql','20261013160000_gerente_vendas_fabricio.sql','20261013170000_assistencia_origem_do_erro.sql'])await db.exec(await readFile(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'))
  await db.exec(await readFile(new URL('../supabase/migrations/20261011223808_numeracao_contratos_diaria.sql',import.meta.url),'utf8'))
  await db.exec(await readFile(new URL('../supabase/migrations/20261011225405_registro_liberacao_comercial.sql',import.meta.url),'utf8'))
  const gestor='00000000-0000-4000-8000-000000000001',vendedor='00000000-0000-4000-8000-000000000002',cid='00000000-0000-4000-8000-000000000010'
@@ -40,6 +40,12 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  const assist=await save('assistencia',{identificada:'2026-09-01',descricao:'Teste',status:'Identificada'})
  assert.ok(assist.dados.vencimento)
  await assert.rejects(save('assistencia',{...assist.dados,status:'Resolvida'},assist.id,assist.versao),/Confirme/)
+ await db.query("insert into storage.objects(bucket_id,name) values('jornada-documentos',$1)",[gestor+'/evidencia-assist.pdf'])
+ const assist2=await save('assistencia',{identificada:'2026-09-02',descricao:'Porta riscada',status:'Identificada'})
+ const fechar={...assist2.dados,status:'Resolvida',confirmacao:'Cliente confirmou',evidencia_arquivo:gestor+'/evidencia-assist.pdf'}
+ await assert.rejects(save('assistencia',{...fechar,origem_erro:'A apurar'},assist2.id,assist2.versao),/onde aconteceu o erro/)
+ const fechada=await save('assistencia',{...fechar,origem_erro:'Montagem',responsavel_erro:'Montador teste'},assist2.id,assist2.versao)
+ assert.equal(fechada.dados.status,'Resolvida')
  await assert.rejects(save('assistencia',{...assist.dados,identificada:'2026-09-02'},assist.id,assist.versao),/reiniciar/)
  await db.exec(`select set_config('test.uid','${vendedor}',false)`)
  await assert.rejects(save('assistencia',{identificada:'2026-09-01',descricao:'Teste',status:'Identificada'}),/logística/)
