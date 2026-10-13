@@ -32,6 +32,13 @@ test('ficha importada gera só as pendências da planilha, sem prazos inventados
  assert.match(xs[0].origem,/Planilha de revisões · GIOVANNA · falta guia/)
 })
 
+test('itens da planilha da mesma equipe viram uma linha só por cliente',()=>{
+ const r={id:'i',tipo:'pedido',contrato_id:'c',dados:{cliente_nome:'Cliente',importacao_revisoes:{setor_codigo:'correcao',pendencias:['Conferência/revisão do projeto','Guias técnicas','Itens extras','Assinatura sem data na planilha','Definir conferente']}}}
+ const xs=pendenciasAutomaticas([r])
+ assert.deepEqual(xs.map(x=>[x.titulo,x.papel]),[['Conferência/revisão do projeto · Guias técnicas · Itens extras · Assinatura das guias (sem data)','correcao'],['Definir conferente','gestor']])
+ assert.equal(new Set(xs.map(x=>x.id)).size,xs.length)
+})
+
 test('previsão de montagem segue os prazos da loja e nunca antecipa etapa pendente',async()=>{
  const {previsaoMontagem}=await import('../src/lib/operacao.js')
  const hoje='2026-10-11',fer=['2026-10-12','2026-11-02','2026-11-15','2026-11-20']

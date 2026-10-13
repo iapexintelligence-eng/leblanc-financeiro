@@ -7,6 +7,7 @@ export function situacoesSeparadas(d) {
  return {comercial:d.tipo_venda==='Futura'&&!d.imovel_pronto_em?'Venda futura · aguarda imóvel':'Venda fechada',operacional:SETORES[setorPedido(d)]?.titulo||'Em acompanhamento',financeiro:d.saldo_confirmado?'Quitação conferida':d.entrada_confirmada?'Entrada conferida · saldo pendente':d.historico?.liberacao_em?'Entrada anterior ao sistema · saldo a conferir':'Entrada pendente de conferência'}
 }
 const PAPEL_IMPORTADO={'Assistência aberta':'logistica','Aguardando imóvel / liberação para medição':'vendedor','Definir conferente':'gestor'}
+const TITULO_IMPORTADO={'Assinatura sem data na planilha':'Assinatura das guias (sem data)'}
 export function pendenciasAutomaticas(registros,feriados=[]) {
  const out=[]
  const add=(r,titulo,papel,prazo)=>out.push({id:`${r.id}-${titulo}`,registro_id:r.id,contrato_id:r.contrato_id,cliente:r.dados.cliente_nome,titulo,papel,prazo,origem:'Etapa da jornada'})
@@ -20,7 +21,10 @@ export function pendenciasAutomaticas(registros,feriados=[]) {
   if(imp&&setorImportado(d)){
    // Situação trazida da planilha de revisões: não gera as etapas iniciais nem prazos inventados.
    const est=prazoImportado(d,feriados)
-   for(const p of imp.pendencias||[])out.push({id:`${r.id}-imp-${p}`,registro_id:r.id,contrato_id:r.contrato_id,cliente:d.cliente_nome,titulo:p,papel:PAPEL_IMPORTADO[p]||'correcao',prazo:PAPEL_IMPORTADO[p]?null:est?.prazo||null,origem:`Planilha de revisões${imp.conferente?' · '+imp.conferente:''}${imp.andamento?' · '+imp.andamento:''}`})
+   // Uma linha por cliente e responsável: os itens da planilha da mesma equipe aparecem juntos, não repetidos.
+   const grupos={}
+   for(const p of [...new Set(imp.pendencias||[])]){const papel=PAPEL_IMPORTADO[p]||'correcao';(grupos[papel]||=[]).push(TITULO_IMPORTADO[p]||p)}
+   for(const [papel,itens] of Object.entries(grupos))out.push({id:`${r.id}-imp-${papel}`,registro_id:r.id,contrato_id:r.contrato_id,cliente:d.cliente_nome,titulo:itens.join(' · '),itens,papel,prazo:papel==='correcao'?est?.prazo||null:null,origem:`Planilha de revisões${imp.conferente?' · '+imp.conferente:''}${imp.andamento?' · '+imp.andamento:''}`})
    continue
   }
   // Etapas lançadas como já realizadas dispensam o checklist inicial do fluxo novo.
