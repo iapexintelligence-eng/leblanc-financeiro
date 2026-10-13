@@ -90,3 +90,27 @@ export function previsaoMontagem(d,{dataVenda=null,feriados=[],hoje=hojeSP()}={}
   return fim(somarUteis(somarDias(base,5),12,feriados),'Ainda sem liberação para medição: cálculo a partir de hoje (5 + 12 + 35)','estimado')
  }catch{return null}
 }
+
+// Linha do tempo resumida da ficha: da venda até a liberação para a correção, com os prazos de cada etapa.
+// Clientes vindos da planilha usam as datas registradas nela (marcadas como "planilha") até haver marco real.
+export function datasPedido(d, { vendidoEm = null, feriados = [] } = {}) {
+  const imp = d.importacao_revisoes || {}
+  const de = (real, plan) => real ? { data: real, planilha: false } : plan ? { data: plan, planilha: true } : { data: null, planilha: false }
+  const venda = de(d.venda_data || vendidoEm, null)
+  const liberacao = de(d.liberacao_em, imp.lib_medida)
+  const medida = de(d.medicao_agendada, imp.medida)
+  const correcao = de(d.medicao_em, imp.medida)
+  const assinatura = de(d.aprovacao_em, imp.assinatura)
+  const etapas = [
+    { k: 'venda', rotulo: 'Venda fechada', ...venda },
+    { k: 'liberacao', rotulo: 'Liberado p/ medição', ...liberacao },
+    { k: 'medida', rotulo: d.medicao_em || imp.medida ? 'Dia da medida' : 'Medida agendada', ...medida },
+    { k: 'correcao', rotulo: 'Liberado p/ correção', ...correcao },
+  ]
+  const prazos = []
+  if (liberacao.data && !medida.data) prazos.push({ rotulo: 'Rodrigo agenda a medida até', data: d.medicao_prazo || somarDias(liberacao.data, 5) })
+  if (correcao.data && !d.correcao_em && !assinatura.data) prazos.push({ rotulo: 'Giovanna conclui a correção até', data: d.correcao_prazo || somarUteis(correcao.data, 12, feriados) })
+  if (d.correcao_em && !assinatura.data) prazos.push({ rotulo: 'Correção concluída em', data: d.correcao_em, feito: true })
+  if (assinatura.data && !d.entrega_em) prazos.push({ rotulo: 'Entrega até (35 dias úteis da assinatura)', data: d.entrega_prazo || somarUteis(assinatura.data, 35, feriados) })
+  return { etapas, prazos }
+}

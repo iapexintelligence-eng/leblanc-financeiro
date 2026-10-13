@@ -81,3 +81,13 @@ test('pasta liberada: Rodrigo agenda em 5 dias corridos e depois registra a medi
  assert.equal(noSetor({tipo:'pedido',dados:{venda_data:'2026-10-12'}},'medicao'),true)
  assert.equal(noSetor({tipo:'pedido',dados:{...lib,medicao_em:'2026-10-16'}},'medicao'),false)
 })
+
+test('linha do tempo da ficha: venda, liberação, medida, correção e prazos',async()=>{
+ const {datasPedido}=await import('../src/lib/operacao.js')
+ const novo=datasPedido({venda_data:'2026-10-01',liberacao_em:'2026-10-05'})
+ assert.deepEqual(novo.etapas.map(e=>e.data),['2026-10-01','2026-10-05',null,null])
+ assert.deepEqual(novo.prazos,[{rotulo:'Rodrigo agenda a medida até',data:'2026-10-10'}])
+ const imp=datasPedido({importacao_revisoes:{lib_medida:'2026-05-05',medida:'2026-05-27'}},{vendidoEm:'2026-04-20'})
+ assert.equal(imp.etapas[1].planilha,true);assert.equal(imp.etapas[3].data,'2026-05-27')
+ assert.equal(imp.prazos[0].rotulo,'Giovanna conclui a correção até')
+})
