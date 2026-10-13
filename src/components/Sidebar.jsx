@@ -49,6 +49,21 @@ const GROUPS = [
  ]},
 ]
 
+// Página inicial e rotas extras (fora do menu) de cada setor.
+export const INICIO = { vendedor: '/orcamentos', correcao: '/correcao', logistica: '/montagem', montagem: '/montagem', qualidade: '/qualidade', montador: '/montagem' }
+const EXTRAS = {
+  vendedor: ['/contratos', '/novo-contrato', '/simulador'],
+  logistica: ['/fretes', '/agenda', '/agenda-operacional', '/assistencias-operacionais'],
+  qualidade: ['/assistencias-operacionais'],
+  montagem: ['/agenda', '/agenda-operacional'],
+}
+export function podeVerRota(path, papel) {
+  if (podeTudo(papel)) return true
+  if (!papel) return false
+  if ((EXTRAS[papel] || []).includes(path)) return true
+  return GROUPS.some((g) => g.items.some((it) => it.roles && it.roles.includes(papel) && (it.end ? path === it.to : path === it.to || path.startsWith(it.to + '/'))))
+}
+
 export default function Sidebar({ papel = null }) {
   const vePode = (it) => podeTudo(papel) || (it.roles && it.roles.includes(papel))
   const grupos = GROUPS.map((g) => ({ ...g, items: g.items.filter(vePode) })).filter((g) => g.items.length)

@@ -1,6 +1,6 @@
 import AlertasJornada from './AlertasJornada.jsx'
-import { Outlet, useLocation } from 'react-router-dom'
-import Sidebar from './Sidebar.jsx'
+import { Navigate, Outlet, useLocation } from 'react-router-dom'
+import Sidebar, { INICIO, podeVerRota } from './Sidebar.jsx'
 import { authOn } from '../lib/supabase.js'
 import { signOut } from '../lib/useAuth.js'
 import { useRole } from '../lib/useRole.js'
@@ -58,6 +58,11 @@ export default function Layout() {
   const [crumb, title] = TITLES[pathname] || ['', '']
   const role = useRole()
   const iniciais = (role.nome || 'LB').slice(0, 2).toUpperCase()
+  // Cada setor abre na sua aba e não entra nas telas financeiras pela barra de endereço.
+  if (authOn && !role.loading && role.papel && !podeVerRota(pathname, role.papel)) {
+    const destino = INICIO[role.papel] || '/pendencias'
+    if (destino !== pathname) return <Navigate to={destino} replace />
+  }
   return (
     <div className="app">
       {!noCRM && <Sidebar papel={role.papel} />}
