@@ -75,7 +75,7 @@ const inicial = () => ({
   cliente_telefone: '', cliente_email: '', cliente_profissao: '',
   endereco: '', bairro: '', cidade: 'Curitiba', uf: 'PR', cep: '',
   entrega_endereco: '', entrega_bairro: '', entrega_cidade: '', entrega_uf: 'PR', entrega_cep: '',
-  prazo_entrega: '35 dias úteis após a assinatura das guias técnicas pelo cliente',
+  prazo_entrega: '35 dias úteis a partir da data da assinatura do projeto final',
   led_incluso: 'LED e instalação inclusos',
   itens: [itemVazio()],
   condicao_pagamento: '', forma_pagamento: 'Pix', data_entrada: '',
@@ -556,7 +556,7 @@ export default function EmitirContrato({ orcamento = false }) {
       </div>
       <div className="field"><label>Endereço de entrega (se diferente)</label><input className="input" value={f.entrega_endereco} onChange={(e) => set('entrega_endereco', e.target.value)} /></div>
       <div className="row-3">
-        <div className="field"><label>Prazo de entrega (conta a partir da assinatura das guias técnicas)</label><input className="input" value={f.prazo_entrega} onChange={(e) => set('prazo_entrega', e.target.value)} /></div>
+        <div className="field"><label>Prazo de entrega (igual à cláusula 3.3 do contrato)</label><input className="input" value={f.prazo_entrega} onChange={(e) => set('prazo_entrega', e.target.value)} /></div>
         <div className="field"><label>LED / Instalação</label>
           <select className="input" value={f.led_incluso} onChange={(e) => set('led_incluso', e.target.value)}>
             {LED_OPCOES.map((o) => <option key={o}>{o}</option>)}
