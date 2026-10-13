@@ -65,7 +65,7 @@ function diffContrato(antes, depois) {
   return out
 }
 
-const itemVazio = () => ({ qtd: 1, descricao: '', fornecedor: '', linha: '', prazo: 35, valor: '', corpo: '', porta: '', puxador: '', complemento: '', modelo: '' })
+const itemVazio = () => ({ incluir: true, qtd: 1, descricao: '', fornecedor: '', linha: '', prazo: 35, valor: '', corpo: '', porta: '', puxador: '', complemento: '', modelo: '' })
 const parcelaVazia = (n) => ({ numero: n, vencimento: today(), valor: '' })
 
 const inicial = () => ({
@@ -75,7 +75,7 @@ const inicial = () => ({
   cliente_telefone: '', cliente_email: '', cliente_profissao: '',
   endereco: '', bairro: '', cidade: 'Curitiba', uf: 'PR', cep: '',
   entrega_endereco: '', entrega_bairro: '', entrega_cidade: '', entrega_uf: 'PR', entrega_cep: '',
-  prazo_entrega: '35 dias úteis após a aprovação do projeto pelo cliente',
+  prazo_entrega: '35 dias úteis após a assinatura das guias técnicas pelo cliente',
   led_incluso: 'LED e instalação inclusos',
   itens: [itemVazio()],
   condicao_pagamento: '', forma_pagamento: 'Pix', data_entrada: '',
@@ -128,7 +128,7 @@ export default function EmitirContrato({ orcamento = false }) {
   const abrirOrcamento = async (o) => {
     if(o.contrato_id){await abrirContrato(o.contrato_id);return}
     setEditId(null);setSalvo(null);setOriginal(null);setErro('');setOrcamentoAtual(o)
-    setF({...inicial(),...o.dados});setFormasPg(o.dados.formas_pagamento||[linhaPgVazia()])
+    setF({...inicial(),...o.dados,itens:[...(o.dados.itens||[]),...(o.dados.itens_fora||[])]});setFormasPg(o.dados.formas_pagamento||[linhaPgVazia()])
     const r=await supabase.from('comercial_orcamento_versoes').select('versao,criado_em,autor').eq('orcamento_id',o.id).order('versao',{ascending:false})
     setVersoesOrcamento(r.data||[])
   }
@@ -215,7 +215,7 @@ export default function EmitirContrato({ orcamento = false }) {
       const p = parsePromobXML(text)
       const industria = INDUSTRIAS.includes(p.fornecedor) ? p.fornecedor : (p.fornecedor || '')
       const itensNovos = (p.ambientes.length ? p.ambientes : [{ descricao: '', valor: p.total, fornecedor: industria }])
-        .map((a) => ({ ...itemVazio(), descricao: a.descricao, valor: a.valor || '', fornecedor: industria }))
+        .map((a) => ({ ...itemVazio(), descricao: a.descricao, valor: a.valor || '', fornecedor: industria, origem: 'promob' }))
       const arquivo = await anexarJornada(file)
       setF((s) => ({
         ...s, promob_arquivo:arquivo, promob_original:p,
@@ -240,9 +240,9 @@ export default function EmitirContrato({ orcamento = false }) {
 
   useEffect(() => {
     (async () => {
-      const fu = await supabase.from('funcionarios').select('id, nome_completo, tipo, ativo').eq('ativo', true).order('nome_completo')
-      const fs = (fu.data || []); fs.sort((a, b) => (b.tipo === 'Vendedor') - (a.tipo === 'Vendedor'))
-      setVendedores(fs)
+      // Só a equipe de vendas ativa aparece como responsável pela venda.
+      const fu = await supabase.from('usuarios_sistema').select('id, nome, papel, ativo').eq('ativo', true).eq('papel', 'vendedor').order('nome')
+      setVendedores((fu.data || []).map((v) => ({ id: v.id, nome_completo: v.nome })))
       const m = await crm.from('contrato_modelos').select('nome, ativo').eq('ativo', true).order('nome')
       if (!m.error && m.data?.length) setModelos(m.data.map((x) => x.nome))
       carregarLista()
@@ -262,7 +262,7 @@ export default function EmitirContrato({ orcamento = false }) {
     carregarAnexos(id)
     carregarFluxo(id)
     if (dj) {
-      setF({ ...inicial(), ...dj })
+      setF({ ...inicial(), ...dj, itens: [...(dj.itens || []), ...(dj.itens_fora || [])] })
       setFormasPg(dj.formas_pagamento || [linhaPgVazia()])
     } else {
       // contrato antigo (sem dados_json completo) — reconstrói o básico das colunas
@@ -290,7 +290,8 @@ export default function EmitirContrato({ orcamento = false }) {
 
   const role = useRole()
   let calculo, calculoErro=''
-  try {calculo=calcularProposta(f.itens,f.desconto_valor||0,f.desconto_tipo)} catch(e) {calculoErro=e.message;calculo={original:0,marketing:0,base:0,abatimento:0,percentual:0,limite:0,final:0,exigeAutorizacao:true}}
+  const itensIncluidos=f.itens.filter(i=>i.incluir!==false)
+  try {calculo=calcularProposta(itensIncluidos,f.desconto_valor||0,f.desconto_tipo)} catch(e) {calculoErro=e.message;calculo={original:0,marketing:0,base:0,abatimento:0,percentual:0,limite:0,final:0,exigeAutorizacao:true}}
   const totalPedido=calculo.base, descontoValor=calculo.abatimento, descontoPct=calculo.percentual, valorFinal=calculo.final
   const LIMITE_DESCONTO=calculo.limite, precisaAprovacao=calculo.exigeAutorizacao, bloqueadoDesconto=precisaAprovacao&&!f.desconto_aprovado
   const descVal=Number(f.desconto_valor)||0
@@ -335,7 +336,8 @@ export default function EmitirContrato({ orcamento = false }) {
     })) }))
   }
 
-  const montarDados = (numero) => ({ ...f, numero, total_pedido: totalPedido, formas_pagamento: formasPg, regras_versao: VERSAO_REGRAS })
+  // Ambientes desmarcados ficam guardados à parte e não entram no valor nem no contrato.
+  const montarDados = (numero) => ({ ...f, itens: itensIncluidos, itens_fora: f.itens.filter(i=>i.incluir===false), numero, total_pedido: totalPedido, formas_pagamento: formasPg, loja_liquido_previsto: Math.round(pgLoja*100)/100, regras_versao: VERSAO_REGRAS })
 
   const salvar = async () => {
     if(emOrcamento)return salvarOrcamento()
@@ -349,7 +351,7 @@ export default function EmitirContrato({ orcamento = false }) {
       const res=await supabase.rpc('comercial_salvar',{p_id:editId?String(editId):null,p_dados:montarDados(numero)})
       if(res.error)throw res.error
       const c=res.data
-      setEditId(c.id);setF({...inicial(),...c.dados_json});setOriginal(c.dados_json);setSalvo({...c.dados_json,id:c.id,status:c.status})
+      setEditId(c.id);setF({...inicial(),...c.dados_json,itens:[...(c.dados_json.itens||[]),...(c.dados_json.itens_fora||[])]});setOriginal(c.dados_json);setSalvo({...c.dados_json,id:c.id,status:c.status})
       await carregarLista();await carregarHistorico(c.id)
       const ap=await supabase.rpc('comercial_liberacoes_contrato',{p_contrato:String(c.id)});setAprovacoes(ap.data||[])
       return c
@@ -420,7 +422,6 @@ export default function EmitirContrato({ orcamento = false }) {
       </details>}
       {emOrcamento && versoesOrcamento.length>0 && <details><summary>Histórico do orçamento ({versoesOrcamento.length} versões)</summary>{versoesOrcamento.map(v=><p key={v.versao}>Versão {v.versao} · {new Date(v.criado_em).toLocaleString('pt-BR')}</p>)}</details>}
       {calculoErro&&<p className="login-err">{calculoErro}</p>}
-      <p className="sub">Uso interno: Promob {brl(calculo.original)} + marketing automático de 15% ({brl(calculo.marketing)}). Base de desconto: {brl(totalPedido)}. Limite sem autorização: {LIMITE_DESCONTO}%.</p>
       {salvo && <div className="badge ok" style={{ margin: '12px 0', display: 'inline-block' }}>Contrato {salvo.numero} {salvo.status === 'Rascunho' ? 'salvo como RASCUNHO (você pode completar depois)' : 'salvo · confira a situação de aprovação e os recebíveis da jornada'}</div>}
 
       {lista.length > 0 && (
@@ -471,7 +472,7 @@ export default function EmitirContrato({ orcamento = false }) {
 
       <div style={{ ...S, borderTop: 'none', paddingTop: 0 }}>Importar orçamento do Promob (XML)</div>
       <div style={{ border: '1px solid var(--brand, var(--line-strong))', borderRadius: 10, padding: 14, background: 'var(--surface)' }}>
-        <div className="sub" style={{ marginBottom: 8 }}>Suba o XML exportado do Promob e o sistema preenche cliente, ambientes, indústria e valores automaticamente. Depois é só conferir e completar.</div>
+        <div className="sub" style={{ marginBottom: 8 }}>Suba o XML exportado do Promob uma vez só: ele preenche cliente, ambientes, indústria e valores e já fica guardado como o arquivo do Promob na pasta do cliente.</div>
         <input className="input" type="file" accept=".xml,text/xml,application/xml" onChange={(e) => { importarPromob(e.target.files?.[0]); e.target.value = '' }} />
         {importInfo && <div className="badge ok" style={{ display: 'inline-block', marginTop: 10 }}>{importInfo}</div>}
       </div>
@@ -481,8 +482,8 @@ export default function EmitirContrato({ orcamento = false }) {
       <div style={{ border: '1px solid var(--line)', borderRadius: 10, padding: 14 }}>
         <div className="row-2">
           <div className="field" style={{ margin: 0 }}>
-            <label>Arquivo do Promob (PDF/impressão)</label>
-            <input className="input" type="file" onChange={(e) => { enviarArquivo(e.target.files?.[0], 'promob'); e.target.value = '' }} />
+            <label>Arquivo do Promob</label>
+            <div className="sub" style={{ margin: 0 }}>{f.promob_arquivo ? 'Guardado pelo XML importado acima.' : 'Entra automaticamente ao importar o XML do Promob acima.'}</div>
           </div>
           <div className="field" style={{ margin: 0 }}>
             <label>Outro anexo (imagens, documentos)</label>
@@ -518,7 +519,7 @@ export default function EmitirContrato({ orcamento = false }) {
       <div className="row-3">
         <div className="field"><label>Responsável pela venda</label>
           <select className="input" value={f.vendedor} onChange={(e) => set('vendedor', e.target.value)}>
-            <option value="">— selecione —</option>{vendedores.map((v) => <option key={v.id} value={v.nome_completo}>{v.nome_completo}</option>)}
+            <option value="">— selecione —</option>{f.vendedor && !vendedores.some((v) => v.nome_completo === f.vendedor) && <option value={f.vendedor}>{f.vendedor}</option>}{vendedores.map((v) => <option key={v.id} value={v.nome_completo}>{v.nome_completo}</option>)}
           </select></div>
         <div className="field"><label>Loja</label><input className="input" value={f.loja} onChange={(e) => set('loja', e.target.value)} /></div>
         <div className="field"><label>Data do contrato</label><input className="input" type="date" value={f.data_contrato} onChange={(e) => set('data_contrato', e.target.value)} /></div>
@@ -555,7 +556,7 @@ export default function EmitirContrato({ orcamento = false }) {
       </div>
       <div className="field"><label>Endereço de entrega (se diferente)</label><input className="input" value={f.entrega_endereco} onChange={(e) => set('entrega_endereco', e.target.value)} /></div>
       <div className="row-3">
-        <div className="field"><label>Prazo de entrega</label><input className="input" value={f.prazo_entrega} onChange={(e) => set('prazo_entrega', e.target.value)} /></div>
+        <div className="field"><label>Prazo de entrega (conta a partir da assinatura das guias técnicas)</label><input className="input" value={f.prazo_entrega} onChange={(e) => set('prazo_entrega', e.target.value)} /></div>
         <div className="field"><label>LED / Instalação</label>
           <select className="input" value={f.led_incluso} onChange={(e) => set('led_incluso', e.target.value)}>
             {LED_OPCOES.map((o) => <option key={o}>{o}</option>)}
@@ -565,19 +566,19 @@ export default function EmitirContrato({ orcamento = false }) {
 
       <div id="ambientes-contrato" style={S}>Ambientes / Itens</div>
       <datalist id="lista-industrias">{INDUSTRIAS.map((n) => <option key={n} value={n} />)}</datalist>
-      <div className="sub" style={{ marginTop: -4, marginBottom: 8 }}>No campo <b>Fornecedor</b> escolha a indústria (Bartzen, Menezes…) — pode digitar ou selecionar da lista.</div>
+      <div className="sub" style={{ marginTop: -4, marginBottom: 8 }}>Os ambientes vêm do XML do Promob. Desmarque “Incluir” no ambiente que não entra neste orçamento. A <b>indústria</b> é só para leitura interna do financeiro e do limite de desconto: não sai no contrato nem no orçamento do cliente.</div>
       <div className="table-wrap" style={{ boxShadow: 'none' }}>
         <table>
-          <thead><tr><th>Qtd</th><th>Descrição / Ambiente</th><th>Fornecedor</th><th>Linha</th><th>Prazo</th><th className="num">Valor</th><th></th></tr></thead>
+          <thead><tr><th>Incluir</th><th>Qtd</th><th>Descrição / Ambiente</th><th>Indústria (interno)</th><th>Linha</th><th className="num">Valor Promob</th><th></th></tr></thead>
           <tbody>
             {f.itens.map((it, i) => (
-              <tr key={i}>
+              <tr key={i} style={{ opacity: it.incluir === false ? 0.45 : 1 }}>
+                <td><input type="checkbox" aria-label={`Incluir ${it.descricao || 'ambiente'}`} checked={it.incluir !== false} onChange={(e) => setItem(i, 'incluir', e.target.checked)} /></td>
                 <td><input className="input" style={{ width: 55 }} type="number" value={it.qtd} onChange={(e) => setItem(i, 'qtd', e.target.value)} /></td>
                 <td><input className="input" value={it.descricao} onChange={(e) => setItem(i, 'descricao', e.target.value)} placeholder="Ex.: Estante de livros" /></td>
-                <td><input className="input" style={{ width: 120 }} list="lista-industrias" value={it.fornecedor} onChange={(e) => setItem(i, 'fornecedor', e.target.value)} placeholder="Indústria" /></td>
+                <td><input className="input" style={{ width: 120 }} list="lista-industrias" value={it.fornecedor} readOnly={it.origem === 'promob' && !!it.fornecedor} onChange={(e) => setItem(i, 'fornecedor', e.target.value)} placeholder="Indústria" /></td>
                 <td><input className="input" style={{ width: 110 }} value={it.linha} onChange={(e) => setItem(i, 'linha', e.target.value)} placeholder="Sala de Estar" /></td>
-                <td><input className="input" style={{ width: 60 }} type="number" value={it.prazo} onChange={(e) => setItem(i, 'prazo', e.target.value)} /></td>
-                <td><input className="input" style={{ width: 110 }} type="number" step="0.01" value={it.valor} onChange={(e) => setItem(i, 'valor', e.target.value)} /></td>
+                <td><input className="input" style={{ width: 110 }} type="number" step="0.01" value={it.valor} readOnly={it.origem === 'promob'} title={it.origem === 'promob' ? 'Valor do XML do Promob' : undefined} onChange={(e) => setItem(i, 'valor', e.target.value)} /></td>
                 <td><button className="icon-btn" onClick={() => rmItem(i)} disabled={f.itens.length === 1}>×</button></td>
               </tr>
             ))}
@@ -586,7 +587,10 @@ export default function EmitirContrato({ orcamento = false }) {
       </div>
       <div className="between" style={{ marginTop: 10 }}>
         <button className="btn ghost sm" onClick={addItem}><IcoPlus /> Adicionar item</button>
-        <div>Total do pedido: <b style={{ fontFamily: 'var(--serif)', fontSize: 18 }}>{brl(totalPedido)}</b></div>
+        <div style={{ textAlign: 'right' }}>
+          <div className="sub" style={{ margin: 0 }}>Promob {brl(calculo.original)} + marketing 15% {brl(calculo.marketing)} (interno)</div>
+          <div>Total do pedido: <b style={{ fontFamily: 'var(--serif)', fontSize: 18 }}>{brl(totalPedido)}</b></div>
+        </div>
       </div>
 
       <div id="desconto-contrato" style={S}>Desconto ao cliente</div>
@@ -599,6 +603,7 @@ export default function EmitirContrato({ orcamento = false }) {
         <div className="field"><label>Desconto aplicado</label><input className="input" value={`${brl(descontoValor)} · ${descontoPct.toFixed(1)}%`} disabled /></div>
         <div className="field"><label>Valor final</label><input className="input" value={brl(valorFinal)} disabled /></div>
       </div>
+      <p className="sub">O desconto é calculado sobre o total do pedido (Promob + 15% de marketing). Limite sem autorização: {LIMITE_DESCONTO}%.</p>
       {precisaAprovacao && <p className="sub">Confira os motivos e as orientações na seção de liberação no topo do contrato.</p>}
 
       <div id="pagamento-contrato" style={S}>Pagamento — simulação</div>
@@ -641,7 +646,7 @@ export default function EmitirContrato({ orcamento = false }) {
             )}
             <div className="between" style={{ marginTop: 10, fontSize: 13 }}>
               <span className="muted">{r.n > 1 ? `${r.n}x de ${brl(r.parcela)}` : `1x de ${brl(r.parcela)}`}{r.taxaCliente ? ` · taxa ${r.taxaCliente}%` : ' · sem taxa'}</span>
-              <span>Cliente: <b>{brl(r.valorCliente)}</b> · Loja: <b>{brl(r.lojaRecebe)}</b>{formasPg.length > 1 && <button className="icon-btn" style={{ marginLeft: 8 }} onClick={() => rmFP(i)}>×</button>}</span>
+              <span>Cliente: <b>{brl(r.valorCliente)}</b> · <span title="Interno: não sai no contrato nem no orçamento do cliente">Loja recebe (interno): <b>{brl(r.lojaRecebe)}</b></span>{formasPg.length > 1 && <button className="icon-btn" style={{ marginLeft: 8 }} onClick={() => rmFP(i)}>×</button>}</span>
             </div>
           </div>
         )
@@ -651,9 +656,10 @@ export default function EmitirContrato({ orcamento = false }) {
         <span className={Math.abs(pgRestante) > 0.5 ? 'badge warn' : 'badge ok'}>A alocar: {brl(pgRestante)}</span>
       </div>
       <div className="between" style={{ marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
-        <span className="muted">Cliente paga <b>{brl(pgCliente)}</b> · Loja recebe líquido <b>{brl(pgLoja)}</b></span>
+        <span className="muted">Cliente paga <b>{brl(pgCliente)}</b></span>
         <button className="btn" onClick={aplicarSimulacao}>Aplicar ao contrato → gerar parcelas</button>
       </div>
+      <div style={{ border: '1px dashed var(--warn)', borderRadius: 10, padding: '8px 12px', marginBottom: 12, fontSize: 13 }}>🔒 Interno: a loja recebe líquido <b>{brl(pgLoja)}</b> (taxas {brl(Math.max(0, pgCliente - pgLoja))}). Não sai no contrato nem no orçamento enviado ao cliente; fica salvo para a Léia comparar com o valor recebido.</div>
       <div className="tools"><label>Entrada (%) <input className="input" type="number" min="1" max="99" value={f.entrada_percentual} onChange={e=>set('entrada_percentual',e.target.value)}/></label><button className="btn ghost" onClick={avista}>Aplicar à vista · saldo 2 dias antes da entrega</button></div>
       <p className="sub">Saldo à vista sem data de entrega definida fica com vencimento a confirmar. Qualquer entrada diferente de 60% exige autorização.</p>
       <div className="sub" style={{ marginBottom: 8 }}>Parcelas geradas (pode ajustar manualmente abaixo):</div>
@@ -685,7 +691,7 @@ export default function EmitirContrato({ orcamento = false }) {
       <div style={{ border: '1px solid var(--warn-bg)', borderRadius: 10, padding: 16, marginTop: -6 }}>
         <div className="row-2">
           <div className="field"><label>Onde foi feito o orçamento</label><input className="input" value={f.local_orcamento} onChange={(e) => set('local_orcamento', e.target.value)} placeholder="Ex.: Promob, planilha…" /></div>
-          <div className="field"><label>Custo de marketing para conferência (não confundir com o acréscimo de 15%)</label><input className="input" type="number" step="0.01" value={f.comissao_marketing} onChange={(e) => set('comissao_marketing', e.target.value)} placeholder="valor interno" /></div>
+          <div className="field"><label>Valor adicionado para item comprado por fora</label><input className="input" type="number" step="0.01" value={f.comissao_marketing} onChange={(e) => set('comissao_marketing', e.target.value)} placeholder="valor interno" /></div>
         </div>
         <div className="table-wrap" style={{ boxShadow: 'none' }}>
           <table>
@@ -718,7 +724,7 @@ export default function EmitirContrato({ orcamento = false }) {
         {emOrcamento ? <button className="btn ghost" onClick={converterOrcamento} disabled={saving}>Gerar contrato com estes dados</button> : <button className="btn ghost" onClick={imprimir}>Prévia da minuta / PDF</button>}
       </div>
 
-      <div style={S}>Checklist, medição e correção</div><p>O checklist e as liberações agora são registrados na <Link to="/jornada">Jornada do cliente</Link>. A medição tem 5 dias corridos; a conferência, 12 dias úteis após a medição.</p>
+      <div style={S}>Checklist, pasta do cliente e medida técnica</div><p>Depois da venda, o checklist e a liberação da pasta do cliente são registrados na <Link to="/jornada">Jornada do cliente</Link>. Com a pasta liberada, o Rodrigo tem 5 dias corridos para agendar a medida técnica; a correção tem 12 dias úteis após a medida; a entrega, 35 dias úteis após a assinatura das guias técnicas.</p>
       <Link className="btn" to="/jornada">Abrir checklist e jornada</Link>
     </div>
   )
