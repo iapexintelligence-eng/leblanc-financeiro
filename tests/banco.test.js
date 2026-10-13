@@ -21,7 +21,7 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  create table leblanc.contrato_historico(contrato_id uuid,numero text,acao text,descricao text,editado_por text,alteracoes jsonb);
  create table le_admin.contas_bancarias(id integer primary key,nome text,banco text,saldo numeric,ativo boolean default true,updated_at timestamp,data_saldo_base date);
  create table le_admin.a_receber(id serial primary key,cliente_nome text,descricao text,valor_parcela numeric,data_prevista date,data_recebimento date,status text default 'Pendente',forma_recebimento text,observacoes text,conta_bancaria_id integer);`)
- for(const name of ['20261002144759_jornada.sql','20261002144808_taxas.sql','20261002144904_comercial.sql','20261002144921_integracao.sql','20261002144930_colaboracao_e_revisao_mensal.sql','20261002144940_ativacao_compatibilidade_e_acessos.sql','20261002145427_aditivos_contratuais.sql','20261011193842_xml_final_conferencia.sql','20261011201612_importacao_revisoes_preservada.sql','20261011220000_etapas_historicas.sql','20261011230000_recebimentos_com_comprovante.sql'])await db.exec(await readFile(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'))
+ for(const name of ['20261002144759_jornada.sql','20261002144808_taxas.sql','20261002144904_comercial.sql','20261002144921_integracao.sql','20261002144930_colaboracao_e_revisao_mensal.sql','20261002144940_ativacao_compatibilidade_e_acessos.sql','20261002145427_aditivos_contratuais.sql','20261011193842_xml_final_conferencia.sql','20261011201612_importacao_revisoes_preservada.sql','20261011220000_etapas_historicas.sql','20261011230000_recebimentos_com_comprovante.sql','20261013140000_vendedor_ve_suas_vendas.sql'])await db.exec(await readFile(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'))
  await db.exec(await readFile(new URL('../supabase/migrations/20261011223808_numeracao_contratos_diaria.sql',import.meta.url),'utf8'))
  await db.exec(await readFile(new URL('../supabase/migrations/20261011225405_registro_liberacao_comercial.sql',import.meta.url),'utf8'))
  const gestor='00000000-0000-4000-8000-000000000001',vendedor='00000000-0000-4000-8000-000000000002',cid='00000000-0000-4000-8000-000000000010'
@@ -295,6 +295,22 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  assert.equal((await db.query('select count(*)::int as n from leblanc.contratos')).rows[0].n,0)
  await assert.rejects(db.exec("delete from leblanc.contratos"),/permission denied/)
  await db.exec('reset role')
+ // Vendedor vê e preenche a ficha das próprias vendas mesmo criadas pela gestão, pelo nome no contrato.
+ await db.exec(`select set_config('test.uid','${gestor}',false)`)
+ const cidV='00000000-0000-4000-8000-000000000040',cidO='00000000-0000-4000-8000-000000000041'
+ await db.exec(`insert into leblanc.contratos(id,numero,cliente_nome,vendor) values('${cidV}','V1','Cliente da Andriely','Andriely da Costa'),('${cidO}','V2','Cliente do Murilo','Murilo');
+ insert into le_admin.vendedor_apelidos values('${vendedor}','Andriely');`)
+ const fichaV=(await db.query("insert into le_admin.jornada_registros(tipo,contrato_id,dados,criado_por) values('pedido',$1,'{\"tipo_venda\":\"Normal\"}',$2) returning *",[cidV,gestor])).rows[0]
+ await db.query("insert into le_admin.jornada_registros(tipo,contrato_id,dados,criado_por) values('pedido',$1,'{}',$2)",[cidO,gestor])
+ await db.exec(`select set_config('test.uid','${vendedor}',false);set role authenticated;`)
+ assert.deepEqual((await db.query('select numero from leblanc.contratos order by numero')).rows.map((r)=>r.numero),['V1'])
+ assert.equal((await db.query("select count(*)::int n from le_admin.jornada_registros where tipo='pedido'")).rows[0].n,1)
+ await db.exec('reset role')
+ const fv=(await db.query('select * from le_admin.jornada_salvar($1,$2,$3,$4,$5)',['pedido',cidV,JSON.stringify({...fichaV.dados,grupo_criado:true}),fichaV.id,fichaV.versao])).rows[0]
+ assert.equal(fv.dados.grupo_criado,true)
+ const fo=(await db.query("select * from le_admin.jornada_registros where contrato_id=$1",[cidO])).rows[0]
+ await assert.rejects(db.query('select * from le_admin.jornada_salvar($1,$2,$3,$4,$5)',['pedido',cidO,'{"grupo_criado":true}',fo.id,fo.versao]),/não disponível|outro vendedor/)
+ await db.exec(`select set_config('test.uid','${gestor}',false)`)
  // RLS: montador não lê informações financeiras nem outras escalas.
  await db.exec(`grant usage on schema auth to authenticated;select set_config('test.uid','${montador}',false);set role authenticated;`)
  const visiveis=await db.query('select tipo,dados from le_admin.jornada_registros')
