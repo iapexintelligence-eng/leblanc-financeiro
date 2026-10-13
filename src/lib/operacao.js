@@ -15,6 +15,8 @@ export function pendenciasAutomaticas(registros,feriados=[]) {
   if(r.tipo==='frete'&&d.status==='Liberado para pagamento')add(r,'Pagar frete conferido','financeiro',d.prevista)
   if(r.tipo!=='pedido')continue
   const imp=d.importacao_revisoes
+  // Em espera (venda futura, imóvel ou cliente não liberado): os prazos da etapa ficam parados e só fica o retorno ao cliente.
+  if(d.espera_motivo){out.push({id:`${r.id}-espera`,registro_id:r.id,contrato_id:r.contrato_id,cliente:d.cliente_nome,titulo:`Retomar contato com o cliente · ${d.espera_motivo}`,papel:d.medicao_em||imp?.medida?'correcao':'vendedor',prazo:d.espera_proximo_contato||null,origem:`Em espera${d.espera_contato_em?' · último contato '+d.espera_contato_em.split('-').reverse().join('/'):''}`});continue}
   if(imp&&setorImportado(d)){
    // Situação trazida da planilha de revisões: não gera as etapas iniciais nem prazos inventados.
    const est=prazoImportado(d,feriados)
@@ -72,6 +74,7 @@ export function previsaoMontagem(d,{dataVenda=null,feriados=[],hoje=hojeSP()}={}
  if(!d)return null
  const imp=d.importacao_revisoes&&setorImportado(d)?d.importacao_revisoes:null
  if(d.entrega_em||d.montagem_concluida_em)return null
+ if(d.espera_motivo)return {data:null,base:`Em espera: ${d.espera_motivo}`,tipo:'pendente'}
  if(imp&&['qualidade'].includes(imp.setor_codigo))return null
  const max=(a,b)=>a>b?a:b
  const fim=(aprov,base,tipo)=>({data:somarUteis(max(aprov,hoje),35,feriados),base,tipo})
@@ -108,6 +111,7 @@ export function datasPedido(d, { vendidoEm = null, feriados = [] } = {}) {
     { k: 'correcao', rotulo: 'Liberado p/ correção', ...correcao },
   ]
   const prazos = []
+  if (d.espera_motivo) return { etapas, prazos: [{ rotulo: `Em espera · ${d.espera_motivo}${d.espera_contato_em ? ' · último contato ' + d.espera_contato_em.split('-').reverse().join('/') : ''} · próximo contato`, data: d.espera_proximo_contato || null, espera: true }] }
   if (liberacao.data && !medida.data) prazos.push({ rotulo: 'Rodrigo agenda a medida até', data: d.medicao_prazo || somarDias(liberacao.data, 5) })
   if (correcao.data && !d.correcao_em && !assinatura.data) prazos.push({ rotulo: 'Giovanna conclui a correção até', data: d.correcao_prazo || somarUteis(correcao.data, 12, feriados) })
   if (d.correcao_em && !assinatura.data) prazos.push({ rotulo: 'Correção concluída em', data: d.correcao_em, feito: true })

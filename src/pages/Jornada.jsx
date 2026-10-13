@@ -17,6 +17,7 @@ const TIPOS={pedido:'Jornada do cliente',assistencia:'Assistências',agenda:'Age
 // Campos internos permanecem fora do documento público do contrato.
 const CAMPOS={
  pedido:[
+ ['Em espera · venda futura ou aguardando liberação (pausa os prazos da etapa)'],['espera_motivo','Situação de espera',['Venda futura','Aguardando liberação do imóvel para a medida técnica','Aguardando liberação do cliente']],['espera_contato_em','Data do último contato com o cliente','date'],['espera_proximo_contato','Próximo contato combinado','date'],['espera_obs','O que o cliente informou','textarea'],
  ['Fechamento e checklist'],['venda_data','Fechamento do contrato','date'],['tipo_venda','Tipo de venda',['Normal','Futura']],['imovel_pronto_em','Cliente avisou que o imóvel está pronto','date'],
  ['grupo_criado','Grupo criado: cliente, gestores e setores','check'],['grupo_arquivo','Comprovação do grupo','file'],['imagens_enviadas','Imagens enviadas ao cliente','check'],['imagens_arquivo','Imagens e evidência do envio','file'],
  ['planta_enviada_em','Planta enviada por e-mail ao corretor','date'],['planta_arquivo','Planta baixa do Promob','file'],['informacoes_correcao','Informações para correção','textarea'],
@@ -47,13 +48,14 @@ function LinhaDoTempo({d,vendidoEm,feriados,hoje}) {
  const {etapas,prazos}=datasPedido(d,{vendidoEm,feriados})
  return <div style={{fontSize:12,lineHeight:1.5,minWidth:210}}>
   {etapas.map(e=><div key={e.k} style={{display:'flex',justifyContent:'space-between',gap:10,color:e.data?undefined:'var(--muted)'}}><span>{e.rotulo}</span><b style={{fontWeight:e.data?600:400}}>{e.data?fmtDate(e.data):'—'}{e.planilha&&<span className="sub" style={{margin:0,fontWeight:400}}> (planilha)</span>}</b></div>)}
-  {prazos.map(p=><div key={p.rotulo} style={{marginTop:4,color:!p.feito&&p.data<hoje?'var(--danger)':undefined}}>{p.rotulo}: <b>{fmtDate(p.data)}</b>{!p.feito&&p.data<hoje?' · vencido':''}</div>)}
+  {prazos.map(p=><div key={p.rotulo} style={{marginTop:4,color:p.data&&!p.feito&&p.data<hoje?'var(--danger)':p.espera?'var(--warn)':undefined}}>{p.rotulo}: <b>{p.data?fmtDate(p.data):'a combinar'}</b>{p.data&&!p.feito&&p.data<hoje?' · vencido':''}</div>)}
  </div>
 }
 const inicial=(tipo)=>tipo==='pedido'?{tipo_venda:'Normal'}:tipo==='assistencia'?{identificada:hojeSP(),status:'Identificada',responsavel:'Glauci',causa:'A apurar'}:tipo==='frete'?{status:'Solicitado'}:{}
 const diasDesde=(a,b)=>Math.max(0,Math.round((new Date(b+'T12:00:00Z')-new Date(a+'T12:00:00Z'))/86400000))
 function prazo(r,feriados=[]) {
  const d=r.dados
+ if(r.tipo==='pedido'&&d.espera_motivo) return d.espera_proximo_contato||null
  const est=r.tipo==='pedido'?prazoImportado(d,feriados):null
  if(est) return est.prazo
  if(r.tipo==='assistencia') return d.status==='Resolvida'?null:d.vencimento
@@ -68,6 +70,7 @@ function situacao(r) {
  const d=r.dados
  if(r.tipo==='agenda') return d.confirmada?'Escala liberada':'Reserva interna'
  if(r.tipo!=='pedido') return d.status
+ if(d.espera_motivo) return `Em espera: ${d.espera_motivo}${d.espera_contato_em?` · último contato ${fmtDate(d.espera_contato_em)}`:''}`
  if(d.fotos_em) return 'Fotos agendadas'
  if(d.montagem_concluida_em) return 'Montagem concluída'
  if(d.entrega_em) return 'Entregue'

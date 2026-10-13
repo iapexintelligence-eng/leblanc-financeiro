@@ -91,3 +91,14 @@ test('linha do tempo da ficha: venda, liberação, medida, correção e prazos',
  assert.equal(imp.etapas[1].planilha,true);assert.equal(imp.etapas[3].data,'2026-05-27')
  assert.equal(imp.prazos[0].rotulo,'Giovanna conclui a correção até')
 })
+
+test('em espera: pausa os prazos da etapa e gera só o retorno ao cliente',async()=>{
+ const {datasPedido,previsaoMontagem}=await import('../src/lib/operacao.js')
+ const d={liberacao_em:'2026-10-01',medicao_prazo:'2026-10-06',espera_motivo:'Aguardando liberação do imóvel para a medida técnica',espera_contato_em:'2026-10-10',espera_proximo_contato:'2026-11-10'}
+ const p=pendenciasAutomaticas([{id:'x',tipo:'pedido',dados:d}])
+ assert.equal(p.length,1);assert.equal(p[0].papel,'vendedor');assert.equal(p[0].prazo,'2026-11-10')
+ assert.equal(datasPedido(d).prazos[0].espera,true)
+ assert.equal(previsaoMontagem(d,{hoje:'2026-10-13'}).tipo,'pendente')
+ const imp={espera_motivo:'Aguardando liberação do cliente',importacao_revisoes:{setor_codigo:'correcao',medida:'2026-05-27',pendencias:['Guias técnicas']}}
+ assert.deepEqual(pendenciasAutomaticas([{id:'y',tipo:'pedido',dados:imp}]).map(x=>x.papel),['correcao'])
+})
