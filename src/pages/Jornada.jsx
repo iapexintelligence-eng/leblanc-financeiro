@@ -34,7 +34,7 @@ const CAMPOS={
  ],
  assistencia:[
  ['Ocorrência'],['identificada','Problema identificado em','date'],['descricao','Descrição do problema','textarea'],['ambiente','Ambiente / peça afetada'],['foto_arquivo','Fotos da ocorrência','file'],['montagem_id','Montagem de origem','montagem'],['montador_original','Montador da montagem original'],
- ['Onde foi o erro · Glauci define (obrigatório para encerrar)'],['origem_erro','Etapa onde aconteceu o erro',ORIGENS_ERRO],['responsavel_erro','Quem responde pelo erro (pessoa, indústria, montador ou transportadora)','responsavel'],['analise_erro','Como foi apurado','textarea'],
+ ['Onde foi o erro · Léia registra (obrigatório para encerrar)'],['origem_erro','Etapa onde aconteceu o erro',ORIGENS_ERRO],['responsavel_erro','Quem responde pelo erro (pessoa, indústria, montador ou transportadora)','responsavel'],['analise_erro','Como foi apurado','textarea'],
  ['Atendimento'],['responsavel','Responsável pelo atendimento'],['status','Situação',['Identificada','Em análise','Peças solicitadas','Aguardando peças','Atendimento agendado','Executada','Resolvida']],['pecas','Peças necessárias','textarea'],['proxima_acao','Próxima ação'],['prevista','Previsão da próxima ação','date'],['realizada','Visita realizada','date'],['visitas','Quantas idas ao cliente até resolver','number'],['confirmacao','Confirmação de que o problema foi resolvido','textarea'],['evidencia_arquivo','Evidência de resolução / termo quando disponível','file'],
  ['Custos · os fretes ligados a esta assistência somam automaticamente'],['custo_pecas','Peças / material','number'],['custo_mao_obra','Mão de obra (montador)','number'],['custo_outros','Outros custos','number'],
  ['Cobrança do responsável'],['cobranca_status','Situação da cobrança',STATUS_COBRANCA],['cobranca_valor','Valor cobrado do responsável','number'],['cobranca_em','Cobrado em','date'],['ressarcido_valor','Valor ressarcido','number'],['cobranca_arquivo','Comprovante da cobrança / ressarcimento','file'],['cobranca_obs','Observações da cobrança','textarea']],
@@ -59,7 +59,7 @@ function LinhaDoTempo({d,vendidoEm,feriados,hoje}) {
   {prazos.map(p=><div key={p.rotulo} style={{marginTop:4,color:(p.data&&!p.feito&&p.data<hoje)||p.atraso?'var(--danger)':p.espera?'var(--warn)':undefined}}>{p.rotulo}: <b>{p.data?fmtDate(p.data):'a combinar'}</b>{p.data&&!p.feito&&p.data<hoje?' · vencido':''}{p.atraso?' · depois do prazo do contrato':''}</div>)}
  </div>
 }
-const inicial=(tipo)=>tipo==='pedido'?{tipo_venda:'Normal'}:tipo==='assistencia'?{identificada:hojeSP(),status:'Identificada',responsavel:'Glauci',origem_erro:'A apurar',cobranca_status:'A cobrar'}:tipo==='frete'?{status:'Solicitado'}:{}
+const inicial=(tipo)=>tipo==='pedido'?{tipo_venda:'Normal'}:tipo==='assistencia'?{identificada:hojeSP(),status:'Identificada',responsavel:'Glauci (atendimento)',origem_erro:'A apurar',cobranca_status:'A cobrar'}:tipo==='frete'?{status:'Solicitado'}:{}
 const diasDesde=(a,b)=>Math.max(0,Math.round((new Date(b+'T12:00:00Z')-new Date(a+'T12:00:00Z'))/86400000))
 function prazo(r,feriados=[]) {
  const d=r.dados
