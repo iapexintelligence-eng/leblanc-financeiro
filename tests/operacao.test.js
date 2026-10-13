@@ -102,3 +102,23 @@ test('em espera: pausa os prazos da etapa e gera só o retorno ao cliente',async
  const imp={espera_motivo:'Aguardando liberação do cliente',importacao_revisoes:{setor_codigo:'correcao',medida:'2026-05-27',pendencias:['Guias técnicas']}}
  assert.deepEqual(pendenciasAutomaticas([{id:'y',tipo:'pedido',dados:imp}]).map(x=>x.papel),['correcao'])
 })
+
+test('datas da planilha escritas como texto não quebram a linha do tempo',async()=>{
+ const {datasPedido,previsaoMontagem}=await import('../src/lib/operacao.js')
+ const casos=[{lib_medida:'P/JULHO',medida:'2026-04-16',setor_codigo:'correcao'},{lib_medida:'ja tem medida',setor_codigo:'correcao'},{lib_medida:'LIBERADO',medida:'2026-10-07',setor_codigo:'correcao'},{medida:'DEZEMBRO',setor_codigo:'correcao'},{medida:'?',lib_medida:'2026-09-28',setor_codigo:'correcao'},{lib_medida:'Proximo a Dezembro',setor_codigo:'vendas'}]
+ for(const imp of casos){
+  const d={venda_data:'2026-03-17',importacao_revisoes:imp}
+  const r=datasPedido(d)
+  assert.ok(r.etapas.length===4)
+  assert.ok(r.prazos.every(p=>p.data===null||/^\d{4}-\d{2}-\d{2}$/.test(p.data)))
+  previsaoMontagem(d,{hoje:'2026-10-13'})
+  pendenciasAutomaticas([{id:'z',tipo:'pedido',dados:d}])
+ }
+ assert.equal(datasPedido({importacao_revisoes:{lib_medida:'P/JULHO'}}).etapas[1].texto,'P/JULHO')
+})
+
+test('entrega confirmada depois do prazo do contrato fica marcada',async()=>{
+ const {datasPedido}=await import('../src/lib/operacao.js')
+ const r=datasPedido({aprovacao_em:'2026-10-01',entrega_prazo:'2026-11-19',entrega_prevista:'2026-11-25'})
+ assert.deepEqual(r.prazos.map(p=>[p.rotulo.slice(0,7),p.atraso||false]),[['Entrega',false],['Entrega',true]])
+})

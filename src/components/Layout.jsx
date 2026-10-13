@@ -1,5 +1,6 @@
 import AlertasJornada from './AlertasJornada.jsx'
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
+import Protegido from './Protegido.jsx'
 import Sidebar, { INICIO, podeVerRota } from './Sidebar.jsx'
 import { authOn } from '../lib/supabase.js'
 import { signOut } from '../lib/useAuth.js'
@@ -81,7 +82,7 @@ export default function Layout() {
             )}
           </div>
         </header>
-        <main className="content"><AlertasJornada /><Outlet /></main>
+        <main className="content"><AlertasJornada /><Protegido nome={title || 'Tela'} chave={pathname}><Outlet /></Protegido></main>
       </div>
     </div>
   )

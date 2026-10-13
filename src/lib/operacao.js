@@ -98,7 +98,8 @@ export function previsaoMontagem(d,{dataVenda=null,feriados=[],hoje=hojeSP()}={}
 // Clientes vindos da planilha usam as datas registradas nela (marcadas como "planilha") até haver marco real.
 export function datasPedido(d, { vendidoEm = null, feriados = [] } = {}) {
   const imp = d.importacao_revisoes || {}
-  const de = (real, plan) => real ? { data: real, planilha: false } : plan ? { data: plan, planilha: true } : { data: null, planilha: false }
+  // Só datas válidas entram nos cálculos; texto da planilha ("P/JULHO", "?") aparece como anotação.
+  const de = (real, plan) => dataValida(real) ? { data: real, planilha: false } : dataValida(plan) ? { data: plan, planilha: true } : plan ? { data: null, texto: String(plan), planilha: true } : { data: null, planilha: false }
   const venda = de(d.venda_data || vendidoEm, null)
   const liberacao = de(d.liberacao_em, imp.lib_medida)
   const medida = de(d.medicao_agendada || d.medicao_em, imp.medida)
@@ -110,11 +111,16 @@ export function datasPedido(d, { vendidoEm = null, feriados = [] } = {}) {
     { k: 'medida', rotulo: d.medicao_em || imp.medida ? 'Dia da medida' : 'Medida agendada', ...medida },
     { k: 'correcao', rotulo: 'Liberado p/ correção', ...correcao },
   ]
+  const seguroDias = (dt, n) => { try { return somarDias(dt, n) } catch { return null } }
+  const seguroUteis = (dt, n, f) => { try { return somarUteis(dt, n, f) } catch { return null } }
   const prazos = []
   if (d.espera_motivo) return { etapas, prazos: [{ rotulo: `Em espera · ${d.espera_motivo}${d.espera_contato_em ? ' · último contato ' + d.espera_contato_em.split('-').reverse().join('/') : ''} · próximo contato`, data: d.espera_proximo_contato || null, espera: true }] }
-  if (liberacao.data && !medida.data) prazos.push({ rotulo: 'Rodrigo agenda a medida até', data: d.medicao_prazo || somarDias(liberacao.data, 5) })
-  if (correcao.data && !d.correcao_em && !assinatura.data) prazos.push({ rotulo: 'Giovanna conclui a correção até', data: d.correcao_prazo || somarUteis(correcao.data, 12, feriados) })
+  if (liberacao.data && !medida.data) prazos.push({ rotulo: 'Rodrigo agenda a medida até', data: d.medicao_prazo || seguroDias(liberacao.data, 5) })
+  if (correcao.data && !d.correcao_em && !assinatura.data) prazos.push({ rotulo: 'Giovanna conclui a correção até', data: d.correcao_prazo || seguroUteis(correcao.data, 12, feriados) })
   if (d.correcao_em && !assinatura.data) prazos.push({ rotulo: 'Correção concluída em', data: d.correcao_em, feito: true })
-  if (assinatura.data && !d.entrega_em) prazos.push({ rotulo: 'Entrega até (35 dias úteis da assinatura)', data: d.entrega_prazo || somarUteis(assinatura.data, 35, feriados) })
-  return { etapas, prazos }
+  const limiteEntrega = assinatura.data ? (d.entrega_prazo || seguroUteis(assinatura.data, 35, feriados)) : null
+  if (assinatura.data && !d.entrega_em) prazos.push({ rotulo: 'Entrega até (35 dias úteis da assinatura das guias)', data: limiteEntrega })
+  // Data combinada com o cliente pela logística; fica vermelha se passar do prazo do contrato.
+  if (dataValida(d.entrega_prevista) && !d.entrega_em) prazos.push({ rotulo: 'Entrega confirmada com o cliente', data: d.entrega_prevista, feito: true, atraso: !!(limiteEntrega && d.entrega_prevista > limiteEntrega) })
+  return { etapas, prazos: prazos.filter((p) => p.espera || p.data) }
 }
