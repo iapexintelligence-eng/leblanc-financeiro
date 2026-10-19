@@ -8,6 +8,7 @@ const n = (v) => Number(v) || 0
 const today = () => new Date().toISOString().slice(0, 10)
 const MESES_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 const rotuloMes = (ym) => { if (!ym) return '—'; const [a, m] = ym.split('-'); return `${MESES_PT[Number(m) - 1]}/${a.slice(2)}` }
+const FORMAS_RET = ['PIX', 'Dinheiro']
 const CAT_LABEL = { pro_labore: 'Pró-labore', marketing: 'Marketing / RT' }
 
 export default function ProLabore() {
@@ -25,7 +26,7 @@ export default function ProLabore() {
     const [m, t, p] = await Promise.all([
       supabase.from('vw_pro_labore_mes').select('*'),
       supabase.from('pro_labore_teto').select('*'),
-      supabase.from('pagamentos').select('id,fornecedor,valor,data_pagamento,data_vencimento').eq('retirada', true).not('fornecedor', 'is', null),
+      supabase.from('pagamentos').select('id,fornecedor,valor,data_pagamento,data_vencimento,forma_pagamento').eq('retirada', true).not('fornecedor', 'is', null),
     ])
     if (m.error) setErro(m.error.message)
     setRows(m.data || [])
@@ -54,18 +55,19 @@ export default function ProLabore() {
   const abrirRetirada = (socio = '') => {
     setErro('')
     const d = (mesF && mesF !== 'todos') ? `${mesF}-05` : today()
-    setModalRet({ socio, valor: '', data: d })
+    setModalRet({ socio, valor: '', data: d, forma: '' })
   }
   const salvarRetirada = async () => {
     setErro('')
     const f = modalRet
     if (!f.socio) { setErro('Escolha o sócio.'); return }
     if (f.valor === '' || Number(f.valor) <= 0) { setErro('Informe o valor da retirada.'); return }
+    if (!f.forma) { setErro('Informe se foi PIX ou dinheiro.'); return }
     setSaving(true)
     const d = f.data || today()
     const { error } = await supabase.from('pagamentos').insert({
       descricao: `Pró-labore ${f.socio} - retirada`, categoria: 'pro_labore', fornecedor: f.socio,
-      valor: Number(f.valor), data: d, data_vencimento: d, data_pagamento: d, status: 'Pago',
+      valor: Number(f.valor), data: d, data_vencimento: d, data_pagamento: d, status: 'Pago', forma_pagamento: f.forma,
       retirada: true, tipo: 'Eventual',
     })
     setSaving(false)
@@ -73,6 +75,13 @@ export default function ProLabore() {
     setModalRet(null); carregar()
   }
 
+  // Retiradas antigas sem a forma: dá para informar direto na linha.
+  const mudarForma = async (p, forma) => {
+    setErro('')
+    const { error } = await supabase.from('pagamentos').update({ forma_pagamento: forma || null }).eq('id', p.id)
+    if (error) { setErro(error.message); return }
+    setRetiradas((lst) => lst.map((x) => x.id === p.id ? { ...x, forma_pagamento: forma || null } : x))
+  }
   const confirmarExclusao = async () => {
     setErro(''); setSaving(true)
     // Mesmo cuidado da tela de Saídas: remove o rateio ligado ao pagamento antes do pagamento.
@@ -137,7 +146,7 @@ export default function ProLabore() {
                   <td>{CAT_LABEL[r.categoria] || r.categoria || '—'}</td>
                   <td className="muted">{rotuloMes(r.mes_referencia)}</td>
                   <td className="num">{n(r.teto) > 0 ? brl(r.teto) : <span className="faint">não definido</span>}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{datasDe(r).length ? datasDe(r).map((p) => <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{fmtDate(p.data)}{datasDe(r).length > 1 && <span className="faint"> · {brl(p.valor)}</span>}<button className="icon-btn" style={{ width: 24, height: 24, padding: 3 }} title="Excluir esta retirada" aria-label={`Excluir retirada de ${fmtDate(p.data)}`} onClick={() => { setErro(''); setExcluir({ ...p, socio: r.socio }) }}><IcoTrash /></button></div>) : <span className="faint">—</span>}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{datasDe(r).length ? datasDe(r).map((p) => <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{fmtDate(p.data)}{datasDe(r).length > 1 && <span className="faint"> · {brl(p.valor)}</span>}<select aria-label={`Forma da retirada de ${fmtDate(p.data)}`} title="PIX ou dinheiro" value={FORMAS_RET.includes(p.forma_pagamento) ? p.forma_pagamento : ''} onChange={(e) => mudarForma(p, e.target.value)} style={{ font: 'inherit', fontSize: 12, padding: '2px 4px', borderRadius: 12, border: '1px solid ' + (FORMAS_RET.includes(p.forma_pagamento) ? 'var(--line-strong)' : 'var(--danger)'), background: p.forma_pagamento === 'Dinheiro' ? 'var(--warn-bg)' : p.forma_pagamento === 'PIX' ? 'var(--ok-bg)' : 'var(--danger-bg)', color: 'var(--ink)' }}><option value="">Forma?</option>{FORMAS_RET.map((f) => <option key={f} value={f}>{f}</option>)}</select><button className="icon-btn" style={{ width: 24, height: 24, padding: 3 }} title="Excluir esta retirada" aria-label={`Excluir retirada de ${fmtDate(p.data)}`} onClick={() => { setErro(''); setExcluir({ ...p, socio: r.socio }) }}><IcoTrash /></button></div>) : <span className="faint">—</span>}</td>
                   <td className="num">{brl(r.retirado)}</td>
                   <td className="num" style={{ color: n(r.restante) < 0 ? 'var(--danger)' : 'inherit', fontWeight: 600 }}>{brl(r.restante)}</td>
                   <td><div style={{ height: 8, background: 'var(--line)', borderRadius: 6, overflow: 'hidden' }}><div style={{ width: uso + '%', height: '100%', background: cor }} /></div></td>
@@ -179,6 +188,7 @@ export default function ProLabore() {
           </div>
           <div className="field"><label>Valor da retirada (R$)</label><input className="input" type="number" step="0.01" value={modalRet.valor} onChange={(e) => setModalRet((m) => ({ ...m, valor: e.target.value }))} /></div>
           <div className="field"><label>Data</label><input className="input" type="date" value={modalRet.data} onChange={(e) => setModalRet((m) => ({ ...m, data: e.target.value }))} /></div>
+          <div className="field"><label>Forma da retirada</label><div style={{ display: 'flex', gap: 8 }}>{FORMAS_RET.map((f) => <button key={f} type="button" className={'btn' + (modalRet.forma === f ? '' : ' ghost')} aria-pressed={modalRet.forma === f} onClick={() => setModalRet((m) => ({ ...m, forma: f }))}>{f}</button>)}</div></div>
         </Modal>
       )}
     </div>
