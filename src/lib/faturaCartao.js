@@ -189,6 +189,67 @@ function parseNubankPdf(arr) {
   return { cartao: 'Nubank', mesRef, itens, totalFatura }
 }
 
+// ---- Sicoob (Mastercard Empresarial): lançamentos em DUAS colunas por página ----
+// Cada lançamento começa na data ("26 AGO"); a descrição pode ter linha acima/abaixo (parcela "02/06"),
+// e nas compras em dólar o valor em R$ vem mais abaixo, junto de "US$" e "V.DOL". Por isso lê com posição.
+export function ehFaturaSicoob(arr) { return arr.some((l) => /LAN[CÇ]AMENTOS\s*-\s*SICOOB/i.test(l)) }
+const reDataSicoob = /^(\d{2})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)$/i
+const reReais = /^-?\s*R\$\s*-?[\d.]+,\d{2}$/
+export function parseSicoob(paginas) {
+  // Linhas de texto por coluna (para cabeçalho e resumo).
+  const colunasDe = (pg) => { const meio = (pg.largura || 595) / 2; return [pg.itens.filter((i) => i.x < meio), pg.itens.filter((i) => i.x >= meio)] }
+  const linhasDe = (itens) => { const m = {}; for (const i of itens) (m[i.y] ||= []).push(i); return Object.keys(m).map(Number).sort((a, b) => b - a).map((y) => m[y].sort((a, b) => a.x - b.x).map((i) => i.s).join(' ')) }
+  const todas = paginas.flatMap((pg) => colunasDe(pg).flatMap(linhasDe))
+  let mesRef = '', final = ''
+  for (const l of todas) {
+    const v = !mesRef && l.match(/VENCIMENTO\s+(\d{2})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\s+(\d{4})/i)
+    if (v) mesRef = `${v[3]}-${pad(MESES[v[2].toLowerCase()])}`
+  }
+  if (!mesRef) for (const l of todas) { const v = l.match(/\b(\d{2})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\s+(20\d{2})\b/i); if (v) { mesRef = `${v[3]}-${pad(MESES[v[2].toLowerCase()])}`; break } }
+  const resumo = (re) => { for (const l of todas) { const m = l.match(re); if (m) return parseMoney(m[1]) } return null }
+  const despesas = resumo(/^DESPESAS\/D[ÉE]BITOS\s*\+\s*([\d.]+,\d{2})/i)
+  const internac = resumo(/^DESPESAS\/D[ÉE]BITOS INTERNACIONAIS\s*\+\s*([\d.]+,\d{2})/i)
+  const encargos = resumo(/^ENCARGOS\s*\+\s*([\d.]+,\d{2})/i)
+  const { ano: anoFat, mes: mesFat } = anoDoMesRef(mesRef)
+  const itens = []
+  for (const pg of paginas) {
+    const alt = pg.altura || 842
+    for (const col of colunasDe(pg)) {
+      const corpo = col.filter((i) => i.y > 35 && i.y < alt - 60 && !/^P[áa]gina\b|^de \d+$/i.test(i.s))
+      const datas = corpo.filter((i) => reDataSicoob.test(i.s)).sort((a, b) => b.y - a.y)
+      if (!datas.length) continue
+      const xData = Math.min(...datas.map((d) => d.x))
+      // Fim de cada lançamento: a próxima data ou outro texto na coluna da data (cabeçalho, titular, total).
+      const marcos = corpo.filter((i) => i.x < xData + 30).map((i) => i.y).sort((a, b) => b - a)
+      for (const d of datas) {
+        const prox = marcos.find((y) => y < d.y - 1)
+        const bloco = corpo.filter((i) => i !== d && i.y <= d.y + 5 && (prox == null || i.y > prox + 5))
+        const reais = bloco.filter((i) => reReais.test(i.s)).sort((a, b) => b.x - a.x)
+        if (!reais.length) continue
+        const valor = parseMoney(reais[0].s)
+        if (valor === null || valor === 0) continue
+        const xDesc = d.x + 40
+        const textos = bloco.filter((i) => !reReais.test(i.s)).sort((a, b) => b.y - a.y || a.x - b.x)
+        const parcela = (textos.find((i) => /^\d{2}\/\d{2}$/.test(i.s)) || {}).s || ''
+        const usd = textos.find((i) => /^US\$\s*[\d.]+,\d{2}$/.test(i.s))
+        const descricao = textos.filter((i) => Math.abs(i.x - xDesc) <= 6 && !/^US?\$|^V\.DOL|^\d{2}\/\d{2}$/i.test(i.s)).map((i) => i.s).join(' ').replace(/\s+/g, ' ').trim()
+        const [, dia, mesNome] = d.s.match(reDataSicoob)
+        const mn = MESES[mesNome.toLowerCase()]
+        let ano = anoFat; if (ano != null && mesFat != null && mn > mesFat) ano -= 1
+        itens.push({
+          data_compra: ano != null ? `${ano}-${pad(mn)}-${dia}` : null,
+          descricao: descricao || d.s, parcela, valor_usd: usd ? parseMoney(usd.s) : null, valor,
+          credito: valor < 0,
+          encargo: /\b(iof|juros|encargo|anuidade|multa|rotativo)\b/i.test(descricao),
+        })
+      }
+    }
+  }
+  for (const l of todas) { const m = l.match(/^(?:[A-ZÀ-Ú][A-ZÀ-Ú .]+?)\s+(\d{4})$/); if (m && !/LTDA|SICOOB|REF\b/i.test(l)) { final = m[1]; break } }
+  const totalFatura = despesas != null ? Math.round(((despesas || 0) + (internac || 0) + (encargos || 0)) * 100) / 100 : null
+  return { cartao: final ? `Sicoob Mastercard final ${final}` : 'Sicoob Mastercard', mesRef, itens, totalFatura }
+}
+
 export function parseFaturaCartao(lines, { foto = false } = {}) {
   const arr = Array.isArray(lines) ? lines : String(lines).split('\n')
   if (ehFaturaAilos(arr)) return parseAilos(arr)

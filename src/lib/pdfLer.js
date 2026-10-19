@@ -79,3 +79,21 @@ export function parseContrato(txt) {
   }
   return { cliente, cpf, valor, data, vendedor: '' }
 }
+
+// Itens de texto com posição, página a página (para faturas em duas colunas, como a do Sicoob,
+// em que juntar por linha mistura as colunas).
+export async function extrairItens(file, password) {
+  const buf = await file.arrayBuffer()
+  const params = { data: buf }
+  if (password) params.password = password
+  const pdf = await pdfjs.getDocument(params).promise
+  const paginas = []
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p)
+    const c = await page.getTextContent()
+    const largura = page.view[2] - page.view[0]
+    const itens = c.items.filter((it) => it.str && it.str.trim()).map((it) => ({ x: Math.round(it.transform[4]), y: Math.round(it.transform[5]), w: Math.round(it.width || 0), s: it.str.trim() }))
+    paginas.push({ largura, altura: page.view[3] - page.view[1], itens })
+  }
+  return paginas
+}

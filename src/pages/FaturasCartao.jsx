@@ -3,9 +3,9 @@ import { supabase } from '../lib/supabase.js'
 import { brl, fmtDate, today } from '../lib/format.js'
 import { IcoSearch, IcoTrash } from '../components/Icons.jsx'
 import Modal from '../components/Modal.jsx'
-import { extrairLinhas } from '../lib/pdfLer.js'
+import { extrairLinhas, extrairItens } from '../lib/pdfLer.js'
 import { ocrImagem } from '../lib/ocr.js'
-import { parseFaturaCartao, sugerirBucket, sugerirCategoria } from '../lib/faturaCartao.js'
+import { parseFaturaCartao, sugerirBucket, sugerirCategoria, ehFaturaSicoob, parseSicoob } from '../lib/faturaCartao.js'
 import { CARTOES, situacaoCartoes } from '../lib/cartoes.js'
 import { hojeSP } from '../lib/prazos.js'
 
@@ -138,7 +138,8 @@ export default function FaturasCartao() {
     setErro(''); setLendo(true)
     try {
       const linhas = await extrairLinhas(file, pass || undefined)
-      const r = parseFaturaCartao(linhas)
+      // Sicoob traz os lançamentos em duas colunas: lê com a posição de cada texto.
+      const r = ehFaturaSicoob(linhas) ? parseSicoob(await extrairItens(file, pass || undefined)) : parseFaturaCartao(linhas)
       if (!r.itens.length) {
         setErro('Não encontrei transações nesse PDF. Se for de um banco diferente, me avise que ajusto o leitor.')
         setLendo(false); return

@@ -7,7 +7,7 @@ export const CARTOES = [
   { id: 'sicredi', banco: 'Sicredi', detalhe: 'Visa final 9514', sugestao: 'Visa final 9514', re: /\b9514\b|sicredi/i },
   { id: 'nubank', banco: 'Nubank', detalhe: '', sugestao: 'Nubank', re: /nubank/i },
   { id: 'viacredi', banco: 'Viacredi', detalhe: 'Mastercard final 3553', sugestao: 'Mastercard final 3553', re: /\b3553\b|viacredi|ailos/i },
-  { id: 'sicoob', banco: 'Sicoob', detalhe: '', sugestao: 'Sicoob', re: /sicoob/i },
+  { id: 'sicoob', banco: 'Sicoob', detalhe: 'Mastercard final 7822', sugestao: 'Sicoob Mastercard final 7822', re: /sicoob|\b7822\b/i },
 ]
 
 export const cartaoDe = (nome) => CARTOES.find((c) => c.re.test(nome || '')) || null
