@@ -139,3 +139,13 @@ test('assistência criada substitui a pendência "Assistência aberta" da planil
  const apurada={...ass,dados:{...ass.dados,origem_erro:'Transporte / frete'}}
  assert.equal(pendenciasAutomaticas([apurada]).some(x=>x.papel==='financeiro'),false)
 })
+
+test('saldo que trava a montagem vem antes de qualquer outra pendência, mesmo sem data de entrega',()=>{
+ const ped=(id,coluna,extra={})=>({id,tipo:'pedido',contrato_id:'c'+id,dados:{cliente_nome:'Cliente '+id,posvenda:{coluna},...extra}})
+ const regs=[ped('a','entrega_tecnica'),ped('b','aguardando_cliente'),ped('c','entrega_agendada',{posvenda:{coluna:'entrega_agendada',entrega_agendada_em:'2026-11-10'}}),ped('d','pronto',{saldo_confirmado:true,saldo_confirmado_arquivo:'x.pdf'})]
+ const lista=ordenarPendencias([{id:'z',titulo:'Outra coisa urgente',papel:'financeiro',prazo:'2026-01-01'},...pendenciasAutomaticas(regs)].filter(i=>i.papel==='financeiro'),'2026-10-19')
+ assert.deepEqual(lista.slice(0,3).map(i=>[i.cliente,i.trava]),[['Cliente c','montagem'],['Cliente b','montagem'],['Cliente a','regularizar']])
+ assert.ok(lista.slice(3).every(i=>!i.trava)&&lista.findIndex(i=>i.id==='z')>2,'a pendência vencida comum fica depois dos saldos')
+ assert.equal(lista[0].prazo,'2026-11-08')
+ assert.ok(!lista.some(i=>i.cliente==='Cliente d'&&i.trava),'quitado com comprovante não gera cobrança')
+})

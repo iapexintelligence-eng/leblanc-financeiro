@@ -10,7 +10,7 @@ const PAPEL_IMPORTADO={'Assistência aberta':'logistica','Aguardando imóvel / l
 const TITULO_IMPORTADO={'Assinatura sem data na planilha':'Assinatura das guias (sem data)'}
 export function pendenciasAutomaticas(registros,feriados=[]) {
  const out=[]
- const add=(r,titulo,papel,prazo)=>out.push({id:`${r.id}-${titulo}`,registro_id:r.id,contrato_id:r.contrato_id,cliente:r.dados.cliente_nome,titulo,papel,prazo,origem:'Etapa da jornada'})
+ const add=(r,titulo,papel,prazo,extra={})=>out.push({id:`${r.id}-${titulo}`,registro_id:r.id,contrato_id:r.contrato_id,cliente:r.dados.cliente_nome,titulo,papel,prazo,origem:'Etapa da jornada',...extra})
  for(const r of registros){const d=r.dados
   if(r.tipo==='assistencia'&&d.status!=='Resolvida'){
    add(r,d.proxima_acao||'Resolver assistência','logistica',d.vencimento)
@@ -25,8 +25,9 @@ export function pendenciasAutomaticas(registros,feriados=[]) {
   const quitadoPV=(d.saldo_confirmado===true||d.saldo_confirmado==='true')&&!!d.saldo_confirmado_arquivo
   if(col&&!quitadoPV){
    const entrega=pv.entrega_agendada_em||d.entrega_prevista
-   if(['pronto','aguardando_cliente','entrega_agendada'].includes(col)&&entrega)add(r,'Cobrar o saldo e anexar o comprovante para liberar a montagem','financeiro',dataValida(entrega)?somarDias(entrega,-2):null)
-   if(['montagem','entrega_tecnica','pendencias','pecas','assistencia'].includes(col))add(r,'Anexar o comprovante do saldo (cliente já em montagem, veio do Trello)','financeiro',null)
+   // Prioridade 1: saldo que trava a montagem (vem antes de tudo). Prioridade 2: regularizar quem já montou sem comprovante.
+   if(['pronto','aguardando_cliente','entrega_agendada'].includes(col))add(r,'Cobrar o saldo e anexar o comprovante para liberar a montagem','financeiro',entrega&&dataValida(entrega)?somarDias(entrega,-2):null,{trava:'montagem',prioridade:1,origem:'Saldo · trava a montagem'})
+   if(['montagem','entrega_tecnica','pendencias','pecas','assistencia'].includes(col))add(r,'Anexar o comprovante do saldo (cliente já em montagem, veio do Trello)','financeiro',null,{trava:'regularizar',prioridade:2,origem:'Saldo · sem comprovante no sistema'})
   }
   if(col==='entrega_tecnica'&&!pv.posvenda_em)add(r,'Fazer o pós-venda com o cliente após a montagem','logistica',pv.montagem_fim_em&&dataValida(pv.montagem_fim_em)?somarUteis(pv.montagem_fim_em,5,feriados):null)
   if(['montagem','entrega_tecnica','pendencias','pecas','assistencia','finalizado'].includes(col))continue
@@ -56,7 +57,7 @@ export function pendenciasAutomaticas(registros,feriados=[]) {
   if(d.aprovacao_em&&!d.implantacao_em)add(r,'Anexar XML final, aguardar OK da Leia e implantar','correcao',d.entrega_prazo)
   if(d.implantacao_em&&!d.fabrica_paga&&!hist.implantacao_em)add(r,'Conferir pagamento da fábrica','financeiro',null)
   if(d.carregamento_em&&!d.cliente_recebe_em)add(r,'Confirmar com cliente que pode receber','logistica',d.entrega_prevista||d.entrega_prazo)
-  if(d.cliente_recebe_em&&!d.saldo_confirmado)add(r,'Cobrar e conferir saldo final','financeiro',d.entrega_prevista?somarDias(d.entrega_prevista,-2):null)
+  if(d.cliente_recebe_em&&!(d.saldo_confirmado&&d.saldo_confirmado_arquivo))add(r,'Cobrar e conferir saldo final','financeiro',d.entrega_prevista?somarDias(d.entrega_prevista,-2):null,{trava:'montagem',prioridade:1,origem:'Saldo · trava a montagem'})
   if(d.aprovacao_em&&!d.entrega_em)add(r,'Acompanhar entrega no prazo','logistica',d.entrega_prazo)
   if(d.montagem_concluida_em&&!d.fotos_em&&!registros.some(a=>a.contrato_id===r.contrato_id&&a.tipo==='assistencia'&&a.dados.status!=='Resolvida'))add(r,'Agendar fotos após conclusão','logistica',null)
  }
@@ -83,7 +84,8 @@ export function capacidadeMensal(registros,pessoas,indisponibilidades,mes,feriad
  })
 }
 export function ordenarPendencias(lista,hoje=hojeSP()) {
- return [...lista].sort((a,b)=>(a.prazo||'9999').localeCompare(b.prazo||'9999')).map(i=>({...i,atrasada:!!i.prazo&&i.prazo<hoje}))
+ // Saldos que travam a montagem vêm primeiro; dentro de cada grupo, o prazo mais próximo primeiro.
+ return [...lista].sort((a,b)=>(a.prioridade||9)-(b.prioridade||9)||(a.prazo||'9999').localeCompare(b.prazo||'9999')).map(i=>({...i,atrasada:!!i.prazo&&i.prazo<hoje}))
 }
 
 // Data a partir da qual o pedido pode ir para montagem (móveis entregues), pelos prazos definitivos da loja:
