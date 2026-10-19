@@ -16,10 +16,9 @@ begin
  foreach k in array array['padrao_fabrica','entrega_apos_pronto','montagem_dias'] loop
   if jsonb_typeof(p->k)<>'number' or (p->>k)::numeric<0 or (p->>k)::numeric>200 then raise exception 'Prazo inválido: %',k; end if;
  end loop;
- update le_admin.jornada_config set prazos_operacao=jsonb_build_object('fabricas',p->'fabricas','padrao_fabrica',p->'padrao_fabrica','entrega_apos_pronto',p->'entrega_apos_pronto','montagem_dias',p->'montagem_dias'),atualizado_em=now();
+ update le_admin.jornada_config set prazos_operacao=jsonb_build_object('fabricas',p->'fabricas','padrao_fabrica',p->'padrao_fabrica','entrega_apos_pronto',p->'entrega_apos_pronto','montagem_dias',p->'montagem_dias'),atualizado_em=now() where id=true;
  return p;
 end $$;
-revoke all on function le_admin.posvenda_prazos_salvar(jsonb) from public,anon;
 grant execute on function le_admin.posvenda_prazos_salvar(jsonb) to authenticated;
 
 -- Histórico do quadro do Trello (inclusive os cartões finalizados), somente leitura.

@@ -30,6 +30,7 @@ const TITLES = {
   '/projetos': ['Operação', 'Projetos'],
   '/recebiveis': ['Financeiro · Leia', 'Recebimentos'],
   '/previsibilidade': ['Financeiro · Leia', 'Previsibilidade'],
+  '/previsibilidade-montagens': ['Operação', 'Previsibilidade de montagens'],
   '/correcao': ['Setores', 'Correção'],
   '/liberacao': ['Setores', 'Liberação'],
   '/montagem': ['Setores', 'Montagem'],

@@ -32,6 +32,7 @@ import Custos from './pages/Custos.jsx'
 import Pagamentos from './pages/Pagamentos.jsx'
 import DRE from './pages/DRE.jsx'
 import Previsibilidade from './pages/Previsibilidade.jsx'
+import PrevisibilidadeMontagens from './pages/PrevisibilidadeMontagens.jsx'
 import Assistencias from './pages/Assistencias.jsx'
 import Gratificacao from './pages/Gratificacao.jsx'
 import Relatorios from './pages/Relatorios.jsx'
@@ -93,6 +94,7 @@ export default function App() {
         <Route path="/faturas-cartao" element={<FaturasCartao />} />
         <Route path="/dre" element={<DRE />} />
         <Route path="/previsibilidade" element={<Previsibilidade />} />
+        <Route path="/previsibilidade-montagens" element={<PrevisibilidadeMontagens />} />
         <Route path="/assistencias" element={<Jornada tipoInicial="assistencia" />} />
         <Route path="/aot" element={<Jornada tipoInicial="assistencia" />} />
         <Route path="/gratificacao" element={<Gratificacao />} />

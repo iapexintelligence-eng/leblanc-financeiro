@@ -20,6 +20,16 @@ export function pendenciasAutomaticas(registros,feriados=[]) {
   if(r.tipo==='frete'&&d.status==='Liberado para pagamento')add(r,'Pagar frete conferido','financeiro',d.prevista)
   if(r.tipo!=='pedido')continue
   const imp=d.importacao_revisoes
+  // Quadro de pós-venda: a Leia cobra o saldo e anexa o comprovante; sem ele a montagem fica bloqueada.
+  const pv=d.posvenda||{},col=pv.coluna
+  const quitadoPV=(d.saldo_confirmado===true||d.saldo_confirmado==='true')&&!!d.saldo_confirmado_arquivo
+  if(col&&!quitadoPV){
+   const entrega=pv.entrega_agendada_em||d.entrega_prevista
+   if(['pronto','aguardando_cliente','entrega_agendada'].includes(col)&&entrega)add(r,'Cobrar o saldo e anexar o comprovante para liberar a montagem','financeiro',dataValida(entrega)?somarDias(entrega,-2):null)
+   if(['montagem','entrega_tecnica','pendencias','pecas','assistencia'].includes(col))add(r,'Anexar o comprovante do saldo (cliente já em montagem, veio do Trello)','financeiro',null)
+  }
+  if(col==='entrega_tecnica'&&!pv.posvenda_em)add(r,'Fazer o pós-venda com o cliente após a montagem','logistica',pv.montagem_fim_em&&dataValida(pv.montagem_fim_em)?somarUteis(pv.montagem_fim_em,5,feriados):null)
+  if(['montagem','entrega_tecnica','pendencias','pecas','assistencia','finalizado'].includes(col))continue
   // Em espera (venda futura, imóvel ou cliente não liberado): os prazos da etapa ficam parados e só fica o retorno ao cliente.
   if(d.espera_motivo){out.push({id:`${r.id}-espera`,registro_id:r.id,contrato_id:r.contrato_id,cliente:d.cliente_nome,titulo:`Retomar contato com o cliente · ${d.espera_motivo}`,papel:d.medicao_em||imp?.medida?'correcao':'vendedor',prazo:d.espera_proximo_contato||null,origem:`Em espera${d.espera_contato_em?' · último contato '+d.espera_contato_em.split('-').reverse().join('/'):''}`});continue}
   if(imp&&setorImportado(d)){

@@ -13,7 +13,12 @@ export function setorImportado(d) {
  const s=d?.importacao_revisoes?.setor_codigo
  return s&&SETORES[s]&&!MARCOS_REAIS.some(k=>d[k])?s:null
 }
+const COLUNAS_MONTAGEM=['aguardando_cliente','entrega_agendada','montagem'],COLUNAS_QUALIDADE=['entrega_tecnica','pendencias','pecas','assistencia','finalizado']
 export function setorPedido(d) {
+ // Quadro de pós-venda da Glauci: da espera do cliente em diante, o cliente fica com a logística e depois com a qualidade.
+ const c=d?.posvenda?.coluna
+ if(COLUNAS_QUALIDADE.includes(c))return 'qualidade'
+ if(COLUNAS_MONTAGEM.includes(c))return 'montagem'
  const importado=setorImportado(d)
  if(importado)return importado
  if(d.entrega_em||d.montagem_concluida_em||d.fotos_em)return 'qualidade'

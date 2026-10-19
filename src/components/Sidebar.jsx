@@ -19,6 +19,7 @@ const GROUPS = [
   {to:'/medicao',icon:IcoTool,txt:'Medida técnica',roles:['medidor','correcao']},
   {to:'/correcao',icon:IcoTool,txt:'Correção',roles:['correcao']},
   {to:'/liberacao',icon:IcoProject,txt:'Liberação',roles:['correcao','logistica']},
+  {to:'/previsibilidade-montagens',icon:IcoForecast,txt:'Previsibilidade de montagens',roles:['logistica','gestor','financeiro','correcao']},
   {to:'/capacidade-montagem',icon:IcoPeople,txt:'Capacidade de montagem',roles:['logistica','gestor']},
   {to:'/montagem',icon:IcoTool,txt:'Montagem',roles:['logistica','montagem','montador']},
   {to:'/qualidade',icon:IcoTool,txt:'Qualidade',roles:['logistica','qualidade']},
