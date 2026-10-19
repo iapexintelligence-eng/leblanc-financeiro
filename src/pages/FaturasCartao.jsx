@@ -6,6 +6,8 @@ import Modal from '../components/Modal.jsx'
 import { extrairLinhas } from '../lib/pdfLer.js'
 import { ocrImagem } from '../lib/ocr.js'
 import { parseFaturaCartao, sugerirBucket, sugerirCategoria } from '../lib/faturaCartao.js'
+import { CARTOES, situacaoCartoes } from '../lib/cartoes.js'
+import { hojeSP } from '../lib/prazos.js'
 
 const n = (v) => Number(v) || 0
 const MESES_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
@@ -40,8 +42,10 @@ export default function FaturasCartao() {
   useEffect(() => { carregar() }, [])
 
   const cartoes = useMemo(() => [...new Set((rows || []).map((r) => r.cartao).filter(Boolean))].sort(), [rows])
-  const meses = useMemo(() => [...new Set((rows || []).map((r) => String(r.mes_ref || '').slice(0, 7)).filter(Boolean))].sort().reverse(), [rows])
-  useEffect(() => { if (rows && mesF === '' && meses.length) setMesF(meses[0]) }, [rows, meses]) // eslint-disable-line
+  const meses = useMemo(() => [...new Set([hojeSP().slice(0, 7), ...(rows || []).map((r) => String(r.mes_ref || '').slice(0, 7)).filter(Boolean)])].sort().reverse(), [rows])
+  useEffect(() => { if (rows && mesF === '' && meses.length) setMesF(meses.includes(hojeSP().slice(0, 7)) ? hojeSP().slice(0, 7) : meses[0]) }, [rows, meses]) // eslint-disable-line
+  const mesQuadro = mesF && mesF !== 'todos' ? mesF : hojeSP().slice(0, 7)
+  const quadro = useMemo(() => situacaoCartoes(rows, mesQuadro), [rows, mesQuadro])
 
   const lista = useMemo(() => (rows || []).filter((r) => {
     if (cartaoF !== 'todos' && r.cartao !== cartaoF) return false
@@ -224,6 +228,22 @@ export default function FaturasCartao() {
         </div>
       })()}
       {erro && !imp && <div className="login-err" style={{ marginBottom: 12 }}>{erro}</div>}
+      {rows && <div style={{ marginBottom: 14 }}>
+        <div className="sub" style={{ marginBottom: 6 }}>Faturas de {rotuloMes(mesQuadro)} · {quadro.faltam ? <b style={{ color: 'var(--warn)' }}>falta subir {quadro.faltam} de {quadro.lista.length}</b> : <b style={{ color: 'var(--ok)' }}>todas lançadas</b>}</div>
+        <div className="grid cols-3" style={{ gap: 8 }}>
+          {quadro.lista.map((c) => {
+            const ok = c.itens > 0, ativo = ok && c.nomes.length === 1 && cartaoF === c.nomes[0]
+            return <button key={c.id} type="button" className="card" aria-disabled={!ok}
+              title={ok ? 'Mostrar só este cartão' : 'Fatura deste mês ainda não foi subida'}
+              onClick={() => ok && c.nomes.length === 1 && setCartaoF(ativo ? 'todos' : c.nomes[0])}
+              style={{ textAlign: 'left', padding: '10px 12px', cursor: ok ? 'pointer' : 'default', border: ativo ? '2px solid var(--ink)' : undefined, background: ok ? undefined : 'var(--warn-bg, transparent)' }}>
+              <div style={{ fontWeight: 600 }}>{c.banco}{c.detalhe && <span className="faint" style={{ fontWeight: 400 }}> · {c.detalhe}</span>}</div>
+              <div style={{ fontSize: 13, marginTop: 2, color: ok ? 'var(--ok)' : 'var(--warn)' }}>{ok ? `✓ Lançada · ${c.itens} ${c.itens === 1 ? 'item' : 'itens'} · ${brl(c.total)}` : 'Falta subir a fatura'}</div>
+            </button>
+          })}
+        </div>
+        {quadro.outros.length > 0 && <div className="sub" style={{ marginTop: 6 }}>Também neste mês, fora da lista de cartões: {quadro.outros.join(', ')}</div>}
+      </div>}
 
       <div className="grid cols-3" style={{ marginBottom: 12 }}>
         <div className="card kpi"><div className="label">Total no filtro</div><div className="value">{brl(total)}</div><div className="delta">{lista.length} item(ns)</div></div>
@@ -308,7 +328,7 @@ export default function FaturasCartao() {
           {erro && <div className="login-err" style={{ marginBottom: 12 }}>{erro}</div>}
           {imp.foto && <div className="sub" style={{ marginBottom: 12, background: 'var(--warn-bg, #fff7e6)', border: '1px solid var(--line)', borderRadius: 8, padding: '8px 10px' }}>📷 Lido de uma foto. A leitura por imagem pode errar um número ou uma data — <b>confira os valores</b> antes de importar. Você pode editar data, descrição e valor aqui mesmo.</div>}
           <div className="grid cols-2" style={{ gap: 12, marginBottom: 12 }}>
-            <div className="field"><label>Cartão</label><input className="input" value={imp.cartao} onChange={(e) => setImp((s) => ({ ...s, cartao: e.target.value }))} placeholder="Ex.: Nubank / Sicredi Visa final 9514" /></div>
+            <div className="field"><label>Cartão</label><input className="input" list="cartoes-loja" value={imp.cartao} onChange={(e) => setImp((s) => ({ ...s, cartao: e.target.value }))} placeholder="Escolha o cartão" /><datalist id="cartoes-loja">{CARTOES.map((c) => <option key={c.id} value={c.sugestao}>{c.banco}</option>)}</datalist></div>
             <div className="field"><label>Mês de referência (AAAA-MM)</label><input className="input" value={imp.mesRef} onChange={(e) => setImp((s) => ({ ...s, mesRef: e.target.value }))} placeholder="2026-08" /></div>
           </div>
           <div className="between" style={{ marginBottom: 8 }}>
