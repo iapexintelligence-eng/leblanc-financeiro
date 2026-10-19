@@ -1,5 +1,5 @@
 import { useEffect,useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { authOn } from '../lib/supabase.js'
 import { carregarJornada } from '../lib/jornada.js'
 import { listarItens } from '../lib/colaboracao.js'
@@ -8,7 +8,10 @@ import { PAPEIS, pendenciasAutomaticas, ordenarPendencias } from '../lib/operaca
 import { hojeSP } from '../lib/prazos.js'
 export default function Pendencias(){
  const [base,setBase]=useState(()=>authOn?null:jornadaDemo().dados),[itens,setItens]=useState([]),[papel,setPapel]=useState(''),[mes,setMes]=useState(hojeSP().slice(0,7)),[erro,setErro]=useState(''),[busca,setBusca]=useState('')
- useEffect(()=>{if(authOn)Promise.all([carregarJornada(),listarItens()]).then(([b,i])=>{setBase(b);setItens(i);setPapel(b.eu?.papel==='gestor'?'':b.eu?.papel||'')}).catch(e=>setErro(e.message))},[])
+ const equipe=useSearchParams()[0].get('equipe')
+ useEffect(()=>{if(authOn)Promise.all([carregarJornada(),listarItens()]).then(([b,i])=>{setBase(b);setItens(i);setPapel(p=>equipe??(b.eu?.papel==='gestor'?'':b.eu?.papel||p))}).catch(e=>setErro(e.message))},[])
+ // A aba do topo escolhe a equipe (Financeiro → Leia, Pós-venda → Glauci...); o filtro continua livre na tela.
+ useEffect(()=>{if(equipe!==null)setPapel(PAPEIS[equipe]?equipe:'')},[equipe])
  const registros=base?.registros||[]
  const lista=ordenarPendencias([...pendenciasAutomaticas(registros,base?.config?.feriados||[]),...itens.filter(i=>(i.tipo==='tarefa'&&!i.dados.concluida)||(i.tipo==='excecao'&&['Em análise','Em tratamento'].includes(i.dados.status))).map(i=>({...i,cliente:registros.find(r=>r.id===i.registro_id)?.dados.cliente_nome,papel:i.tipo==='excecao'?'gestor':i.dados.responsavel_papel,prazo:i.dados.prazo,origem:i.tipo==='excecao'?'Exceção · '+i.dados.status:i.dados.bloqueia?'Tarefa bloqueante':'Tarefa',pessoa:i.dados.responsavel_id}))]).filter(i=>(!papel||i.papel===papel)&&(!i.prazo||i.prazo.startsWith(mes)||i.prazo<mes+'-01')&&`${i.cliente||''} ${i.titulo}`.toLowerCase().includes(busca.toLowerCase()))
  return <><div className="card"><h3>Pendências da equipe</h3><p>Etapas em aberto e tarefas atribuídas. Pendências de meses anteriores permanecem visíveis até a conclusão.</p>{!authOn&&<p className="sub">Demonstração com clientes fictícios. Nenhum dado é gravado.</p>}<div className="tools" style={{flexWrap:'wrap'}}><label>Mês<input className="input" type="month" value={mes} onChange={e=>setMes(e.target.value||hojeSP().slice(0,7))}/></label><label>Equipe<select aria-label="Equipe" className="input" value={papel} onChange={e=>setPapel(e.target.value)}><option value="">Todos os responsáveis visíveis</option>{Object.entries(PAPEIS).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label><label>Buscar<input className="input" placeholder="Cliente ou tarefa" value={busca} onChange={e=>setBusca(e.target.value)}/></label></div></div>
