@@ -21,7 +21,7 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  create table leblanc.contrato_historico(contrato_id uuid,numero text,acao text,descricao text,editado_por text,alteracoes jsonb);
  create table le_admin.contas_bancarias(id integer primary key,nome text,banco text,saldo numeric,ativo boolean default true,updated_at timestamp,data_saldo_base date);
  create table le_admin.a_receber(id serial primary key,cliente_nome text,descricao text,valor_parcela numeric,data_prevista date,data_recebimento date,status text default 'Pendente',forma_recebimento text,observacoes text,conta_bancaria_id integer);`)
- for(const name of ['20261002144759_jornada.sql','20261002144808_taxas.sql','20261002144904_comercial.sql','20261002144921_integracao.sql','20261002144930_colaboracao_e_revisao_mensal.sql','20261002144940_ativacao_compatibilidade_e_acessos.sql','20261002145427_aditivos_contratuais.sql','20261011193842_xml_final_conferencia.sql','20261011201612_importacao_revisoes_preservada.sql','20261011220000_etapas_historicas.sql','20261011230000_recebimentos_com_comprovante.sql','20261013140000_vendedor_ve_suas_vendas.sql','20261013150000_medicao_tecnica_rodrigo.sql','20261013160000_gerente_vendas_fabricio.sql','20261013170000_assistencia_origem_do_erro.sql','20261019150000_importacao_revisoes_atualizavel.sql'])await db.exec(await readFile(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'))
+ for(const name of ['20261002144759_jornada.sql','20261002144808_taxas.sql','20261002144904_comercial.sql','20261002144921_integracao.sql','20261002144930_colaboracao_e_revisao_mensal.sql','20261002144940_ativacao_compatibilidade_e_acessos.sql','20261002145427_aditivos_contratuais.sql','20261011193842_xml_final_conferencia.sql','20261011201612_importacao_revisoes_preservada.sql','20261011220000_etapas_historicas.sql','20261011230000_recebimentos_com_comprovante.sql','20261013140000_vendedor_ve_suas_vendas.sql','20261013150000_medicao_tecnica_rodrigo.sql','20261013160000_gerente_vendas_fabricio.sql','20261013170000_assistencia_origem_do_erro.sql','20261019150000_importacao_revisoes_atualizavel.sql','20261019170000_posvenda_quadro.sql'])await db.exec(await readFile(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'))
  await db.exec(await readFile(new URL('../supabase/migrations/20261011223808_numeracao_contratos_diaria.sql',import.meta.url),'utf8'))
  await db.exec(await readFile(new URL('../supabase/migrations/20261011225405_registro_liberacao_comercial.sql',import.meta.url),'utf8'))
  const gestor='00000000-0000-4000-8000-000000000001',vendedor='00000000-0000-4000-8000-000000000002',cid='00000000-0000-4000-8000-000000000010'
@@ -395,6 +395,38 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  const pendente=(await db.query('select le_admin.orcamento_converter($1,$2) as c',[excecao.id,1])).rows[0].c
  assert.equal(pendente.status,'Aguardando aprovação')
  assert.equal((await db.query('select count(*)::int as n from le_admin.comercial_recebiveis where contrato_id=$1',[pendente.id])).rows[0].n,0)
+ // Quadro de pós-venda: só logística/gestão movimenta; montagem e entrega exigem saldo quitado com comprovante conferido.
+ await db.exec(`select set_config('test.uid','${gestor}',false)`)
+ const cpv='00000000-0000-4000-8000-000000000070',cpv2='00000000-0000-4000-8000-000000000071',logi='00000000-0000-4000-8000-000000000008'
+ await db.exec(`insert into leblanc.contratos(id,numero,cliente_nome) values('${cpv}','PV','Cliente quadro'),('${cpv2}','PV2','Cliente já montando');
+  insert into auth.users(id) values('${logi}');insert into le_admin.jornada_acessos values('${logi}','Glauci','logistica',null,true);
+  insert into storage.objects(bucket_id,name) values('jornada-documentos','${gestor}/saldo-pv.pdf');`)
+ let pv=await save2(cpv,{cliente_nome:'Cliente quadro'},null,0)
+ await db.exec(`select set_config('test.uid','${logi}',false)`)
+ pv=await save2(cpv,{...pv.dados,posvenda:{coluna:'entrega_agendada',entrega_agendada_em:'2026-11-10',fabrica:'Menezes'}},pv.id,pv.versao)
+ assert.equal(pv.dados.posvenda.coluna,'entrega_agendada')
+ await assert.rejects(save2(cpv,{...pv.dados,posvenda:{...pv.dados.posvenda,coluna:'montagem'}},pv.id,pv.versao),/Montagem bloqueada/)
+ await assert.rejects(save2(cpv,{...pv.dados,posvenda:{...pv.dados.posvenda,montador:'Robson'}},pv.id,pv.versao),/Montagem bloqueada/)
+ await assert.rejects(save2(cpv,{...pv.dados,posvenda:{...pv.dados.posvenda,coluna:'finalizado'}},pv.id,pv.versao),/Montagem bloqueada/)
+ await assert.rejects(save2(cpv,{...pv.dados,posvenda:{...pv.dados.posvenda,entrega_agendada_em:'amanhã'}},pv.id,pv.versao),/date|data/i)
+ pv=await save2(cpv,{...pv.dados,posvenda:{...pv.dados.posvenda,anotacoes:[{texto:'Cliente pediu manhã',usuario:'falso'}]}},pv.id,pv.versao)
+ assert.equal(pv.dados.posvenda.anotacoes[0].usuario,logi)
+ await assert.rejects(save2(cpv,{...pv.dados,posvenda:{...pv.dados.posvenda,anotacoes:[{texto:'editada'}]}},pv.id,pv.versao),/Anotações anteriores/)
+ await db.exec(`select set_config('test.uid','${conferente}',false)`)
+ await assert.rejects(save2(cpv,{...pv.dados,posvenda:{...pv.dados.posvenda,fabrica:'Bartzen'}},pv.id,pv.versao),/logística/)
+ await db.exec(`select set_config('test.uid','${gestor}',false)`)
+ pv=await save2(cpv,{...pv.dados,saldo_confirmado_arquivo:'${gestor}/saldo-pv.pdf'.replace('${gestor}',gestor),saldo_confirmado:true},pv.id,pv.versao)
+ await db.exec(`select set_config('test.uid','${logi}',false)`)
+ pv=await save2(cpv,{...pv.dados,posvenda:{...pv.dados.posvenda,coluna:'montagem',montador:'Robson',montagem_inicio_em:'2026-11-11'}},pv.id,pv.versao)
+ assert.equal(pv.dados.posvenda.montador,'Robson')
+ // Cartão trazido do Trello já em montagem continua editável sem nova trava; a origem no Trello é preservada.
+ const ja=(await db.query(`insert into le_admin.jornada_registros(tipo,contrato_id,dados,criado_por) values('pedido','${cpv2}',$1,'${gestor}') returning *`,[JSON.stringify({cliente_nome:'Cliente já montando',posvenda:{coluna:'montagem',montador:'Vilmar',trello:{id:'abc'}}})])).rows[0]
+ const ja2=await save2(cpv2,{...ja.dados,posvenda:{...ja.dados.posvenda,montador:'Vilmar e Junior',trello:{id:'trocado'}}},ja.id,ja.versao)
+ assert.equal(ja2.dados.posvenda.montador,'Vilmar e Junior')
+ assert.equal(ja2.dados.posvenda.trello.id,'abc')
+ await assert.rejects(db.query('select le_admin.posvenda_prazos_salvar($1)',[JSON.stringify({fabricas:{Menezes:-1},padrao_fabrica:30,entrega_apos_pronto:7,montagem_dias:5})]),/Prazo inválido/)
+ await db.query('select le_admin.posvenda_prazos_salvar($1)',[JSON.stringify({fabricas:{Menezes:30,Bartzen:20},padrao_fabrica:30,entrega_apos_pronto:6,montagem_dias:4})])
+ assert.equal((await db.query('select prazos_operacao from le_admin.jornada_config')).rows[0].prazos_operacao.fabricas.Menezes,30)
  } finally {await db.close()}
 })
 
