@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { brl, fmtDate } from '../lib/format.js'
 import Modal from '../components/Modal.jsx'
-import { IcoEdit } from '../components/Icons.jsx'
+import { IcoEdit, IcoTrash } from '../components/Icons.jsx'
 
 const n = (v) => Number(v) || 0
 const today = () => new Date().toISOString().slice(0, 10)
@@ -17,6 +17,7 @@ export default function ProLabore() {
   const [mesF, setMesF] = useState('')
   const [modal, setModal] = useState(null)
   const [modalRet, setModalRet] = useState(null)
+  const [excluir, setExcluir] = useState(null) // retirada a confirmar
   const [saving, setSaving] = useState(false)
   const [erro, setErro] = useState('')
 
@@ -72,6 +73,16 @@ export default function ProLabore() {
     setModalRet(null); carregar()
   }
 
+  const confirmarExclusao = async () => {
+    setErro(''); setSaving(true)
+    // Mesmo cuidado da tela de Saídas: remove o rateio ligado ao pagamento antes do pagamento.
+    await supabase.from('custos_operacionais').delete().eq('rateio_pagamento_id', excluir.id)
+    const { error } = await supabase.from('pagamentos').delete().eq('id', excluir.id)
+    setSaving(false)
+    if (error) { setErro(error.message); return }
+    setExcluir(null); carregar()
+  }
+
   const editarTeto = (r) => {
     const existente = tetos.find((t) => t.socio === r.socio && t.mes_referencia === r.mes_referencia && (t.categoria || 'pro_labore') === (r.categoria || 'pro_labore'))
     setErro(''); setModal({ socio: r.socio, mes_referencia: r.mes_referencia, categoria: r.categoria || 'pro_labore', valor: existente ? String(existente.valor) : '', id: existente?.id || null })
@@ -103,7 +114,7 @@ export default function ProLabore() {
         </div>
       </div>
 
-      {erro && !modal && <div className="login-err" style={{ margin: '12px 0' }}>{erro}</div>}
+      {erro && !modal && !excluir && <div className="login-err" style={{ margin: '12px 0' }}>{erro}</div>}
 
       <div className="grid cols-3" style={{ margin: '14px 0' }}>
         <div className="card kpi"><div className="label">Teto total</div><div className="value">{brl(kpi.teto)}</div></div>
@@ -126,7 +137,7 @@ export default function ProLabore() {
                   <td>{CAT_LABEL[r.categoria] || r.categoria || '—'}</td>
                   <td className="muted">{rotuloMes(r.mes_referencia)}</td>
                   <td className="num">{n(r.teto) > 0 ? brl(r.teto) : <span className="faint">não definido</span>}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{datasDe(r).length ? datasDe(r).map((p) => <div key={p.id}>{fmtDate(p.data)}{datasDe(r).length > 1 && <span className="faint"> · {brl(p.valor)}</span>}</div>) : <span className="faint">—</span>}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{datasDe(r).length ? datasDe(r).map((p) => <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{fmtDate(p.data)}{datasDe(r).length > 1 && <span className="faint"> · {brl(p.valor)}</span>}<button className="icon-btn" style={{ width: 24, height: 24, padding: 3 }} title="Excluir esta retirada" aria-label={`Excluir retirada de ${fmtDate(p.data)}`} onClick={() => { setErro(''); setExcluir({ ...p, socio: r.socio }) }}><IcoTrash /></button></div>) : <span className="faint">—</span>}</td>
                   <td className="num">{brl(r.retirado)}</td>
                   <td className="num" style={{ color: n(r.restante) < 0 ? 'var(--danger)' : 'inherit', fontWeight: 600 }}>{brl(r.restante)}</td>
                   <td><div style={{ height: 8, background: 'var(--line)', borderRadius: 6, overflow: 'hidden' }}><div style={{ width: uso + '%', height: '100%', background: cor }} /></div></td>
@@ -144,6 +155,15 @@ export default function ProLabore() {
           {erro && <div className="login-err" style={{ marginBottom: 12 }}>{erro}</div>}
           <div className="sub" style={{ marginBottom: 12 }}>{modal.socio} · {CAT_LABEL[modal.categoria] || modal.categoria} · {rotuloMes(modal.mes_referencia)}</div>
           <div className="field"><label>Teto (R$)</label><input className="input" type="number" step="0.01" value={modal.valor} onChange={(e) => setModal((m) => ({ ...m, valor: e.target.value }))} autoFocus /></div>
+        </Modal>
+      )}
+
+      {excluir && (
+        <Modal title="Excluir retirada" onClose={() => !saving && setExcluir(null)}
+          footer={<><button className="btn ghost" onClick={() => setExcluir(null)} disabled={saving}>Cancelar</button><button className="btn" style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={confirmarExclusao} disabled={saving}>{saving ? 'Excluindo…' : 'Excluir retirada'}</button></>}>
+          {erro && <div className="login-err" style={{ marginBottom: 12 }}>{erro}</div>}
+          <p style={{ marginTop: 0 }}>Excluir a retirada de <b>{excluir.socio}</b> de <b>{fmtDate(excluir.data)}</b> no valor de <b>{brl(excluir.valor)}</b>?</p>
+          <div className="sub">Ela sai do pró-labore e também da lista de pagamentos. Não dá para desfazer; se foi engano, lance de novo.</div>
         </Modal>
       )}
 
