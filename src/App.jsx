@@ -9,6 +9,7 @@ import ConferenciaFinanceira from './pages/ConferenciaFinanceira.jsx'
 import { Routes, Route } from 'react-router-dom'
 import { useAuth } from './lib/useAuth.js'
 import Login from './pages/Login.jsx'
+import DefinirSenha from './pages/DefinirSenha.jsx'
 import Layout from './components/Layout.jsx'
 
 import Jornada from './pages/Jornada.jsx'
@@ -44,9 +45,10 @@ import Vincular from './pages/Vincular.jsx'
 import EmBreve from './pages/EmBreve.jsx'
 
 export default function App() {
-  const { session, loading, authOn } = useAuth()
+  const { session, loading, authOn, definirSenha, senhaDefinida } = useAuth()
 
   if (loading) return <div className="spinner-wrap">Carregando…</div>
+  if (authOn && session && definirSenha) return <DefinirSenha email={session.user?.email} onPronto={senhaDefinida} />
   if (authOn && !session) return <Login />
 
   return (
