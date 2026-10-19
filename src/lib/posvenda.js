@@ -22,9 +22,9 @@ export const POS_MONTAGEM = new Set(COLUNAS.filter(c => c.trava).map(c => c.id))
 export const PERGUNTAS = {
  implantado: [['implantado_em','Implantado na fábrica em','date']],
  producao: [['pronto_fabrica_em','Previsão de ficar pronto na fábrica','date']],
- pronto: [['pronto_fabrica_em','Pronto na fábrica em','date']],
+ pronto: [['pronto_fabrica_em','Pronto na fábrica em','date'],['carregado_em','Carregou / saiu da fábrica em','date'],['chegada_prevista_em','Chegada prevista (data passada pela transportadora)','date']],
  aguardando_cliente: [['impedimento','O que o cliente informou (reforma, chaves, viagem…)','textarea'],['retorno_previsto_em','Previsão de retorno do cliente','date']],
- entrega_agendada: [['entrega_agendada_em','Entrega agendada para','date']],
+ entrega_agendada: [['entrega_agendada_em','Entrega ao cliente agendada para','date'],['montador_previa','Montador previsto (prévia; só é confirmado após o pagamento)','montador']],
  montagem: [['entregue_em','Entrega realizada em','date'],['montador','Montador','montador'],['montagem_inicio_em','Início da montagem','date'],['montagem_fim_prevista_em','Previsão de término','date']],
  entrega_tecnica: [['montagem_fim_em','Término da montagem','date']],
  pendencias: [['pendencias','O que ficou pendente','textarea']],
@@ -34,11 +34,12 @@ export const PERGUNTAS = {
 }
 // Todos os campos do cartão, para edição no detalhe.
 export const CAMPOS_POSVENDA = [
- ['fabrica','Fábrica','fabrica'],['pedidos_fabrica','Pedidos na fábrica'],['prazo_cliente_em','Prazo combinado com o cliente','date'],
- ['implantado_em','Implantado na fábrica em','date'],['pronto_fabrica_em','Pronto na fábrica (ou previsão)','date'],
+ ['fabrica','Fábrica','fabrica'],['pedidos_fabrica','Pedidos na fábrica'],
+ ['carregado_em','Carregou / saiu da fábrica em','date'],['chegada_prevista_em','Chegada prevista (data da transportadora)','date'],
+ ['entrega_agendada_em','Entrega ao cliente agendada para','date'],['montador_previa','Montador previsto (prévia)','montador'],
+ ['prazo_cliente_em','Prazo combinado com o cliente','date'],['implantado_em','Implantado na fábrica em','date'],['pronto_fabrica_em','Pronto na fábrica (ou previsão)','date'],
  ['impedimento','Impedimento do cliente','textarea'],['retorno_previsto_em','Previsão de retorno do cliente','date'],
- ['entrega_agendada_em','Entrega agendada para','date'],['entregue_em','Entrega realizada em','date'],
- ['montador','Montador','montador'],['montagem_inicio_em','Início da montagem','date'],['montagem_fim_prevista_em','Previsão de término da montagem','date'],['montagem_fim_em','Término da montagem','date'],
+ ['entregue_em','Entrega realizada em','date'],['montador','Montador confirmado (após o pagamento)','montador'],['montagem_inicio_em','Início da montagem','date'],['montagem_fim_prevista_em','Previsão de término da montagem','date'],['montagem_fim_em','Término da montagem','date'],
  ['posvenda_em','Pós-venda feito em','date'],['pendencias','Pendências','textarea'],['pecas','Peças solicitadas','textarea'],['pecas_previstas_em','Previsão de chegada das peças','date'],
 ]
 export const FABRICAS = ['Menezes','Bartzen']
@@ -46,6 +47,15 @@ export const MONTADORES_CONHECIDOS = ['Robson','Vilmar','Bruno','Junior','Felipe
 
 export const quitado = (d={}) => (d.saldo_confirmado === true || d.saldo_confirmado === 'true') && !!d.saldo_confirmado_arquivo
 const imp = (d) => d?.importacao_revisoes || {}
+
+// Data de entrega que vale para a cobrança: a agendada com o cliente ou, antes disso, a chegada passada pela
+// transportadora (a Glauci lança assim que o pedido carrega). Sem ela não há cobrança: a Leia não cobra por estimativa.
+export function dataEntregaCobranca(d={}) {
+ const pv = d.posvenda || {}
+ return [pv.entrega_agendada_em, pv.chegada_prevista_em, d.entrega_prevista].find(dataValida) || null
+}
+// Contrato: o saldo é pago 2 dias corridos antes da entrega.
+export const dataCobrancaSaldo = (d={}) => { const e = dataEntregaCobranca(d); return e ? somarDias(e, -2) : null }
 
 // Coluna do cliente no quadro: a escolhida pela Glauci ou, sem isso, a deduzida dos marcos da jornada.
 export function colunaDe(d={}) {
@@ -101,6 +111,7 @@ export function previsaoOperacao(d={}, { prazos=PRAZOS_PADRAO, feriados=[], hoje
  let entrega
  if (ok(pv.entregue_em) || ok(d.entrega_em)) entrega = { data: pv.entregue_em || d.entrega_em, origem:'realizada' }
  else if (ok(pv.entrega_agendada_em) || ok(d.entrega_prevista)) entrega = { data: pv.entrega_agendada_em || d.entrega_prevista, origem:'confirmada' }
+ else if (ok(pv.chegada_prevista_em)) entrega = { data: pv.chegada_prevista_em, origem:'transportadora' }
  else entrega = { data: seguro(() => somarUteis(maior(pronto?.data || hoje, hoje), aposPronto, feriados)), origem:'estimada' }
 
  let montagem
@@ -110,7 +121,8 @@ export function previsaoOperacao(d={}, { prazos=PRAZOS_PADRAO, feriados=[], hoje
  else montagem = { data: seguro(() => somarUteis(maior(pv.montagem_inicio_em || entrega.data || hoje, hoje), diasMontagem, feriados)), origem: entrega.origem === 'estimada' ? 'estimada' : 'estimada após entrega' }
 
  const prazoContrato = d.entrega_prazo || (ok(pv.prazo_cliente_em) ? pv.prazo_cliente_em : null) || (ok(i.assinatura) ? seguro(() => somarUteis(i.assinatura, 35, feriados)) : null)
- const saldoAte = !quitado(d) && entrega.data && entrega.origem !== 'realizada' ? seguro(() => somarDias(entrega.data, -2)) : null
+ // Cobrança só com data de verdade (agendada ou da transportadora), nunca pela estimativa.
+ const saldoAte = !quitado(d) && ['confirmada','transportadora'].includes(entrega.origem) ? seguro(() => somarDias(entrega.data, -2)) : null
  return { coluna, fabrica, leadTime: lt, pronto, entrega, montagem, prazoContrato, saldoAte, quitado: quitado(d) }
 }
 

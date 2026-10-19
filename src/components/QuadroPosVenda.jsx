@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import Modal from './Modal.jsx'
 import { salvarRegistro } from '../lib/jornada.js'
 import { fmtDate } from '../lib/format.js'
 import { hojeSP } from '../lib/prazos.js'
-import { COLUNAS, TITULO_COLUNA, PERGUNTAS, CAMPOS_POSVENDA, FABRICAS, MONTADORES_CONHECIDOS, POS_MONTAGEM, colunaDe, bloqueioMontagem, quitado } from '../lib/posvenda.js'
+import { COLUNAS, TITULO_COLUNA, PERGUNTAS, CAMPOS_POSVENDA, FABRICAS, MONTADORES_CONHECIDOS, POS_MONTAGEM, colunaDe, bloqueioMontagem, quitado, dataEntregaCobranca, dataCobrancaSaldo } from '../lib/posvenda.js'
 
 const ANTES_DA_MONTAGEM = new Set(['pronto','aguardando_cliente','entrega_agendada'])
 
@@ -14,7 +14,7 @@ function dataChave(c, pv={}, d={}) {
  switch (c) {
   case 'implantado': return f(pv.implantado_em || d.implantacao_em) && `Implantado ${f(pv.implantado_em || d.implantacao_em)}`
   case 'producao': return f(pv.pronto_fabrica_em) && `Pronto previsto ${f(pv.pronto_fabrica_em)}`
-  case 'pronto': return f(pv.pronto_fabrica_em) && `Pronto ${f(pv.pronto_fabrica_em)}`
+  case 'pronto': return f(pv.chegada_prevista_em) ? `Chega ${f(pv.chegada_prevista_em)} (transportadora)` : f(pv.pronto_fabrica_em) && `Pronto ${f(pv.pronto_fabrica_em)}`
   case 'aguardando_cliente': return f(pv.retorno_previsto_em) && `Retorno previsto ${f(pv.retorno_previsto_em)}`
   case 'entrega_agendada': return f(pv.entrega_agendada_em || d.entrega_prevista) && `Entrega ${f(pv.entrega_agendada_em || d.entrega_prevista)}`
   case 'montagem': return [f(pv.entregue_em) && `Entregue ${f(pv.entregue_em)}`, f(pv.montagem_inicio_em) && `montagem desde ${f(pv.montagem_inicio_em)}`].filter(Boolean).join(' · ') || null
@@ -47,10 +47,13 @@ export default function QuadroPosVenda({ registros, mapa, pessoas=[], eu, onSalv
  const assistAbertas = (r) => registros.filter(a => a.tipo === 'assistencia' && a.contrato_id === r.contrato_id && a.dados.status !== 'Resolvida')
 
  const cartoes = useMemo(() => registros.filter(r => r.tipo === 'pedido' && colunaDe(r.dados))
-  .filter(r => !busca || `${cliente(r)} ${r.dados.posvenda?.montador || ''} ${r.dados.posvenda?.fabrica || ''}`.toLowerCase().includes(busca.toLowerCase())), [registros, busca, mapa])
+  .filter(r => !busca || `${cliente(r)} ${r.dados.posvenda?.montador || ''} ${r.dados.posvenda?.montador_previa || ''} ${r.dados.posvenda?.fabrica || ''}`.toLowerCase().includes(busca.toLowerCase())), [registros, busca, mapa])
  const montadores = useMemo(() => [...new Set([...MONTADORES_CONHECIDOS, ...registros.map(r => r.dados.posvenda?.montador).filter(Boolean)])].sort(), [registros])
  const porColuna = Object.fromEntries(COLUNAS.map(c => [c.id, cartoes.filter(r => colunaDe(r.dados) === c.id)
-  .sort((a, b) => (a.dados.posvenda?.entrega_agendada_em || a.dados.posvenda?.pronto_fabrica_em || '9999').localeCompare(b.dados.posvenda?.entrega_agendada_em || b.dados.posvenda?.pronto_fabrica_em || '9999'))]))
+  .sort((a, b) => (dataEntregaCobranca(a.dados) || a.dados.posvenda?.pronto_fabrica_em || '9999').localeCompare(dataEntregaCobranca(b.dados) || b.dados.posvenda?.pronto_fabrica_em || '9999'))]))
+ // Vindo das pendências ("Lançar a data no quadro"): abre direto o cartão do cliente.
+ const [params, setParams] = useSearchParams()
+ useEffect(() => { const id = params.get('cartao'); const r = id && registros.find(x => x.id === id); if (r) { setDetalhe({ r, pv: { ...(r.dados.posvenda || {}) }, nota: '' }); params.delete('cartao'); setParams(params, { replace: true }) } }, [params, registros])
  const semComprovante = cartoes.filter(r => POS_MONTAGEM.has(colunaDe(r.dados)) && colunaDe(r.dados) !== 'finalizado' && !quitado(r.dados)).length
  const aguardandoLeia = cartoes.filter(r => ANTES_DA_MONTAGEM.has(colunaDe(r.dados)) && !quitado(r.dados)).length
 
@@ -60,7 +63,7 @@ export default function QuadroPosVenda({ registros, mapa, pessoas=[], eu, onSalv
   const bloqueio = bloqueioMontagem(r.dados, destino)
   if (bloqueio) { setErro(`${cliente(r)}: ${bloqueio}`); return }
   const pv = r.dados.posvenda || {}
-  const campos = Object.fromEntries((PERGUNTAS[destino] || []).map(([k]) => [k, pv[k] || (k.endsWith('_em') && ['entregue_em','montagem_fim_em','posvenda_em','implantado_em'].includes(k) ? hojeSP() : '')]))
+  const campos = Object.fromEntries((PERGUNTAS[destino] || []).map(([k]) => [k, pv[k] || (k === 'montador' ? pv.montador_previa || '' : '') || (k === 'entrega_agendada_em' ? pv.chegada_prevista_em || '' : '') || (k.endsWith('_em') && ['entregue_em','montagem_fim_em','posvenda_em','implantado_em'].includes(k) ? hojeSP() : '')]))
   setMover({ r, destino, campos })
  }
  async function gravar(r, pv) {
@@ -114,11 +117,12 @@ export default function QuadroPosVenda({ registros, mapa, pessoas=[], eu, onSalv
       return <article key={r.id} draggable={pode} onDragStart={() => setArrastando(r.id)} onClick={() => { setErro(''); setDetalhe({ r, pv: { ...pv }, nota: '' }) }}
        style={{ background: 'var(--paper)', borderRadius: 'var(--radius-sm)', padding: '9px 10px', marginBottom: 8, boxShadow: 'var(--shadow)', cursor: 'pointer', borderLeft: lock ? '3px solid var(--danger)' : '3px solid transparent' }}>
        <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.3 }}>{cliente(r)}</div>
-       <div className="sub" style={{ margin: '2px 0 0', fontSize: 12 }}>{[pv.fabrica, pv.montador && `Montador ${pv.montador}`].filter(Boolean).join(' · ') || 'Fábrica e montador a informar'}</div>
+       <div className="sub" style={{ margin: '2px 0 0', fontSize: 12 }}>{[pv.fabrica, pv.montador ? `Montador ${pv.montador}` : pv.montador_previa && `Prévia: ${pv.montador_previa}`].filter(Boolean).join(' · ') || 'Fábrica e montador a informar'}</div>
        {dataChave(c.id, pv, d) && <div style={{ fontSize: 12, marginTop: 4 }}>{dataChave(c.id, pv, d)}</div>}
        {pv.impedimento && <div style={{ fontSize: 12, marginTop: 4, color: 'var(--warn)' }}>{pv.impedimento.slice(0, 90)}</div>}
        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
-        {lock && <span className="badge danger">🔒 Saldo sem comprovante</span>}
+        {lock && (dataCobrancaSaldo(d) ? <span className="badge danger">🔒 Leia cobra até {fmtDate(dataCobrancaSaldo(d))}</span> : <span className="badge danger">🔒 Saldo sem comprovante</span>)}
+        {['pronto','entrega_agendada'].includes(c.id) && !quitado(d) && !dataEntregaCobranca(d) && <span className="badge warn">Lançar chegada da transportadora</span>}
         {POS_MONTAGEM.has(c.id) && c.id !== 'finalizado' && !quitado(d) && <span className="badge warn">Sem comprovante no sistema</span>}
         {abertas.length > 0 && <span className="badge warn">{abertas.length} assistência{abertas.length > 1 ? 's' : ''}</span>}
         {(pv.anotacoes?.length || 0) + (pv.trello?.comentarios?.length || 0) > 0 && <span className="badge neutral">{(pv.anotacoes?.length || 0) + (pv.trello?.comentarios?.length || 0)} anotação(ões)</span>}
@@ -142,11 +146,11 @@ export default function QuadroPosVenda({ registros, mapa, pessoas=[], eu, onSalv
     {erro && <div className="login-err" role="alert">{erro}</div>}
     <div className="grid cols-3" style={{ marginBottom: 12 }}>
      <div className="card"><small>Etapa</small><p style={{ margin: 0 }}>{TITULO_COLUNA[coluna]}</p>{pode && <select aria-label="Mover para" className="input" style={{ marginTop: 6 }} value="" onChange={e => { if (e.target.value) { setDetalhe(null); iniciarMover(r, e.target.value) } }}><option value="">Mover para…</option>{COLUNAS.filter(c => c.id !== coluna).map(c => <option key={c.id} value={c.id}>{c.titulo}</option>)}</select>}</div>
-     <div className="card"><small>Saldo final</small><p style={{ margin: 0, color: quitado(d) ? 'var(--ok)' : 'var(--danger)' }}>{quitado(d) ? 'Quitação conferida pela Leia' : '🔒 Aguardando comprovante da Leia'}</p></div>
+     <div className="card"><small>Saldo final</small><p style={{ margin: 0, color: quitado(d) ? 'var(--ok)' : 'var(--danger)' }}>{quitado(d) ? 'Quitação conferida pela Leia' : '🔒 Aguardando comprovante da Leia'}</p>{!quitado(d) && <div className="sub" style={{ margin: '4px 0 0' }}>{dataCobrancaSaldo({ ...d, posvenda: pv }) ? `Cobrança em ${fmtDate(dataCobrancaSaldo({ ...d, posvenda: pv }))} (2 dias antes da entrega)${d.cobranca_em ? ` · cliente avisado em ${fmtDate(d.cobranca_em)}` : ' · Leia ainda vai avisar o cliente'}` : 'Lance a chegada prevista (transportadora) para a Leia cobrar.'}</div>}</div>
      <div className="card"><small>Assistências abertas</small><p style={{ margin: 0 }}>{assistAbertas(r).length ? assistAbertas(r).map(a => <Link key={a.id} to={'/jornada?registro=' + encodeURIComponent(a.id)} style={{ display: 'block', textDecoration: 'underline' }}>{(a.dados.descricao || 'Assistência').split('\n').find(l => l.trim() && !l.startsWith('Trello'))?.slice(0, 50) || 'Assistência'}</Link>) : 'Nenhuma'}</p></div>
     </div>
     {pv.trello && <p className="sub">Veio do Trello: cartão "{pv.trello.nome}" na lista {pv.trello.lista}.</p>}
-    <div className="grid cols-2">{CAMPOS_POSVENDA.map(([k, label, tipo]) => <div className="field" key={k} style={tipo === 'textarea' ? { gridColumn: '1 / -1' } : null}><label>{label}</label><Campo k={k} label={label} tipo={tipo} valor={pv[k]} travado={!pode} montadores={montadores} onChange={(k, v) => setDetalhe(x => ({ ...x, pv: { ...x.pv, [k]: v } }))} /></div>)}</div>
+    <div className="grid cols-2">{CAMPOS_POSVENDA.map(([k, label, tipo]) => <div className="field" key={k} style={tipo === 'textarea' ? { gridColumn: '1 / -1' } : null}><label>{label}</label><Campo k={k} label={label} tipo={tipo} valor={pv[k]} travado={!pode || (['montador', 'montagem_inicio_em', 'entregue_em'].includes(k) && !quitado(d) && !POS_MONTAGEM.has(coluna))} montadores={montadores} onChange={(k, v) => setDetalhe(x => ({ ...x, pv: { ...x.pv, [k]: v } }))} />{k === 'montador_previa' && <div className="faint" style={{ fontSize: 12 }}>Só para planejar; não libera a montagem.</div>}{['montador', 'montagem_inicio_em', 'entregue_em'].includes(k) && !quitado(d) && !POS_MONTAGEM.has(coluna) && <div className="faint" style={{ fontSize: 12 }}>🔒 Liberado depois que a Leia anexar o comprovante.</div>}</div>)}</div>
     <h3 style={{ margin: '18px 0 8px' }}>Anotações</h3>
     {notas.length === 0 && <p className="sub">Nenhuma anotação ainda.</p>}
     {notas.map((n, i) => <div key={i} style={{ borderLeft: '2px solid var(--line-strong)', padding: '2px 0 2px 10px', marginBottom: 10 }}><div className="sub" style={{ margin: 0 }}>{n.autor}{n.em ? ` · ${fmtDate(String(n.em).slice(0, 10))}` : ''}</div><div style={{ whiteSpace: 'pre-wrap' }}>{n.texto}</div></div>)}

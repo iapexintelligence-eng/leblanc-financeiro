@@ -1,5 +1,6 @@
 import { hojeSP, somarDias, somarUteis, util, dataValida } from './prazos.js'
 import { setorPedido, SETORES, prazoImportado, setorImportado } from './setores.js'
+import { dataEntregaCobranca } from './posvenda.js'
 
 export const PAPEIS={vendedor:'Vendas',medidor:'Rodrigo · medida técnica',correcao:'Conferência',logistica:'Glauci · logística',financeiro:'Leia · financeiro',gestor:'Gestão'}
 export const MARCOS={'':'Não bloqueia avanço',liberacao_em:'Liberação para medição',implantacao_em:'Implantação na fábrica',confirmada:'Liberação da escala',entrega_em:'Entrega',fotos_em:'Fotos'}
@@ -7,6 +8,19 @@ export function situacoesSeparadas(d) {
  return {comercial:d.tipo_venda==='Futura'&&!d.imovel_pronto_em?'Venda futura · aguarda imóvel':'Venda fechada',operacional:SETORES[setorPedido(d)]?.titulo||'Em acompanhamento',financeiro:d.saldo_confirmado?'Quitação conferida':d.entrada_confirmada?'Entrada conferida · saldo pendente':d.historico?.liberacao_em?'Entrada anterior ao sistema · saldo a conferir':'Entrada pendente de conferência'}
 }
 const PAPEL_IMPORTADO={'Assistência aberta':'logistica','Aguardando imóvel / liberação para medição':'vendedor','Definir conferente':'gestor'}
+const br=(x)=>x?x.split('-').reverse().join('/'):''
+// Saldo final (contrato: pago 2 dias corridos antes da entrega). Sem data de chegada/entrega não há cobrança:
+// a pendência é da Glauci lançar a data. Com a data: 1º a Leia avisa o cliente da data do pagamento; 2º anexa o comprovante.
+function saldoAntesDaEntrega(r,add){
+ const d=r.dados,col=d.posvenda?.coluna,entrega=dataEntregaCobranca(d)
+ if(!entrega){
+  if(['pronto','entrega_agendada'].includes(col)||(!col&&d.cliente_recebe_em))add(r,'Lançar a data de chegada passada pela transportadora (a cobrança do saldo depende dela)','logistica',null,{link:col?'/montagem?cartao='+encodeURIComponent(r.id):null,acao:col?'Lançar a data no quadro':null,origem:'Saldo · aguardando data de chegada'})
+  return
+ }
+ const cobrar=somarDias(entrega,-2),quando=`${br(cobrar)} (entrega ${br(entrega)})`
+ if(!d.cobranca_em)add(r,`Avisar o cliente: pagamento do saldo em ${quando}`,'financeiro',cobrar,{trava:'montagem',prioridade:1,acao:'Registrar o aviso',origem:'Saldo · informativo ao cliente'})
+ else add(r,`Cobrar o saldo e anexar o comprovante até ${br(cobrar)} (entrega ${br(entrega)})`,'financeiro',cobrar,{trava:'montagem',prioridade:1,acao:'Anexar comprovante',origem:`Saldo · trava a montagem · cliente avisado em ${br(d.cobranca_em)}`})
+}
 const TITULO_IMPORTADO={'Assinatura sem data na planilha':'Assinatura das guias (sem data)'}
 export function pendenciasAutomaticas(registros,feriados=[]) {
  const out=[]
@@ -24,10 +38,10 @@ export function pendenciasAutomaticas(registros,feriados=[]) {
   const pv=d.posvenda||{},col=pv.coluna
   const quitadoPV=(d.saldo_confirmado===true||d.saldo_confirmado==='true')&&!!d.saldo_confirmado_arquivo
   if(col&&!quitadoPV){
-   const entrega=pv.entrega_agendada_em||d.entrega_prevista
-   // Prioridade 1: saldo que trava a montagem (vem antes de tudo). Prioridade 2: regularizar quem já montou sem comprovante.
-   if(['pronto','aguardando_cliente','entrega_agendada'].includes(col))add(r,'Cobrar o saldo e anexar o comprovante para liberar a montagem','financeiro',entrega&&dataValida(entrega)?somarDias(entrega,-2):null,{trava:'montagem',prioridade:1,origem:'Saldo · trava a montagem'})
-   if(['montagem','entrega_tecnica','pendencias','pecas','assistencia'].includes(col))add(r,'Anexar o comprovante do saldo (cliente já em montagem, veio do Trello)','financeiro',null,{trava:'regularizar',prioridade:2,origem:'Saldo · sem comprovante no sistema'})
+   // Antes da montagem: a Glauci lança a chegada da transportadora; com ela, a Leia avisa o cliente e cobra 2 dias antes.
+   if(['implantado','producao','pronto','aguardando_cliente','entrega_agendada'].includes(col))saldoAntesDaEntrega(r,add)
+   // Prioridade 2: regularizar quem já montou sem comprovante.
+   if(['montagem','entrega_tecnica','pendencias','pecas','assistencia'].includes(col))add(r,'Anexar o comprovante do saldo (cliente já em montagem, veio do Trello)','financeiro',null,{trava:'regularizar',prioridade:2,acao:'Anexar comprovante',origem:'Saldo · sem comprovante no sistema'})
   }
   if(col==='entrega_tecnica'&&!pv.posvenda_em)add(r,'Fazer o pós-venda com o cliente após a montagem','logistica',pv.montagem_fim_em&&dataValida(pv.montagem_fim_em)?somarUteis(pv.montagem_fim_em,5,feriados):null)
   if(['montagem','entrega_tecnica','pendencias','pecas','assistencia','finalizado'].includes(col))continue
@@ -57,7 +71,7 @@ export function pendenciasAutomaticas(registros,feriados=[]) {
   if(d.aprovacao_em&&!d.implantacao_em)add(r,'Anexar XML final, aguardar OK da Leia e implantar','correcao',d.entrega_prazo)
   if(d.implantacao_em&&!d.fabrica_paga&&!hist.implantacao_em)add(r,'Conferir pagamento da fábrica','financeiro',null)
   if(d.carregamento_em&&!d.cliente_recebe_em)add(r,'Confirmar com cliente que pode receber','logistica',d.entrega_prevista||d.entrega_prazo)
-  if(d.cliente_recebe_em&&!(d.saldo_confirmado&&d.saldo_confirmado_arquivo))add(r,'Cobrar e conferir saldo final','financeiro',d.entrega_prevista?somarDias(d.entrega_prevista,-2):null,{trava:'montagem',prioridade:1,origem:'Saldo · trava a montagem'})
+  if(!col&&d.cliente_recebe_em&&!(d.saldo_confirmado&&d.saldo_confirmado_arquivo))saldoAntesDaEntrega(r,add)
   if(d.aprovacao_em&&!d.entrega_em)add(r,'Acompanhar entrega no prazo','logistica',d.entrega_prazo)
   if(d.montagem_concluida_em&&!d.fotos_em&&!registros.some(a=>a.contrato_id===r.contrato_id&&a.tipo==='assistencia'&&a.dados.status!=='Resolvida'))add(r,'Agendar fotos após conclusão','logistica',null)
  }

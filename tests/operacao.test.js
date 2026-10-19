@@ -140,12 +140,27 @@ test('assistência criada substitui a pendência "Assistência aberta" da planil
  assert.equal(pendenciasAutomaticas([apurada]).some(x=>x.papel==='financeiro'),false)
 })
 
-test('saldo que trava a montagem vem antes de qualquer outra pendência, mesmo sem data de entrega',()=>{
- const ped=(id,coluna,extra={})=>({id,tipo:'pedido',contrato_id:'c'+id,dados:{cliente_nome:'Cliente '+id,posvenda:{coluna},...extra}})
- const regs=[ped('a','entrega_tecnica'),ped('b','aguardando_cliente'),ped('c','entrega_agendada',{posvenda:{coluna:'entrega_agendada',entrega_agendada_em:'2026-11-10'}}),ped('d','pronto',{saldo_confirmado:true,saldo_confirmado_arquivo:'x.pdf'})]
- const lista=ordenarPendencias([{id:'z',titulo:'Outra coisa urgente',papel:'financeiro',prazo:'2026-01-01'},...pendenciasAutomaticas(regs)].filter(i=>i.papel==='financeiro'),'2026-10-19')
- assert.deepEqual(lista.slice(0,3).map(i=>[i.cliente,i.trava]),[['Cliente c','montagem'],['Cliente b','montagem'],['Cliente a','regularizar']])
- assert.ok(lista.slice(3).every(i=>!i.trava)&&lista.findIndex(i=>i.id==='z')>2,'a pendência vencida comum fica depois dos saldos')
- assert.equal(lista[0].prazo,'2026-11-08')
- assert.ok(!lista.some(i=>i.cliente==='Cliente d'&&i.trava),'quitado com comprovante não gera cobrança')
+test('saldo: sem data da transportadora não há cobrança; com a data a Leia avisa e depois cobra 2 dias antes',()=>{
+ const ped=(id,pv,extra={})=>({id,tipo:'pedido',contrato_id:'c'+id,dados:{cliente_nome:'Cliente '+id,posvenda:pv,...extra}})
+ const regs=[
+  ped('a',{coluna:'entrega_tecnica'}),
+  ped('b',{coluna:'pronto'}),
+  ped('c',{coluna:'pronto',chegada_prevista_em:'2026-11-10'}),
+  ped('e',{coluna:'entrega_agendada',chegada_prevista_em:'2026-11-10',entrega_agendada_em:'2026-11-12'},{cobranca_em:'2026-10-19'}),
+  ped('d',{coluna:'pronto',chegada_prevista_em:'2026-11-10'},{saldo_confirmado:true,saldo_confirmado_arquivo:'x.pdf'}),
+ ]
+ const todas=pendenciasAutomaticas(regs)
+ const saldo=(c)=>todas.filter(i=>i.cliente==='Cliente '+c&&/saldo|chegada/i.test(i.titulo))
+ // Sem data: nada para a Leia; a Glauci lança a chegada pelo quadro.
+ assert.deepEqual(saldo('b').map(i=>[i.papel,i.link]),[['logistica','/montagem?cartao=b']])
+ // Com a chegada: primeiro o aviso ao cliente, já com a data do pagamento (2 dias corridos antes).
+ assert.deepEqual(saldo('c').map(i=>[i.papel,i.prazo,i.trava]),[['financeiro','2026-11-08','montagem']])
+ assert.match(saldo('c')[0].titulo,/Avisar o cliente: pagamento do saldo em 08\/11\/2026/)
+ // Cliente avisado: vira a cobrança com comprovante; a entrega agendada vale mais que a chegada.
+ assert.match(saldo('e')[0].titulo,/Cobrar o saldo e anexar o comprovante até 10\/11\/2026/)
+ assert.equal(saldo('e')[0].prazo,'2026-11-10')
+ assert.equal(saldo('d').length,0,'quitado com comprovante não gera cobrança')
+ const lista=ordenarPendencias([{id:'z',titulo:'Outra coisa urgente',papel:'financeiro',prazo:'2026-01-01'},...todas].filter(i=>i.papel==='financeiro'),'2026-10-19')
+ assert.deepEqual(lista.slice(0,3).map(i=>[i.cliente,i.trava]),[['Cliente c','montagem'],['Cliente e','montagem'],['Cliente a','regularizar']])
+ assert.ok(lista.slice(3).every(i=>!i.trava),'saldos antes das demais pendências')
 })

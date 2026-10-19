@@ -6,10 +6,10 @@ import { jornadaDemo } from '../lib/jornadaDemo.js'
 import { fmtDate } from '../lib/format.js'
 import { hojeSP, dataValida } from '../lib/prazos.js'
 import { setorPedido } from '../lib/setores.js'
-import { previsaoOperacao, frenteAlvo, semanaDe, colunaDe, TITULO_COLUNA, PRAZOS_PADRAO } from '../lib/posvenda.js'
+import { previsaoOperacao, frenteAlvo, semanaDe, colunaDe, TITULO_COLUNA, PRAZOS_PADRAO, POS_MONTAGEM } from '../lib/posvenda.js'
 import Protegido from '../components/Protegido.jsx'
 
-const ORIGEM = { confirmada:'confirmada', 'fábrica':'previsão da fábrica', estimada:'estimada', 'estimada após entrega':'estimada', realizada:'realizada' }
+const ORIGEM = { transportadora:'chegada da transportadora', confirmada:'confirmada', 'fábrica':'previsão da fábrica', estimada:'estimada', 'estimada após entrega':'estimada', realizada:'realizada' }
 const corNivel = { ok:'ok', warn:'warn', danger:'danger' }
 const Data = ({ v }) => !v?.data ? <span className="faint">—</span> : <>{fmtDate(v.data)}<div className="faint" style={{ fontSize: 11 }}>{ORIGEM[v.origem] || v.origem}</div></>
 const natal = () => `${hojeSP().slice(0, 4)}-12-24`
@@ -61,8 +61,9 @@ export default function PrevisibilidadeMontagens() {
    const inicio = pv.montagem_inicio_em || l.prev.entrega?.data
    if (!dataValida(inicio) || inicio > alvo) continue
    const s = semanaDe(inicio > hoje ? inicio : hoje)
-   const quem = pv.montador || 'A definir'
-   ;(out[s] ||= {})[quem] = [...((out[s] || {})[quem] || []), l.cliente]
+   // Prévia da Glauci conta na carga do montador, marcada como prévia até o pagamento liberar.
+   const quem = pv.montador || pv.montador_previa || 'A definir'
+   ;(out[s] ||= {})[quem] = [...((out[s] || {})[quem] || []), pv.montador ? l.cliente : `${l.cliente} (prévia)`]
   }
   return out
  }, [linhas, alvo])
@@ -134,7 +135,7 @@ export default function PrevisibilidadeMontagens() {
        <td><Data v={l.prev.montagem} /></td>
        <td>{l.prev.prazoContrato ? fmtDate(l.prev.prazoContrato) : <span className="faint">—</span>}{l.prev.prazoContrato && l.prev.entrega?.data && l.prev.entrega.data > l.prev.prazoContrato && <div className="badge danger">Entrega após o prazo</div>}</td>
        <td>{l.alvo && <span className={'badge ' + corNivel[l.alvo.nivel]}>{l.alvo.texto}</span>}{g === 'sem' && l.alvo?.limiteImplantar && <div className="sub" style={{ margin: 0 }}>Implantar até {fmtDate(l.alvo.limiteImplantar)}</div>}</td>
-       <td>{l.prev.quitado ? <span className="badge ok">Quitado</span> : l.grupo === 'entrega' && l.prev.saldoAte ? <span className="badge danger">🔒 Cobrar até {fmtDate(l.prev.saldoAte)}</span> : <span className="faint">A cobrar</span>}</td>
+       <td>{l.prev.quitado ? <span className="badge ok">Quitado</span> : l.prev.saldoAte ? <span className="badge danger">🔒 Cobrar até {fmtDate(l.prev.saldoAte)}</span> : l.grupo === 'entrega' && !POS_MONTAGEM.has(l.prev.coluna) ? <span className="badge warn">Aguardando data da transportadora</span> : <span className="faint">A cobrar</span>}</td>
       </tr>)}
      </tbody>
     </table></div>
@@ -158,7 +159,7 @@ export default function PrevisibilidadeMontagens() {
    <div className="sub">A Leia cobra o saldo 2 dias antes da entrega e anexa o comprovante na ficha. Sem isso, a montagem fica bloqueada no quadro.</div>
    <div className="table-wrap" style={{ boxShadow: 'none' }}><table>
     <thead><tr><th>Cliente</th><th>Entrega</th><th>Cobrar até</th></tr></thead>
-    <tbody>{saldos.length === 0 ? <tr><td colSpan="3" className="empty">Nenhum saldo pendente com entrega prevista.</td></tr> : saldos.map(l => <tr key={l.r.id} style={{ background: l.prev.saldoAte < hoje ? 'var(--danger-bg)' : undefined }}><td>{l.cliente}</td><td><Data v={l.prev.entrega} /></td><td>{fmtDate(l.prev.saldoAte)}{l.prev.saldoAte < hoje && <div className="badge danger">Atrasado</div>}</td></tr>)}</tbody>
+    <tbody>{saldos.length === 0 ? <tr><td colSpan="3" className="empty">Nenhum saldo com data de chegada ou entrega lançada.</td></tr> : saldos.map(l => <tr key={l.r.id} style={{ background: l.prev.saldoAte < hoje ? 'var(--danger-bg)' : undefined }}><td>{l.cliente}</td><td><Data v={l.prev.entrega} /></td><td>{fmtDate(l.prev.saldoAte)}{l.prev.saldoAte < hoje && <div className="badge danger">Atrasado</div>}</td></tr>)}</tbody>
    </table></div>
   </div>
  </>
