@@ -35,3 +35,21 @@ test('quadro de cartões mostra qual fatura já foi lançada no mês e qual falt
   assert.deepEqual(s.outros, ['Cartão estranho'])
   assert.equal(cartaoDe('Mastercard final 3553').banco, 'Viacredi')
 })
+
+test('fatura Nubank em PDF: data na linha de cima, parcela, IOF e pagamentos como crédito', () => {
+  const linhas = JSON.parse(fs.readFileSync(new URL('./fixtures/fatura-nubank.json', import.meta.url)))
+  const r = parseFaturaCartao(linhas)
+  assert.equal(r.cartao, 'Nubank')
+  assert.equal(r.mesRef, '2026-10')
+  assert.equal(r.totalFatura, 4209.36)
+  assert.deepEqual(r.itens.map((i) => [i.data_compra, i.descricao, i.parcela, i.valor, i.credito]), [
+    ['2026-09-11', 'Mercadolivre*Mercadol', '2/2', 191.46, false],
+    ['2026-09-20', 'Facebk *E95wz522g4', '', 3415.37, false],
+    ['2026-09-29', 'Netlify', '', 48.8, false],
+    ['2026-09-29', 'IOF de "Netlify"', '', 1.71, false],
+    ['2026-10-10', 'Mercado*Mercadolivre', '', 552.02, false],
+    ['2026-09-18', 'Pagamento em 18 SET', '', -8337.79, true],
+  ])
+  const compras = r.itens.filter((i) => !i.credito).reduce((s, i) => s + i.valor, 0)
+  assert.equal(Math.round(compras * 100) / 100, r.totalFatura)
+})

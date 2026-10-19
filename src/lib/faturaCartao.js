@@ -140,9 +140,59 @@ function parseAilos(arr) {
   return { cartao: final ? `Mastercard final ${final}` : 'Mastercard (Viacredi)', mesRef, itens, totalFatura: total }
 }
 
+// ---- Nubank (PDF) ----
+// Na seção TRANSAÇÕES a data vem numa linha e a compra na seguinte:
+//   11 SET
+//   •••• 2867 Mercadolivre*Mercadol - Parcela 2/2 R$ 191,46
+// Pagamentos aparecem como "Pagamento em 18 SET −R$ 8.337,79" e entram como crédito (desmarcados).
+export function ehFaturaNubankPdf(arr) { return arr.some((l) => /Nu Pagamentos S\.?A/i.test(l)) && arr.some((l) => /^TRANSA[CÇ][OÕ]ES$/i.test(l.trim())) }
+function parseNubankPdf(arr) {
+  let mesRef = '', compras = null, iof = 0
+  for (const raw of arr) {
+    const l = raw.replace(/\s+/g, ' ').trim()
+    const v = !mesRef && l.match(/vencimento:?\s*(\d{1,2})\s+([A-Za-zç]{3})\s+(\d{4})/i)
+    if (v && MESES[v[2].toLowerCase()]) mesRef = `${v[3]}-${pad(MESES[v[2].toLowerCase()])}`
+    const c = l.match(/^Total de compras.*R\$\s*([\d.]+,\d{2})$/i); if (c) compras = parseMoney(c[1])
+    const i = l.match(/^IOF de compras internacionais R\$\s*([\d.]+,\d{2})$/i); if (i) iof += parseMoney(i[1])
+  }
+  const { ano: anoFat, mes: mesFat } = anoDoMesRef(mesRef)
+  const itens = []
+  let dentro = false, data = null
+  const reData = /^(\d{1,2})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)$/i
+  const reTx = /^(?:•+\s*(\d{4})\s+)?(.+?)\s+([−–-])?\s*R\$\s*([\d.]+,\d{2})$/
+  for (const raw of arr) {
+    const l = raw.replace(/\s+/g, ' ').trim()
+    if (/^TRANSA[CÇ][OÕ]ES$/i.test(l)) { dentro = true; data = null; continue }
+    if (!dentro) continue
+    const d = l.match(reData)
+    if (d) {
+      const mn = MESES[d[2].toLowerCase()]
+      let ano = anoFat; if (ano != null && mn > mesFat) ano -= 1
+      data = ano != null ? `${ano}-${pad(mn)}-${pad(Number(d[1]))}` : null
+      continue
+    }
+    const usd = l.match(/^USD\s*([\d.,]+)$/i)
+    if (usd && itens.length) { itens[itens.length - 1].valor_usd = Number(usd[1].replace(',', '.')); continue }
+    const m = l.match(reTx)
+    if (!m || data === undefined) continue
+    if (data === null) continue // linha de total (titular, "Pagamentos") não tem data própria
+    const [, , descBruta, sinal] = m
+    let valor = parseMoney(m[4])
+    const credito = !!sinal || /^Pagamento em/i.test(descBruta) || /estorno|cr[eé]dito de/i.test(descBruta)
+    if (credito) valor = -Math.abs(valor)
+    const parc = descBruta.match(/\s*-\s*Parcela\s*(\d{1,2}\/\d{1,2})/i)
+    const descricao = descBruta.replace(/\s*-\s*Parcela\s*\d{1,2}\/\d{1,2}/i, '').trim()
+    itens.push({ data_compra: data, descricao, parcela: parc ? parc[1] : '', valor_usd: null, valor, credito, encargo: /\b(iof|juros|encargo|anuidade|multa|rotativo)\b/i.test(descricao) })
+    data = null
+  }
+  const totalFatura = compras != null ? Math.round((compras + iof) * 100) / 100 : null
+  return { cartao: 'Nubank', mesRef, itens, totalFatura }
+}
+
 export function parseFaturaCartao(lines, { foto = false } = {}) {
   const arr = Array.isArray(lines) ? lines : String(lines).split('\n')
   if (ehFaturaAilos(arr)) return parseAilos(arr)
+  if (ehFaturaNubankPdf(arr)) return parseNubankPdf(arr)
   const { cartao, mesRef } = acharCabecalho(arr)
   const { ano: anoFat, mes: mesFat } = anoDoMesRef(mesRef)
   const itens = []

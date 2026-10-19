@@ -333,7 +333,7 @@ export default function FaturasCartao() {
           </div>
           <div className="between" style={{ marginBottom: 8 }}>
             <div className="sub">{imp.itens.length} transações lidas. Marque quem é de cada uma e desmarque o que não quer importar.</div>
-            {imp.totalFatura != null && <div className={Math.abs(impTotal - imp.totalFatura) < 0.01 ? 'sub' : 'login-err'} role="status" style={{ marginTop: 6 }}>Total da fatura no PDF: {brl(imp.totalFatura)} · marcado para importar: {brl(impTotal)}{Math.abs(impTotal - imp.totalFatura) < 0.01 ? ' · confere' : ' · confira antes de importar'}</div>}
+            {imp.totalFatura != null && <div className={Math.abs(impTotal - imp.totalFatura) < 0.01 ? 'sub' : 'login-err'} role="status" style={{ marginTop: 6 }}>Compras da fatura no PDF: {brl(imp.totalFatura)} · marcado para importar: {brl(impTotal)}{Math.abs(impTotal - imp.totalFatura) < 0.01 ? ' · confere' : ' · confira antes de importar'}</div>}
             <div className="tools" style={{ gap: 6 }}>
               <button className="btn sm ghost" onClick={() => marcarTodos(true)}>Marcar todos</button>
               <button className="btn sm ghost" onClick={() => marcarTodos(false)}>Desmarcar todos</button>
