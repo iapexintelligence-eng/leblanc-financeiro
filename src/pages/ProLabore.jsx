@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
-import { brl } from '../lib/format.js'
+import { brl, fmtDate } from '../lib/format.js'
 import Modal from '../components/Modal.jsx'
 import { IcoEdit } from '../components/Icons.jsx'
 
@@ -13,6 +13,7 @@ const CAT_LABEL = { pro_labore: 'Pró-labore', marketing: 'Marketing / RT' }
 export default function ProLabore() {
   const [rows, setRows] = useState(null)
   const [tetos, setTetos] = useState([])
+  const [retiradas, setRetiradas] = useState([])
   const [mesF, setMesF] = useState('')
   const [modal, setModal] = useState(null)
   const [modalRet, setModalRet] = useState(null)
@@ -20,13 +21,15 @@ export default function ProLabore() {
   const [erro, setErro] = useState('')
 
   const carregar = async () => {
-    const [m, t] = await Promise.all([
+    const [m, t, p] = await Promise.all([
       supabase.from('vw_pro_labore_mes').select('*'),
       supabase.from('pro_labore_teto').select('*'),
+      supabase.from('pagamentos').select('id,fornecedor,valor,data_pagamento,data_vencimento').eq('retirada', true).not('fornecedor', 'is', null),
     ])
     if (m.error) setErro(m.error.message)
     setRows(m.data || [])
     setTetos(t.data || [])
+    setRetiradas(p.data || [])
   }
   useEffect(() => { carregar() }, [])
 
@@ -42,6 +45,10 @@ export default function ProLabore() {
     restante: lista.reduce((s, r) => s + n(r.restante), 0),
   }), [lista])
 
+  // Retiradas de cada sócio no mês (mesma regra da view: data do pagamento ou, sem ela, o vencimento).
+  const datasDe = (r) => retiradas.map((p) => ({ ...p, data: p.data_pagamento || p.data_vencimento }))
+    .filter((p) => (p.fornecedor || '').toLowerCase() === (r.socio || '').toLowerCase() && (p.data || '').slice(0, 7) === r.mes_referencia)
+    .sort((a, b) => (a.data || '').localeCompare(b.data || ''))
   const socios = useMemo(() => [...new Set((rows || []).map((r) => r.socio).filter(Boolean))].sort(), [rows])
   const abrirRetirada = (socio = '') => {
     setErro('')
@@ -81,7 +88,7 @@ export default function ProLabore() {
   }
 
   return (
-    <div className="card" style={{ maxWidth: 1000 }}>
+    <div className="card" style={{ maxWidth: 1120 }}>
       <div className="between">
         <div>
           <h3>Pró-labore</h3>
@@ -106,10 +113,10 @@ export default function ProLabore() {
 
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Sócio</th><th>Categoria</th><th>Mês</th><th className="num">Teto</th><th className="num">Retirado</th><th className="num">Restante</th><th style={{ width: 160 }}>Uso</th><th></th></tr></thead>
+          <thead><tr><th>Sócio</th><th>Categoria</th><th>Mês</th><th className="num">Teto</th><th>Data da retirada</th><th className="num">Retirado</th><th className="num">Restante</th><th style={{ width: 160 }}>Uso</th><th></th></tr></thead>
           <tbody>
-            {rows === null && <tr><td colSpan="8" className="empty">Carregando…</td></tr>}
-            {rows && lista.length === 0 && <tr><td colSpan="8" className="empty">Sem registros.</td></tr>}
+            {rows === null && <tr><td colSpan="9" className="empty">Carregando…</td></tr>}
+            {rows && lista.length === 0 && <tr><td colSpan="9" className="empty">Sem registros.</td></tr>}
             {lista.map((r, i) => {
               const uso = n(r.teto) > 0 ? Math.min(100, 100 * n(r.retirado) / n(r.teto)) : (n(r.retirado) > 0 ? 100 : 0)
               const cor = n(r.restante) < 0 ? 'var(--danger)' : (uso >= 90 ? 'var(--warn)' : 'var(--ok)')
@@ -119,6 +126,7 @@ export default function ProLabore() {
                   <td>{CAT_LABEL[r.categoria] || r.categoria || '—'}</td>
                   <td className="muted">{rotuloMes(r.mes_referencia)}</td>
                   <td className="num">{n(r.teto) > 0 ? brl(r.teto) : <span className="faint">não definido</span>}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{datasDe(r).length ? datasDe(r).map((p) => <div key={p.id}>{fmtDate(p.data)}{datasDe(r).length > 1 && <span className="faint"> · {brl(p.valor)}</span>}</div>) : <span className="faint">—</span>}</td>
                   <td className="num">{brl(r.retirado)}</td>
                   <td className="num" style={{ color: n(r.restante) < 0 ? 'var(--danger)' : 'inherit', fontWeight: 600 }}>{brl(r.restante)}</td>
                   <td><div style={{ height: 8, background: 'var(--line)', borderRadius: 6, overflow: 'hidden' }}><div style={{ width: uso + '%', height: '100%', background: cor }} /></div></td>
