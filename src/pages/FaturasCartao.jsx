@@ -114,7 +114,7 @@ export default function FaturasCartao() {
       bucket: it.credito ? 'outros' : sugerirBucket(it.descricao),
       categoria: it.credito ? 'outros' : sugerirCategoria(it.descricao),
     }))
-    setImp({ cartao: r.cartao || '', mesRef: r.mesRef || '', itens, foto })
+    setImp({ cartao: r.cartao || '', mesRef: r.mesRef || '', itens, foto, totalFatura: r.totalFatura ?? null })
     setPendente(null); setSenha('')
     return true
   }
@@ -123,7 +123,7 @@ export default function FaturasCartao() {
     setErro(''); setLendo(true); setOcrProg(0)
     try {
       const linhas = await ocrImagem(file, (p) => setOcrProg(p))
-      montarPreview(parseFaturaCartao(linhas), true)
+      montarPreview(parseFaturaCartao(linhas, { foto: true }), true)
     } catch (err) {
       setErro('Não consegui ler a foto: ' + (err?.message || err))
     }
@@ -313,6 +313,7 @@ export default function FaturasCartao() {
           </div>
           <div className="between" style={{ marginBottom: 8 }}>
             <div className="sub">{imp.itens.length} transações lidas. Marque quem é de cada uma e desmarque o que não quer importar.</div>
+            {imp.totalFatura != null && <div className={Math.abs(impTotal - imp.totalFatura) < 0.01 ? 'sub' : 'login-err'} role="status" style={{ marginTop: 6 }}>Total da fatura no PDF: {brl(imp.totalFatura)} · marcado para importar: {brl(impTotal)}{Math.abs(impTotal - imp.totalFatura) < 0.01 ? ' · confere' : ' · confira antes de importar'}</div>}
             <div className="tools" style={{ gap: 6 }}>
               <button className="btn sm ghost" onClick={() => marcarTodos(true)}>Marcar todos</button>
               <button className="btn sm ghost" onClick={() => marcarTodos(false)}>Desmarcar todos</button>

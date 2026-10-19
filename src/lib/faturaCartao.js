@@ -85,8 +85,64 @@ function limparDescItau(resto) {
 const reSicredi = /^\s*(\d{1,2})\/([a-zç]{3})\s+\d{2}:\d{2}\s+(.*)$/i
 const reItau = /^\s*(\d{2})-(\d{2})-(\d{4})\s+(.*)$/
 
-export function parseFaturaCartao(lines) {
+// ---- Viacredi / Ailos Mastercard Empresas ----
+// Lançamentos numa seção própria ("LANÇAMENTOS - AILOS ..."), uma compra por bloco:
+//   MENEZES INDUSTRIA DE            <- descrição pode vir quebrada acima da data
+//   21 SET FAZENDA RIO G R$ 10.000,00
+//   01/03                           <- parcela abaixo
+// O resto do PDF (limites, encargos, "Veja como você usou", resumo) não é compra e é ignorado.
+const reAilosData = /^(\d{1,2})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\b\s*(.*?)\s*(-?\s*R\$\s*-?\s*[\d.]+,\d{2})\s*(-)?\s*$/i
+export function ehFaturaAilos(arr) { return arr.some((l) => /LAN[CÇ]AMENTOS\s*-\s*AILOS|AILOS MASTERCARD/i.test(l)) }
+function parseAilos(arr) {
+  let mesRef = '', final = '', total = null
+  for (let i = 0; i < arr.length; i++) {
+    const l = arr[i].replace(/\s+/g, ' ').trim()
+    if (!mesRef && /^VENCIMENTO$/i.test(l)) {
+      for (let j = i + 1; j <= i + 3 && j < arr.length; j++) {
+        const m = arr[j].match(/(\d{1,2})\s+([A-Za-zç]{3})\s+(\d{4})/)
+        if (m && MESES[m[2].toLowerCase()]) { mesRef = `${m[3]}-${pad(MESES[m[2].toLowerCase()])}`; break }
+      }
+    }
+    if (total === null) { const t = l.match(/no valor total de R\$\s*([\d.]+,\d{2})/i); if (t) total = parseMoney(t[1]) }
+  }
+  const { ano: anoFat, mes: mesFat } = anoDoMesRef(mesRef)
+  const itens = []
+  let dentro = false, pend = []
+  for (const raw of arr) {
+    const l = raw.replace(/\s+/g, ' ').trim()
+    if (/^LAN[CÇ]AMENTOS\b/i.test(l)) { dentro = true; pend = []; continue }
+    if (!dentro) continue
+    if (/^Veja como voc[eê] usou/i.test(l) || /^REF \d/i.test(l)) { dentro = false; pend = []; continue }
+    if (/^DATA DESCRI/i.test(l) || /^LE BLANC/i.test(l)) continue
+    if (/^TOTAL\b/i.test(l)) { const t = l.match(/^TOTAL R\$\s*([\d.]+,\d{2})$/i); if (t) total = parseMoney(t[1]); pend = []; continue }
+    const titular = l.match(/^[A-ZÀ-Ú][A-ZÀ-Ú ]+\s(\d{4})$/)
+    if (titular && !reAilosData.test(l)) { if (!final) final = titular[1]; pend = []; continue }
+    const m = l.match(reAilosData)
+    if (m) {
+      const [, dia, mesNome, meio, valTok, menos] = m
+      let valor = parseMoney(valTok)
+      if (valor === null || valor === 0) { pend = []; continue }
+      const credito = valor < 0 || !!menos || /pagamento|estorno|cr[eé]dito/i.test(pend.join(' ') + ' ' + meio)
+      if (credito) valor = -Math.abs(valor)
+      const mn = MESES[mesNome.toLowerCase()]
+      let data = null
+      if (mn && anoFat) { let ano = anoFat; if (mn > mesFat) ano -= 1; data = `${ano}-${pad(mn)}-${pad(Number(dia))}` }
+      // Sem descrição acima, o que vem depois da data é a descrição (+ cidade).
+      const descricao = (pend.join(' ') || meio).replace(/\s+/g, ' ').trim()
+      itens.push({ data_compra: data, descricao: descricao || l, cidade: pend.length ? meio : '', parcela: '', valor_usd: null, valor, credito, encargo: /\b(iof|juros|encargo|anuidade|multa|rotativo|tarifa)\b/i.test(descricao) })
+      pend = []
+      continue
+    }
+    const parc = l.match(/^(\d{1,2}\/\d{1,2})$/)
+    if (parc && itens.length && !itens[itens.length - 1].parcela) { itens[itens.length - 1].parcela = parc[1]; continue }
+    if (/[A-Za-zÀ-ÿ]/.test(l)) pend.push(l)
+  }
+  return { cartao: final ? `Mastercard final ${final}` : 'Mastercard (Viacredi)', mesRef, itens, totalFatura: total }
+}
+
+export function parseFaturaCartao(lines, { foto = false } = {}) {
   const arr = Array.isArray(lines) ? lines : String(lines).split('\n')
+  if (ehFaturaAilos(arr)) return parseAilos(arr)
   const { cartao, mesRef } = acharCabecalho(arr)
   const { ano: anoFat, mes: mesFat } = anoDoMesRef(mesRef)
   const itens = []
@@ -142,8 +198,9 @@ export function parseFaturaCartao(lines) {
       continue
     }
   }
-  // Se não casou nenhum formato de PDF (ex.: veio de FOTO/OCR), tenta Nubank.
-  if (!itens.length) {
+  // Se não casou nenhum formato de PDF, tenta Nubank — só para foto/print ou PDF do Nubank.
+  // Num PDF de outro banco, esse leitor genérico pega qualquer linha com R$ (limites, resumos) como compra.
+  if (!itens.length && (foto || arr.some((l) => /nubank|nu pagamentos/i.test(l)))) {
     const nb = parseNubankTexto(arr)
     if (nb.itens.length) return nb
   }
