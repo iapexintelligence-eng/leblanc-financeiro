@@ -129,3 +129,13 @@ test('entrega confirmada depois do prazo do contrato fica marcada',async()=>{
  const r=datasPedido({aprovacao_em:'2026-10-01',entrega_prazo:'2026-11-19',entrega_prevista:'2026-11-25'})
  assert.deepEqual(r.prazos.map(p=>[p.rotulo.slice(0,7),p.atraso||false]),[['Entrega',false],['Entrega',true]])
 })
+
+test('assistência criada substitui a pendência "Assistência aberta" da planilha e pede à Léia a origem do erro',()=>{
+ const ficha={id:'p',tipo:'pedido',contrato_id:'c',dados:{cliente_nome:'Cliente',importacao_revisoes:{setor_codigo:'qualidade',pendencias:['Assistência aberta','Guias técnicas']}}}
+ assert.deepEqual(pendenciasAutomaticas([ficha]).map(x=>x.titulo),['Assistência aberta','Guias técnicas'])
+ const ass={id:'a',tipo:'assistencia',contrato_id:'c',dados:{cliente_nome:'Cliente',status:'Identificada',origem_erro:'A apurar',proxima_acao:'Agendar atendimento'}}
+ const xs=pendenciasAutomaticas([ficha,ass])
+ assert.deepEqual(xs.map(x=>[x.titulo,x.papel]),[['Guias técnicas','correcao'],['Agendar atendimento','logistica'],['Apontar onde foi o erro e quem responde pela assistência','financeiro']])
+ const apurada={...ass,dados:{...ass.dados,origem_erro:'Transporte / frete'}}
+ assert.equal(pendenciasAutomaticas([apurada]).some(x=>x.papel==='financeiro'),false)
+})

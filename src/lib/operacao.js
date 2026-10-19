@@ -12,7 +12,11 @@ export function pendenciasAutomaticas(registros,feriados=[]) {
  const out=[]
  const add=(r,titulo,papel,prazo)=>out.push({id:`${r.id}-${titulo}`,registro_id:r.id,contrato_id:r.contrato_id,cliente:r.dados.cliente_nome,titulo,papel,prazo,origem:'Etapa da jornada'})
  for(const r of registros){const d=r.dados
-  if(r.tipo==='assistencia'&&d.status!=='Resolvida')add(r,d.proxima_acao||'Resolver assistência','logistica',d.vencimento)
+  if(r.tipo==='assistencia'&&d.status!=='Resolvida'){
+   add(r,d.proxima_acao||'Resolver assistência','logistica',d.vencimento)
+   // Léia registra onde foi o erro e quem responde: sem isso a assistência não pode ser encerrada nem cobrada.
+   if(!d.origem_erro||d.origem_erro==='A apurar')add(r,'Apontar onde foi o erro e quem responde pela assistência','financeiro',null)
+  }
   if(r.tipo==='frete'&&d.status==='Liberado para pagamento')add(r,'Pagar frete conferido','financeiro',d.prevista)
   if(r.tipo!=='pedido')continue
   const imp=d.importacao_revisoes
@@ -23,7 +27,8 @@ export function pendenciasAutomaticas(registros,feriados=[]) {
    const est=prazoImportado(d,feriados)
    // Uma linha por cliente e responsável: os itens da planilha da mesma equipe aparecem juntos, não repetidos.
    const grupos={}
-   for(const p of [...new Set(imp.pendencias||[])]){const papel=PAPEL_IMPORTADO[p]||'correcao';(grupos[papel]||=[]).push(TITULO_IMPORTADO[p]||p)}
+   const temAssistencia=registros.some(a=>a.tipo==='assistencia'&&a.contrato_id===r.contrato_id)
+   for(const p of [...new Set(imp.pendencias||[])]){if(p==='Assistência aberta'&&temAssistencia)continue;const papel=PAPEL_IMPORTADO[p]||'correcao';(grupos[papel]||=[]).push(TITULO_IMPORTADO[p]||p)}
    for(const [papel,itens] of Object.entries(grupos))out.push({id:`${r.id}-imp-${papel}`,registro_id:r.id,contrato_id:r.contrato_id,cliente:d.cliente_nome,titulo:itens.join(' · '),itens,papel,prazo:papel==='correcao'?est?.prazo||null:null,origem:`Planilha de revisões${imp.conferente?' · '+imp.conferente:''}${imp.andamento?' · '+imp.andamento:''}`})
    continue
   }
