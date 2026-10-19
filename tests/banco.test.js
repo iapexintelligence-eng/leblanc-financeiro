@@ -21,7 +21,7 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  create table leblanc.contrato_historico(contrato_id uuid,numero text,acao text,descricao text,editado_por text,alteracoes jsonb);
  create table le_admin.contas_bancarias(id integer primary key,nome text,banco text,saldo numeric,ativo boolean default true,updated_at timestamp,data_saldo_base date);
  create table le_admin.a_receber(id serial primary key,cliente_nome text,descricao text,valor_parcela numeric,data_prevista date,data_recebimento date,status text default 'Pendente',forma_recebimento text,observacoes text,conta_bancaria_id integer);`)
- for(const name of ['20261002144759_jornada.sql','20261002144808_taxas.sql','20261002144904_comercial.sql','20261002144921_integracao.sql','20261002144930_colaboracao_e_revisao_mensal.sql','20261002144940_ativacao_compatibilidade_e_acessos.sql','20261002145427_aditivos_contratuais.sql','20261011193842_xml_final_conferencia.sql','20261011201612_importacao_revisoes_preservada.sql','20261011220000_etapas_historicas.sql','20261011230000_recebimentos_com_comprovante.sql','20261013140000_vendedor_ve_suas_vendas.sql','20261013150000_medicao_tecnica_rodrigo.sql','20261013160000_gerente_vendas_fabricio.sql','20261013170000_assistencia_origem_do_erro.sql'])await db.exec(await readFile(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'))
+ for(const name of ['20261002144759_jornada.sql','20261002144808_taxas.sql','20261002144904_comercial.sql','20261002144921_integracao.sql','20261002144930_colaboracao_e_revisao_mensal.sql','20261002144940_ativacao_compatibilidade_e_acessos.sql','20261002145427_aditivos_contratuais.sql','20261011193842_xml_final_conferencia.sql','20261011201612_importacao_revisoes_preservada.sql','20261011220000_etapas_historicas.sql','20261011230000_recebimentos_com_comprovante.sql','20261013140000_vendedor_ve_suas_vendas.sql','20261013150000_medicao_tecnica_rodrigo.sql','20261013160000_gerente_vendas_fabricio.sql','20261013170000_assistencia_origem_do_erro.sql','20261019150000_importacao_revisoes_atualizavel.sql'])await db.exec(await readFile(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'))
  await db.exec(await readFile(new URL('../supabase/migrations/20261011223808_numeracao_contratos_diaria.sql',import.meta.url),'utf8'))
  await db.exec(await readFile(new URL('../supabase/migrations/20261011225405_registro_liberacao_comercial.sql',import.meta.url),'utf8'))
  const gestor='00000000-0000-4000-8000-000000000001',vendedor='00000000-0000-4000-8000-000000000002',cid='00000000-0000-4000-8000-000000000010'
@@ -230,6 +230,16 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  assert.equal(salvo.dados.importacao_revisoes.aba,'SETEMBRO')
  const sem={...salvo.dados};delete sem.importacao_revisoes
  assert.equal((await save('pedido',sem,salvo.id,salvo.versao)).dados.importacao_revisoes.linha,3)
+ // Só a reimportação da planilha (com a chave ligada na transação) atualiza o bloco.
+ await db.query("update le_admin.jornada_registros set dados=jsonb_set(dados,'{importacao_revisoes,linha}','9') where id=$1",[j.id])
+ assert.equal((await db.query('select dados from le_admin.jornada_registros where id=$1',[j.id])).rows[0].dados.importacao_revisoes.linha,3)
+ await db.exec('begin')
+ await db.query("select set_config('le_admin.importacao_rpc','1',true)")
+ await db.query("update le_admin.jornada_registros set dados=jsonb_set(dados,'{importacao_revisoes,linha}','9') where id=$1",[j.id])
+ await db.exec('commit')
+ assert.equal((await db.query('select dados from le_admin.jornada_registros where id=$1',[j.id])).rows[0].dados.importacao_revisoes.linha,9)
+ await db.query("update le_admin.jornada_registros set dados=jsonb_set(dados,'{importacao_revisoes,linha}','1') where id=$1",[j.id])
+ assert.equal((await db.query('select dados from le_admin.jornada_registros where id=$1',[j.id])).rows[0].dados.importacao_revisoes.linha,9)
  j=(await db.query('select * from le_admin.jornada_registros where id=$1',[j.id])).rows[0]
  // Etapas já realizadas nas fichas da planilha: com justificativa, em sequência e sem o checklist inicial.
  const cid2='00000000-0000-4000-8000-000000000020',cid3='00000000-0000-4000-8000-000000000030'
