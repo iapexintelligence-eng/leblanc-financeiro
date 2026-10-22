@@ -17,6 +17,7 @@ const TITLES = {
  '/historico-operacional':['Consulta','Histórico operacional anterior'],
  '/conferencia-financeira':['Financeiro · Leia','Conferência, margens e autorizações'],
  '/jornada':['Operação','Jornada do cliente'],
+ '/contratos-todos':['Financeiro · Leia','Contratos'],
  '/medicao':['Setores','Medida técnica'],
  '/fretes':['Logística','Fretes por viagem'],
  '/agenda-operacional':['Logística','Escalas e previsão'],

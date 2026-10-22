@@ -12,6 +12,7 @@ const ROTAS = {
  '/':{icon:IcoHome,txt:'Visão Geral',end:true},
  '/jornada':{icon:IcoProject,txt:'Jornada do cliente',roles:['medidor','vendedor','correcao','logistica','financeiro','gestor','qualidade']},
  '/orcamentos':{icon:IcoSales,txt:'Orçamentos e contratos',roles:['vendedor','financeiro','gestor']},
+ '/contratos-todos':{icon:IcoReport,txt:'Contratos (comercial e importados)',roles:['financeiro','gestor']},
  '/vendas':{icon:IcoSales,txt:'Vendas',roles:['vendedor']},
  '/medicao':{icon:IcoTool,txt:'Medida técnica',roles:['medidor','correcao']},
  '/correcao':{icon:IcoTool,txt:'Correção',roles:['correcao']},
@@ -51,7 +52,7 @@ const ROTAS = {
 // papeis = quem vê a aba (quem vê tudo vê todas). Item = caminho, ou [caminho, nome nesta aba]. Pendências já abre filtrada pela equipe da aba.
 export const AREAS = [
  {id:'financeiro',label:'Financeiro',quem:'Léia',papeis:['financeiro'],grupos:[
-  {label:'Dia a dia',itens:[['/pendencias?equipe=financeiro','Minhas pendências'],'/jornada',['/previsibilidade-montagens','Saldos e montagens'],'/recebiveis','/pagamentos','/faturas-cartao','/saidas','/contas-fixas','/custos','/vincular','/bancos']},
+  {label:'Dia a dia',itens:[['/pendencias?equipe=financeiro','Minhas pendências'],'/jornada','/contratos-todos',['/previsibilidade-montagens','Saldos e montagens'],'/recebiveis','/pagamentos','/faturas-cartao','/saidas','/contas-fixas','/custos','/vincular','/bancos']},
   {label:'Conferência e fechamento',itens:['/conferencia-financeira','/revisao-mensal','/dre','/previsibilidade','/orcamentos','/planilhas-historicas','/pro-labore','/gratificacao']},
  ]},
  {id:'posvenda',label:'Pós-venda',quem:'Glauci',papeis:['logistica','montagem','montador'],grupos:[
