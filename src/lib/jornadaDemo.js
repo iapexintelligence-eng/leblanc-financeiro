@@ -10,7 +10,7 @@ export function jornadaDemo() {
  const add=(tipo,i,dados)=>registros.push({id:`${tipo}-${registros.length}`,tipo,contrato_id:`demo-${i}`,versao:1,dados:{cliente_nome:clientes[i],...dados}})
  add('pedido',0,{tipo_venda:'Normal',venda_data:dia(-22),liberacao_em:dia(-20),medicao_em:dia(-17),correcao_prazo:dia(-1),conferente:'Conferente exemplo'})
  add('pedido',1,{tipo_venda:'Normal',medicao_em:dia(-10),correcao_prazo:dia(2),conferente:'Conferente exemplo'})
- add('pedido',2,{tipo_venda:'Normal',aprovacao_em:dia(-35),implantacao_em:dia(-34),carregamento_em:dia(-1),cliente_recebe_em:hoje,fabrica_paga:true,entrega_prevista:dia(4),entrega_prazo:dia(7),responsavel:'Leia · saldo pendente'})
+ add('pedido',2,{tipo_venda:'Normal',aprovacao_em:dia(-35),implantacao_em:dia(-34),carregamento_em:dia(-1),cliente_recebe_em:hoje,fabrica_paga:true,entrega_prevista:dia(4),entrega_prazo:dia(7),responsavel:'Leia · saldo pendente',prazo_especial:true,prazo_especial_em:dia(20),prazo_especial_motivo:'Exemplo: cliente pediu para entregar depois da reforma'})
  add('pedido',3,{tipo_venda:'Normal',aprovacao_em:dia(-40),entrega_prazo:dia(2),entrega_prevista:hoje,cliente_recebe_em:dia(-4),saldo_confirmado:true,fabrica_paga:true,responsavel:'Glauci · montagem liberada'})
  add('pedido',4,{tipo_venda:'Futura',venda_data:dia(-8),responsavel:'Vendedor · aguarda imóvel pronto'})
  add('agenda',2,{montador_id:'montador-a',inicio:hoje,fim:dia(1),confirmada:false,ambientes:'Cozinha · reserva interna, aguardando quitação'})

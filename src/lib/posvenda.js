@@ -120,7 +120,8 @@ export function previsaoOperacao(d={}, { prazos=PRAZOS_PADRAO, feriados=[], hoje
  else if (['entrega_tecnica','pendencias','pecas','assistencia','finalizado'].includes(coluna)) montagem = { data:null, origem:'realizada' }
  else montagem = { data: seguro(() => somarUteis(maior(pv.montagem_inicio_em || entrega.data || hoje, hoje), diasMontagem, feriados)), origem: entrega.origem === 'estimada' ? 'estimada' : 'estimada após entrega' }
 
- const prazoContrato = d.entrega_prazo || (ok(pv.prazo_cliente_em) ? pv.prazo_cliente_em : null) || (ok(i.assinatura) ? seguro(() => somarUteis(i.assinatura, 35, feriados)) : null)
+ // Prazo especial combinado com o cliente vale sobre o prazo padrão do contrato.
+ const prazoContrato = ((d.prazo_especial === true || d.prazo_especial === 'true') && ok(d.prazo_especial_em) ? d.prazo_especial_em : null) || d.entrega_prazo || (ok(pv.prazo_cliente_em) ? pv.prazo_cliente_em : null) || (ok(i.assinatura) ? seguro(() => somarUteis(i.assinatura, 35, feriados)) : null)
  // Cobrança só com data de verdade (agendada ou da transportadora), nunca pela estimativa.
  const saldoAte = !quitado(d) && ['confirmada','transportadora'].includes(entrega.origem) ? seguro(() => somarDias(entrega.data, -2)) : null
  return { coluna, fabrica, leadTime: lt, pronto, entrega, montagem, prazoContrato, saldoAte, quitado: quitado(d) }

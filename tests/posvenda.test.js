@@ -43,3 +43,11 @@ test('previsão usa a data confirmada quando existe e estima pelo prazo da fábr
  assert.equal(frenteAlvo(agendado,'2026-12-24',{prazos,feriados:fer}).nivel,'ok')
  assert.equal(semanaDe('2026-10-22'),'2026-10-19')
 })
+
+test('prazo especial combinado vale como prazo do contrato e marca o cliente', async () => {
+  const { prazoEspecial, textoPrazoEspecial } = await import('../src/lib/prazoEspecial.js')
+  const d = { prazo_especial: true, prazo_especial_em: '2026-12-10', prazo_especial_motivo: 'Cliente viaja em dezembro', posvenda: { fabrica: 'Menezes', prazo_cliente_em: '2026-11-20' } }
+  assert.equal(previsaoOperacao(d, { prazos, feriados: fer, hoje: '2026-10-23' }).prazoContrato, '2026-12-10')
+  assert.equal(textoPrazoEspecial(prazoEspecial(d)), 'Prazo especial · 10/12/2026')
+  assert.equal(prazoEspecial({ prazo_especial: false, prazo_especial_em: '2026-12-10' }), null, 'desmarcado não pinta de roxo')
+})

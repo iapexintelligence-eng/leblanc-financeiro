@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import Modal from './Modal.jsx'
+import SeloPrazoEspecial from './SeloPrazoEspecial.jsx'
+import { prazoEspecial } from '../lib/prazoEspecial.js'
 import { salvarRegistro } from '../lib/jornada.js'
 import { fmtDate } from '../lib/format.js'
 import { hojeSP } from '../lib/prazos.js'
@@ -115,12 +117,13 @@ export default function QuadroPosVenda({ registros, mapa, pessoas=[], eu, onSalv
       const d = r.dados, pv = d.posvenda || {}, abertas = assistAbertas(r)
       const lock = ANTES_DA_MONTAGEM.has(c.id) && !quitado(d)
       return <article key={r.id} draggable={pode} onDragStart={() => setArrastando(r.id)} onClick={() => { setErro(''); setDetalhe({ r, pv: { ...pv }, nota: '' }) }}
-       style={{ background: 'var(--paper)', borderRadius: 'var(--radius-sm)', padding: '9px 10px', marginBottom: 8, boxShadow: 'var(--shadow)', cursor: 'pointer', borderLeft: lock ? '3px solid var(--danger)' : '3px solid transparent' }}>
+       style={{ background: prazoEspecial(d) ? 'var(--especial-bg)' : 'var(--paper)', borderRadius: 'var(--radius-sm)', padding: '9px 10px', marginBottom: 8, boxShadow: 'var(--shadow)', cursor: 'pointer', borderLeft: lock ? '3px solid var(--danger)' : '3px solid transparent', outline: prazoEspecial(d) ? '2px solid var(--especial)' : undefined, outlineOffset: -2 }}>
        <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.3 }}>{cliente(r)}</div>
        <div className="sub" style={{ margin: '2px 0 0', fontSize: 12 }}>{[pv.fabrica, pv.montador ? `Montador ${pv.montador}` : pv.montador_previa && `Prévia: ${pv.montador_previa}`].filter(Boolean).join(' · ') || 'Fábrica e montador a informar'}</div>
        {dataChave(c.id, pv, d) && <div style={{ fontSize: 12, marginTop: 4 }}>{dataChave(c.id, pv, d)}</div>}
        {pv.impedimento && <div style={{ fontSize: 12, marginTop: 4, color: 'var(--warn)' }}>{pv.impedimento.slice(0, 90)}</div>}
        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
+        <SeloPrazoEspecial dados={d} />
         {lock && (dataCobrancaSaldo(d) ? <span className="badge danger">🔒 Leia cobra até {fmtDate(dataCobrancaSaldo(d))}</span> : <span className="badge danger">🔒 Saldo sem comprovante</span>)}
         {['pronto','entrega_agendada'].includes(c.id) && !quitado(d) && !dataEntregaCobranca(d) && <span className="badge warn">Lançar chegada da transportadora</span>}
         {POS_MONTAGEM.has(c.id) && c.id !== 'finalizado' && !quitado(d) && <span className="badge warn">Sem comprovante no sistema</span>}

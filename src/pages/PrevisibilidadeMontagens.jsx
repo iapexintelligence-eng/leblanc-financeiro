@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import SeloPrazoEspecial from '../components/SeloPrazoEspecial.jsx'
+import { prazoEspecial } from '../lib/prazoEspecial.js'
 import { supabase, authOn } from '../lib/supabase.js'
 import { carregarJornada, todas } from '../lib/jornada.js'
 import { jornadaDemo } from '../lib/jornadaDemo.js'
@@ -126,8 +128,8 @@ export default function PrevisibilidadeMontagens() {
      <thead><tr><th>Cliente</th><th>Etapa</th><th>Fábrica</th><th>Pronto</th><th>Entrega</th><th>Termina a montagem</th><th>Prazo do contrato</th><th>Até {fmtDate(alvo)}</th><th>Saldo</th></tr></thead>
      <tbody>
       {ls.length === 0 && <tr><td colSpan="9" className="empty">Nenhum cliente nesta etapa.</td></tr>}
-      {ls.map(l => <tr key={l.r.id}>
-       <td><Link to={'/jornada?registro=' + encodeURIComponent(l.r.id)} style={{ textDecoration: 'underline' }}>{l.cliente}</Link>{l.espera && <div className="sub" style={{ margin: 0, color: 'var(--warn)' }}>{String(l.espera).slice(0, 60)}</div>}</td>
+      {ls.map(l => <tr key={l.r.id} className={prazoEspecial(l.d) ? 'linha-especial' : undefined}>
+       <td><Link to={'/jornada?registro=' + encodeURIComponent(l.r.id)} style={{ textDecoration: 'underline' }}>{l.cliente}</Link>{prazoEspecial(l.d) && <div><SeloPrazoEspecial dados={l.d} /></div>}{l.espera && <div className="sub" style={{ margin: 0, color: 'var(--warn)' }}>{String(l.espera).slice(0, 60)}</div>}</td>
        <td>{l.col ? TITULO_COLUNA[l.col] : ({ correcao:'Correção', liberacao:'Liberação', montagem:'Montagem' }[setorPedido(l.d)] || '—')}</td>
        <td>{l.prev.fabrica || <span className="faint">A definir</span>}</td>
        <td><Data v={l.prev.pronto} /></td>
