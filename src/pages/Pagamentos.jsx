@@ -1,5 +1,6 @@
 import { dataValida } from '../lib/prazos.js'
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { brl, fmtDate, today } from '../lib/format.js'
 import { registrarLog } from '../lib/log.js'
@@ -29,6 +30,9 @@ const CAT_LABEL = Object.fromEntries(CATEGORIAS.map((c) => [c.v, c.t]))
 const TIPOS = ['Eventual', 'Fixa']
 const FORMAS = ['PIX', 'Boleto', 'Transferência', 'Cartão', 'Dinheiro']
 const STATUS = ['Pendente', 'Pago']
+// Em atraso: não pago nem cancelado e com vencimento antes de hoje.
+const atrasado = (r) => r.status !== 'Pago' && r.status !== 'Cancelado' && !!r.data_vencimento && r.data_vencimento < today()
+const diasAtraso = (r) => Math.round((new Date(today() + 'T12:00:00') - new Date(r.data_vencimento + 'T12:00:00')) / 86400000)
 
 const novo = () => ({ data: today(), descricao: '', categoria: 'operacional', tipo: 'Eventual', valor: '', forma_pagamento: 'PIX', data_vencimento: '', data_pagamento: '', status: 'Pendente', fornecedor: '', conta_bancaria_id: '', observacao: '', recorrente: false, dia_vencimento: '', projeto_uid: '', juros: '' })
 
@@ -36,7 +40,8 @@ export default function Pagamentos() {
   const [rows, setRows] = useState(null)
   const [contas, setContas] = useState([])
   const [projetos, setProjetos] = useState([])
-  const [filtro, setFiltro] = useState('todos')
+  const [params] = useSearchParams()
+  const [filtro, setFiltro] = useState(() => params.get('filtro') === 'atraso' ? 'atraso' : 'todos')
   const [busca, setBusca] = useState('')
   const [modal, setModal] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -121,25 +126,35 @@ export default function Pagamentos() {
   const clienteDe = Object.fromEntries(projetos.map((p) => [p.projeto_uid, p.cliente_nome]))
   const lista = (rows || []).filter((r) => {
     if (busca && !((r.descricao || '').toLowerCase().includes(busca.toLowerCase()) || (r.fornecedor || '').toLowerCase().includes(busca.toLowerCase()))) return false
+    if (filtro === 'atraso') return atrasado(r)
     if (filtro === 'pendentes') return r.status !== 'Pago'
     if (filtro === 'pagos') return r.status === 'Pago'
     return true
   })
+  // Atrasados sempre no topo, do vencimento mais antigo para o mais recente.
+  lista.sort((a, b) => (atrasado(b) - atrasado(a)) || (atrasado(a) ? (a.data_vencimento || '').localeCompare(b.data_vencimento || '') : 0))
   const totalPend = (rows || []).filter(r => r.status !== 'Pago').reduce((s, r) => s + (Number(r.valor) || 0), 0)
+  const emAtraso = (rows || []).filter(atrasado)
+  const totalAtraso = emAtraso.reduce((s, r) => s + (Number(r.valor) || 0), 0)
 
   return (
     <>
       <div className="section-head">
         <div className="tools">
           <select className="input" style={{ width: 150 }} value={filtro} onChange={(e) => setFiltro(e.target.value)}>
-            <option value="todos">Todos</option><option value="pendentes">Pendentes</option><option value="pagos">Pagos</option>
+            <option value="todos">Todos</option><option value="atraso">Em atraso</option><option value="pendentes">Pendentes</option><option value="pagos">Pagos</option>
           </select>
           <div className="search"><IcoSearch /><input className="input" placeholder="Buscar descrição / fornecedor" value={busca} onChange={(e) => setBusca(e.target.value)} /></div>
         </div>
         <button className="btn" onClick={abrirNovo}><IcoPlus /> Novo pagamento</button>
       </div>
       {erro && <div className="login-err" style={{ marginBottom: 14 }}>{erro}</div>}
-      <div className="grid cols-3" style={{ marginBottom: 18 }}>
+      <div className="grid cols-4" style={{ marginBottom: 18 }}>
+        <button type="button" className="card kpi" onClick={() => setFiltro(filtro === 'atraso' ? 'todos' : 'atraso')} title={filtro === 'atraso' ? 'Mostrar todos' : 'Mostrar só os atrasados'} style={{ textAlign: 'left', cursor: 'pointer', font: 'inherit', borderColor: emAtraso.length ? 'var(--danger)' : undefined, background: emAtraso.length ? 'var(--danger-bg)' : undefined }}>
+          <div className="label" style={{ color: emAtraso.length ? 'var(--danger)' : undefined }}>Em atraso · {emAtraso.length}</div>
+          <div className="value" style={{ color: emAtraso.length ? 'var(--danger)' : undefined }}>{brl(totalAtraso)}</div>
+          {emAtraso.length > 0 && <div className="sub" style={{ margin: 0, color: 'var(--danger)' }}>{filtro === 'atraso' ? 'Mostrando só os atrasados' : 'Clique para ver só os atrasados'}</div>}
+        </button>
         <div className="card kpi"><div className="label">Pendente</div><div className="value">{brl(totalPend)}</div></div>
         <div className="card kpi"><div className="label">Total registros</div><div className="value">{(rows || []).length}</div></div>
         <div className="card kpi"><div className="label">Exibindo</div><div className="value">{lista.length}</div></div>
@@ -151,7 +166,7 @@ export default function Pagamentos() {
             {rows === null && <tr><td colSpan="8" className="empty">Carregando…</td></tr>}
             {rows && lista.length === 0 && <tr><td colSpan="8" className="empty">Nenhum pagamento.</td></tr>}
             {lista.map((r) => (
-              <tr key={r.id}>
+              <tr key={r.id} style={atrasado(r) ? { background: 'var(--danger-bg)', boxShadow: 'inset 3px 0 0 var(--danger)' } : undefined}>
                 <td className="muted">{fmtDate(r.data)}</td>
                 <td>{r.descricao}{r.fornecedor ? <span className="faint"> · {r.fornecedor}</span> : ''}{r.projeto_uid ? <div className="faint" style={{ fontSize: 11 }}>📄 {clienteDe[r.projeto_uid] || r.projeto_uid}</div> : null}</td>
                 <td><span className="badge neutral">{CAT_LABEL[r.categoria] || r.categoria || '—'}</span></td>
@@ -162,7 +177,7 @@ export default function Pagamentos() {
                   : r.status === 'Cancelado'
                     ? <span className="badge neutral">Cancelado</span>
                     : (r.data_vencimento && r.data_vencimento < today())
-                      ? <span className="badge" style={{ background: 'rgba(220,53,69,0.14)', color: 'var(--danger)', fontWeight: 600 }}>Atrasado</span>
+                      ? <span className="badge danger" style={{ fontWeight: 600 }}>Atrasado · {diasAtraso(r)} dia{diasAtraso(r) === 1 ? '' : 's'}</span>
                       : <span className="badge warn">Pendente</span>}</td>
                 <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
                   {r.comprovante_path && <button className="btn ghost sm" style={{ marginRight: 4 }} onClick={() => baixar(r.comprovante_path)} title="Comprovante">Compr.</button>}
