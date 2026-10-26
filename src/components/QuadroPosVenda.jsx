@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import Modal from './Modal.jsx'
 import SeloPrazoEspecial from './SeloPrazoEspecial.jsx'
+import FotosVideos from './FotosVideos.jsx'
 import { prazoEspecial } from '../lib/prazoEspecial.js'
 import { salvarRegistro } from '../lib/jornada.js'
 import { fmtDate } from '../lib/format.js'
@@ -154,6 +155,7 @@ export default function QuadroPosVenda({ registros, mapa, pessoas=[], eu, onSalv
     </div>
     {pv.trello && <p className="sub">Veio do Trello: cartão "{pv.trello.nome}" na lista {pv.trello.lista}.</p>}
     <div className="grid cols-2">{CAMPOS_POSVENDA.map(([k, label, tipo]) => <div className="field" key={k} style={tipo === 'textarea' ? { gridColumn: '1 / -1' } : null}><label>{label}</label><Campo k={k} label={label} tipo={tipo} valor={pv[k]} travado={!pode || (['montador', 'montagem_inicio_em', 'entregue_em'].includes(k) && !quitado(d) && !POS_MONTAGEM.has(coluna))} montadores={montadores} onChange={(k, v) => setDetalhe(x => ({ ...x, pv: { ...x.pv, [k]: v } }))} />{k === 'montador_previa' && <div className="faint" style={{ fontSize: 12 }}>Só para planejar; não libera a montagem.</div>}{['montador', 'montagem_inicio_em', 'entregue_em'].includes(k) && !quitado(d) && !POS_MONTAGEM.has(coluna) && <div className="faint" style={{ fontSize: 12 }}>🔒 Liberado depois que a Leia anexar o comprovante.</div>}</div>)}</div>
+    <FotosVideos registro={r} eu={eu} podeEditar={pode} onSalvo={(salvo) => { if (salvo) setDetalhe((x) => ({ ...x, r: { ...x.r, ...salvo } })); onSalvo?.() }} />
     <h3 style={{ margin: '18px 0 8px' }}>Anotações</h3>
     {notas.length === 0 && <p className="sub">Nenhuma anotação ainda.</p>}
     {notas.map((n, i) => <div key={i} style={{ borderLeft: '2px solid var(--line-strong)', padding: '2px 0 2px 10px', marginBottom: 10 }}><div className="sub" style={{ margin: 0 }}>{n.autor}{n.em ? ` · ${fmtDate(String(n.em).slice(0, 10))}` : ''}</div><div style={{ whiteSpace: 'pre-wrap' }}>{n.texto}</div></div>)}

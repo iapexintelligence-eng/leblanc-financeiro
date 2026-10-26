@@ -15,6 +15,7 @@ import { supabase, authOn } from '../lib/supabase.js'
 import { carregarJornada, salvarRegistro, anexarJornada, abrirDocumento, todas } from '../lib/jornada.js'
 import SeloPrazoEspecial from '../components/SeloPrazoEspecial.jsx'
 import { prazoEspecial } from '../lib/prazoEspecial.js'
+import FotosVideos from '../components/FotosVideos.jsx'
 import PagamentosCliente, { CAMPOS_PAGAMENTO, TITULOS_PAGAMENTO } from '../components/PagamentosCliente.jsx'
 import { alertaPrazo, hojeSP } from '../lib/prazos.js'
 import { brl, fmtDate } from '../lib/format.js'
@@ -188,6 +189,7 @@ export default function Jornada({ tipoInicial='pedido', setor=null }) {
    <div className="tools" style={{margin:'12px 0'}}>{['Resumo',...(modal.tipo==='pedido'?['XML final e conferência']:[]),'Arquivos, tarefas e histórico','Aditivos'].map(a=><button className={'btn '+(abaFicha===a?'':'ghost')} key={a} onClick={()=>setAbaFicha(a)}>{a}</button>)}</div>
    {abaFicha==='XML final e conferência'?<XmlFinalConferencia key={modal.contrato_id} contratoId={modal.contrato_id} eu={dados?.eu} pessoas={dados?.pessoas}/>:abaFicha==='Aditivos'?<AditivosContrato key={modal.contrato_id} contratoId={modal.contrato_id}/>:abaFicha!=='Resumo'?<RegistroComplementos key={modal.id||'novo'} registro={modal} registros={registros} pessoas={dados?.pessoas} eu={dados?.eu} setor={setor||'vendas'}/>:<>
    {modal.tipo==='pedido'&&<Protegido nome="Pagamentos do cliente" chave={modal.id||'novo'}><PagamentosCliente registro={modal} cliente={mapa[modal.contrato_id]?.cliente_nome||modal.dados.cliente_nome} contratoNumero={mapa[modal.contrato_id]?.numero} eu={dados?.eu} set={set} anexo={anexo} travado={travado} upload={upload} onErro={setErro}/></Protegido>}
+   {['pedido','assistencia'].includes(modal.tipo)&&<Protegido nome="Fotos e vídeos" chave={modal.id||'novo'}><FotosVideos registro={modal} eu={dados?.eu} podeEditar={edita&&!medidor} onSalvo={(r)=>{if(r)setModal(m=>({...m,...r}));carregar()}}/></Protegido>}
    {modal.tipo==='pedido'&&modal.dados.importacao_revisoes&&<ImportacaoRevisoes imp={modal.dados.importacao_revisoes}/>}
    {modal.tipo==='pedido'&&modal.id&&modal.dados.importacao_revisoes&&<EtapasRealizadas key={modal.id+'-'+modal.versao} registro={modal} eu={dados?.eu} pessoas={dados?.pessoas} onSalvo={(r)=>{if(r)setModal(m=>({...m,...r,dados:r.dados}));carregar()}}/>}
    {modal.tipo==='pedido'&&<details><summary>Conferência para passagem de setor</summary>{checklistPassagem(modal.dados).map(([t,ok,descr])=><p key={t}><b>{ok?'✓':'Pendente'} · {t}</b><br/>{descr}</p>)}<p className="sub">Tarefas bloqueantes adicionais são verificadas ao salvar. Para devolver uma pendência, abra a aba de tarefas e registre motivo, responsável, prazo e etapa dependente.</p></details>}

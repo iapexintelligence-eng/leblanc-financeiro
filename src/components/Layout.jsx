@@ -1,4 +1,5 @@
 import AlertasJornada from './AlertasJornada.jsx'
+import BuscaCliente from './BuscaCliente.jsx'
 import { useEffect, useMemo, useState } from 'react'
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import Protegido from './Protegido.jsx'
@@ -101,6 +102,7 @@ export default function Layout() {
               <h2>{title}</h2>
             </div>
             <div className="right">
+              {role.papel && podeVerRota('/jornada', role.papel) && <BuscaCliente />}
               <span className="pill">{role.nome || 'Le Blanc'}{role.papel ? ` · ${PAPEL_TXT[role.papel] || role.papel}` : ''}</span>
               <div className="avatar" title={role.email}>{iniciais}</div>
               {authOn && (
