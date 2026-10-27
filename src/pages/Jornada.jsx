@@ -9,13 +9,14 @@ import { ORIGENS_ERRO, STATUS_COBRANCA, INDUSTRIAS_CONHECIDAS, custoAssistencia 
 import { situacoesSeparadas, checklistPassagem, datasPedido } from '../lib/operacao.js'
 import { SETORES, noSetor, prazoImportado, setorImportado } from '../lib/setores.js'
 import { jornadaDemo } from '../lib/jornadaDemo.js'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase, authOn } from '../lib/supabase.js'
 import { carregarJornada, salvarRegistro, anexarJornada, abrirDocumento, todas } from '../lib/jornada.js'
 import SeloPrazoEspecial from '../components/SeloPrazoEspecial.jsx'
 import { prazoEspecial } from '../lib/prazoEspecial.js'
 import FotosVideos from '../components/FotosVideos.jsx'
+import ContratoAssinado from '../components/ContratoAssinado.jsx'
 import PagamentosCliente, { CAMPOS_PAGAMENTO, TITULOS_PAGAMENTO } from '../components/PagamentosCliente.jsx'
 import { alertaPrazo, hojeSP } from '../lib/prazos.js'
 import { brl, fmtDate } from '../lib/format.js'
@@ -27,7 +28,7 @@ const CAMPOS={
  pedido:[
  ['Prazo especial · o cliente aparece em roxo em todas as telas'],['prazo_especial','Cliente com prazo especial','check'],['prazo_especial_em','Prazo especial combinado com o cliente','date'],['prazo_especial_motivo','O que foi combinado','textarea'],
  ['Em espera · venda futura, aguardando as chaves ou liberação (pausa os prazos e tira dos alertas)'],['espera_motivo','Situação de espera',['Venda futura','Aguardando as chaves do imóvel','Aguardando liberação do imóvel para a medida técnica','Aguardando liberação do cliente']],['espera_contato_em','Data do último contato com o cliente','date'],['espera_proximo_contato','Próximo contato combinado','date'],['espera_obs','O que o cliente informou','textarea'],
- ['Fechamento e checklist'],['venda_data','Fechamento do contrato','date'],['tipo_venda','Tipo de venda',['Normal','Futura']],['imovel_pronto_em','Cliente avisou que o imóvel está pronto','date'],
+ ['Fechamento e checklist'],['venda_data','Fechamento do contrato','date'],['contrato_assinado_arquivo','Contrato assinado','file'],['tipo_venda','Tipo de venda',['Normal','Futura']],['imovel_pronto_em','Cliente avisou que o imóvel está pronto','date'],
  ['grupo_criado','Grupo criado: cliente, gestores e setores','check'],['grupo_arquivo','Comprovação do grupo','file'],['imagens_enviadas','Imagens enviadas ao cliente','check'],['imagens_arquivo','Imagens e evidência do envio','file'],
  ['planta_enviada_em','Planta enviada por e-mail ao corretor','date'],['planta_arquivo','Planta baixa do Promob','file'],['informacoes_correcao','Informações para correção','textarea'],
  ['Financeiro de entrada'],['entrada_confirmada_arquivo','Comprovante da entrada','file'],['entrada_confirmada','Leia: entrada conferida','check'],
@@ -124,6 +125,7 @@ export default function Jornada({ tipoInicial='pedido', setor=null }) {
  const registros=dados?.registros||[],feriados=dados?.config.feriados||[]
  const lista=registros.filter(r=>r.tipo===tipo&&noSetor(r,setor)&&(!soAtrasados||(prazo(r,feriados)&&prazo(r,feriados)<agora))&&(setor!=='vendas'||(r.dados.tipo_venda||'Normal')===vendaFiltro)&&(!busca||`${mapa[r.contrato_id]?.cliente_nome||r.dados.cliente_nome||''} ${r.dados.montador_original||''} ${r.dados.prestador||''}`.toLowerCase().includes(busca.toLowerCase()))).sort((a,b)=>(prazo(a,feriados)||'9999').localeCompare(prazo(b,feriados)||'9999'))
  // Prazo especial fica na ficha do pedido; assistências, agenda e fretes do mesmo contrato herdam o roxo.
+ const comFicha=useMemo(()=>new Set(registros.filter(r=>r.tipo==='pedido').map(r=>String(r.contrato_id))),[registros])
  const pedidoDoContrato=Object.fromEntries(registros.filter(r=>r.tipo==='pedido').map(r=>[r.contrato_id,r.dados]))
  const especialDe=(r)=>r.tipo==='pedido'?r.dados:pedidoDoContrato[r.contrato_id]
  const abertos=registros.filter(r=>r.tipo==='assistencia'&&r.dados.status!=='Resolvida')
@@ -183,7 +185,8 @@ export default function Jornada({ tipoInicial='pedido', setor=null }) {
   </tbody></table></div></>}
   {modal&&<Modal wide title={TIPOS[modal.tipo]} onClose={()=>!saving&&!upload&&setModal(null)} footer={<><button className="btn ghost" onClick={()=>setModal(null)} disabled={saving||upload}>Fechar</button>{edita&&abaFicha==='Resumo'&&<button className="btn" onClick={salvar} disabled={saving||upload||!modal.contrato_id}>{saving?'Salvando…':'Salvar registro'}</button>}</>}>
    {erro&&<div className="login-err" role="alert">{erro}</div>}
-   <div className="field"><label>Contrato</label><select className="input" value={modal.contrato_id} disabled={!!modal.id||!edita} onChange={e=>{const c=mapa[e.target.value];setModal(m=>({...m,contrato_id:e.target.value,dados:m.tipo==='pedido'&&!m.dados.venda_data&&c?.data_contrato?{...m.dados,venda_data:c.data_contrato}:m.dados}))}}><option value="">Selecione</option>{contratos.map(c=><option key={c.id} value={String(c.id)}>{c.numero} · {c.cliente_nome}</option>)}</select></div>
+   {modal.tipo==='pedido'&&!modal.id&&edita&&!medidor&&authOn&&<ContratoAssinado contratos={contratos} comFicha={comFicha} tipoVenda={modal.dados.tipo_venda||'Normal'} onCriado={async(reg)=>{await carregar();await abrir(reg)}}/>}
+   <div className="field"><label>{modal.tipo==='pedido'&&!modal.id?'Ou escolha um contrato que já está no sistema':'Contrato'}</label><select className="input" value={modal.contrato_id} disabled={!!modal.id||!edita} onChange={e=>{const c=mapa[e.target.value];setModal(m=>({...m,contrato_id:e.target.value,dados:m.tipo==='pedido'&&!m.dados.venda_data&&c?.data_contrato?{...m.dados,venda_data:c.data_contrato}:m.dados}))}}><option value="">Selecione</option>{contratos.map(c=><option key={c.id} value={String(c.id)}>{c.numero} · {c.cliente_nome}</option>)}</select></div>
    {modal.tipo==='pedido'&&prazoEspecial(modal.dados)&&<div className="card linha-especial" style={{margin:'12px 0',padding:'10px 14px'}}><SeloPrazoEspecial dados={modal.dados}/>{modal.dados.prazo_especial_motivo&&<span style={{marginLeft:8}}>{modal.dados.prazo_especial_motivo}</span>}</div>}
    {modal.tipo==='pedido'&&<div className="grid cols-3" style={{margin:'16px 0'}}>{Object.entries(situacoesSeparadas(modal.dados)).map(([k,v])=><div className="card" key={k}><small>{k==='comercial'?'Comercial':k==='operacional'?'Operacional':'Financeiro'}</small><p>{v}</p></div>)}</div>}
    <div className="tools" style={{margin:'12px 0'}}>{['Resumo',...(modal.tipo==='pedido'?['XML final e conferência']:[]),'Arquivos, tarefas e histórico','Aditivos'].map(a=><button className={'btn '+(abaFicha===a?'':'ghost')} key={a} onClick={()=>setAbaFicha(a)}>{a}</button>)}</div>

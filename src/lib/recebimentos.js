@@ -14,7 +14,7 @@ export function mesmoCliente(a, b) {
 }
 
 // Contrato HIST-V116 (importado de vendas) corresponde ao projeto PROJ-V116.
-export const projetoDoContrato = (numero) => { const m = String(numero || '').match(/HIST-V(\d+)/i); return m ? `PROJ-V${m[1]}` : null }
+export const projetoDoContrato = (numero) => { const m = String(numero || '').match(/^(?:HIST|CTR)-V(\d+)$/i); return m ? `PROJ-V${m[1]}` : null }
 
 export const emAberto = (r) => r.status === 'Recebido' ? 0 : Math.max(0, (Number(r.valor_parcela) || 0) - (Number(r.valor_recebido) || 0))
 

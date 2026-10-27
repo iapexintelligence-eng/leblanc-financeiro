@@ -427,6 +427,33 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  await assert.rejects(db.query('select le_admin.posvenda_prazos_salvar($1)',[JSON.stringify({fabricas:{Menezes:-1},padrao_fabrica:30,entrega_apos_pronto:7,montagem_dias:5})]),/Prazo inválido/)
  await db.query('select le_admin.posvenda_prazos_salvar($1)',[JSON.stringify({fabricas:{Menezes:30,Bartzen:20},padrao_fabrica:30,entrega_apos_pronto:6,montagem_dias:4})])
  assert.equal((await db.query('select prazos_operacao from le_admin.jornada_config')).rows[0].prazos_operacao.fabricas.Menezes,30)
+
+ // Contrato assinado subido na "Novo registro": cria venda, contrato com o PDF e a ficha; não duplica.
+ await db.exec(`create table le_admin.vendas(id serial primary key,cliente_nome text not null,vendedor text,valor_vendido numeric,data_venda date,observacoes text,projeto_uid text);
+`)
+ await db.exec(await readFile(new URL('../supabase/migrations/20261027180000_contrato_assinado_jornada.sql',import.meta.url),'utf8'))
+ await db.exec(`select set_config('test.uid','${gestor}',false)`)
+ await db.query("insert into storage.objects(bucket_id,name) values('jornada-documentos',$1),('jornada-documentos',$2),('jornada-documentos',$3)",[gestor+'/a/contrato.pdf',gestor+'/b/contrato2.pdf',vendedor+'/c/alheio.pdf'])
+ const reg=async(d,arq,venda=null,contrato=null)=>(await db.query('select le_admin.contrato_assinado_registrar($1,$2,$3,$4) as r',[JSON.stringify(d),arq,venda,contrato])).rows[0].r
+ const base={cliente_nome:'Cliente Assinado Teste',data_contrato:'2026-10-20',valor:'45000',vendedor:'Vendedor Teste',cliente_cpf:'000.000.000-00'}
+ await assert.rejects(reg(base,vendedor+'/c/alheio.pdf'),/Anexe o contrato/)
+ await assert.rejects(reg({...base,data_contrato:'2099-01-01'},gestor+'/a/contrato.pdf'),/futura/)
+ const r1=await reg(base,gestor+'/a/contrato.pdf')
+ assert.equal(r1.numero,'CTR-V'+r1.venda_id)
+ assert.equal(r1.registro.dados.venda_data,'2026-10-20')
+ assert.equal(r1.registro.dados.contrato_assinado_arquivo,gestor+'/a/contrato.pdf')
+ const ctr=(await db.query('select * from leblanc.contratos where id=$1',[r1.contrato_id])).rows[0]
+ assert.equal(Number(ctr.valor_final),45000); assert.equal(ctr.dados_json.importacao.origem,'contrato_assinado')
+ assert.equal((await db.query('select count(*)::int n from leblanc.contrato_anexos where contrato_id=$1',[r1.contrato_id])).rows[0].n,1)
+ await assert.rejects(reg(base,gestor+'/a/contrato.pdf'),/já foi usado/)
+ await assert.rejects(reg(base,gestor+'/b/contrato2.pdf',r1.venda_id),/já tem contrato/)
+ await assert.rejects(reg(base,gestor+'/b/contrato2.pdf',null,r1.contrato_id),/já tem ficha/)
+ const v2=(await db.query("insert into le_admin.vendas(cliente_nome,data_venda) values('Venda Já Lançada','2026-10-21') returning id")).rows[0].id
+ const r2=await reg({...base,cliente_nome:'Venda Já Lançada'},gestor+'/b/contrato2.pdf',v2)
+ assert.equal(r2.venda_id,v2)
+ assert.equal((await db.query("select count(*)::int n from le_admin.vendas where cliente_nome='Venda Já Lançada'")).rows[0].n,1,'reaproveita a venda')
+ await db.exec(`select set_config('test.uid','${logi}',false)`)
+ await assert.rejects(reg(base,gestor+'/b/contrato2.pdf'),/Somente comercial/)
  } finally {await db.close()}
 })
 
