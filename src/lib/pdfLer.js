@@ -44,41 +44,7 @@ export async function extrairLinhas(file, password) {
   return linhas
 }
 
-// Tenta ler os campos de um contrato Le Blanc. Retorna o que conseguir; o resto fica vazio.
-export function parseContrato(txt) {
-  const t = (txt || '').replace(/\s+/g, ' ')
-  const pick = (re) => { const m = t.match(re); return m ? (m[1] || '').trim() : '' }
-
-  // Cliente costuma aparecer como "1058 - NOME DO CLIENTE" (código - nome)
-  let cliente = ''
-  const mc = t.match(/\b\d{3,6}\s*-\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ '.\-]{4,60})/)
-  if (mc) cliente = mc[1].trim()
-  else cliente = pick(/CLIENTE\b[:\s]*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ '.\-]{4,60}?)\s*(?:CPF|CNPJ|R\.?G|NASC)/i)
-  cliente = cliente.split(/\s+(?:CPF|CNPJ|Normal|Especial|R\.?G|Nasc|Nascimento|Tipo|Telefone|Endere|Profiss|F[íi]sica|Jur[íi]dica)/i)[0].trim()
-
-  let cpf = pick(/CPF\s*\/?\s*C?N?P?J?\b[:\s]*([\d.\-\/]{11,18})/i)
-  // Fallback: qualquer CPF no texto (tolera vírgula no lugar do ponto por causa de OCR)
-  if (!/\d{3}[.,]\d{3}[.,]\d{3}-\d{2}/.test(cpf)) {
-    const mcpf = t.match(/\b(\d{3}[.,]\d{3}[.,]\d{3}-\d{2})\b/)
-    if (mcpf) cpf = mcpf[1].replace(/,/g, '.')
-  }
-
-  const dataStr = pick(/DATA DO CONTRATO[^\d]*(\d{2}\/\d{2}\/\d{4})/i) || pick(/(\d{2}\/\d{2}\/\d{4})/)
-  const valorStr = pick(/TOTAL A (?:PRAZO|SER PAGO)[^\d]*([\d.]+,\d{2})/i)
-    || pick(/Total (?:do pedido|a ser pago)[:\s]*R?\$?\s*([\d.]+,\d{2})/i)
-
-  let data = ''
-  if (dataStr) { const [d, m, a] = dataStr.split('/'); data = `${a}-${m}-${d}` }
-  let valor = valorStr ? Number(valorStr.replace(/\./g, '').replace(',', '.')) : null
-  // Fallback (fotos/OCR sem o rótulo "Total"): usa o maior valor monetário da página.
-  // O total do pedido é a soma dos ambientes, então é sempre >= qualquer item.
-  if (valor === null) {
-    const toks = t.match(/[\d.]+,\d{2}(?![\d-])/g) || [] // ignora fragmentos de CPF (…,429-23)
-    const nums = toks.map((s) => Number(s.replace(/\./g, '').replace(',', '.'))).filter((x) => !isNaN(x) && x > 0)
-    if (nums.length) valor = Math.max(...nums)
-  }
-  return { cliente, cpf, valor, data, vendedor: '' }
-}
+export { parseContrato } from './lerContrato.js'
 
 // Itens de texto com posição, página a página (para faturas em duas colunas, como a do Sicoob,
 // em que juntar por linha mistura as colunas).

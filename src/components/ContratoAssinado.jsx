@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { anexarJornada } from '../lib/jornada.js'
-import { extrairTexto, parseContrato } from '../lib/pdfLer.js'
+import { extrairTexto } from '../lib/pdfLer.js'
+import { parseContrato, nomeDoArquivo } from '../lib/lerContrato.js'
 import { ocrImagemAuto } from '../lib/ocr.js'
 import { acharVendedor, sugerirVinculo } from '../lib/contratoAssinado.js'
 import { registrarLog } from '../lib/log.js'
@@ -10,7 +11,7 @@ import { hojeSP } from '../lib/prazos.js'
 
 // "Novo registro" a partir do contrato assinado: sobe o PDF (ou foto), lê cliente, CPF, data, valor e
 // vendedor, e cria de uma vez a venda, o contrato no sistema e a ficha do cliente.
-const VAZIO = { cliente_nome: '', cliente_cpf: '', data_contrato: '', valor: '', vendedor: '', forma_pagamento: '' }
+const VAZIO = { cliente_nome: '', cliente_cpf: '', cliente_telefone: '', cliente_endereco: '', data_contrato: '', valor: '', vendedor: '', forma_pagamento: '' }
 
 export default function ContratoAssinado({ contratos, comFicha, tipoVenda, onCriado }) {
   const [arquivo, setArquivo] = useState(null) // { path, nome }
@@ -51,16 +52,20 @@ export default function ContratoAssinado({ contratos, comFicha, tipoVenda, onCri
       const path = await envio
       setArquivo({ path, nome: file.name })
       const p = parseContrato(texto)
-      const vend = acharVendedor(texto, vendedores)
+      // Nome lido no texto; se não houver, o do arquivo ("CONTRATO_LE_BLANC_Fulano_de_Tal.pdf").
+      const cliente = p.cliente || nomeDoArquivo(file.name)
+      const vend = (p.vendedor && acharVendedor('Vendedor: ' + p.vendedor, vendedores)) || acharVendedor(texto, vendedores)
       setF((s) => ({
         ...s,
-        cliente_nome: s.cliente_nome || p.cliente || '',
+        cliente_nome: s.cliente_nome || cliente || '',
         cliente_cpf: s.cliente_cpf || p.cpf || '',
+        cliente_telefone: s.cliente_telefone || p.telefone || '',
+        cliente_endereco: s.cliente_endereco || p.endereco || '',
         data_contrato: s.data_contrato || (p.data && p.data <= hojeSP() ? p.data : ''),
         valor: s.valor || (p.valor ?? ''),
         vendedor: s.vendedor || vend || '',
       }))
-      const achou = [p.cliente && 'cliente', p.cpf && 'CPF', p.data && 'data', p.valor && 'valor', vend && 'vendedor'].filter(Boolean)
+      const achou = [cliente && 'cliente', p.cpf && 'CPF', p.data && 'data', p.valor && 'valor', vend && 'vendedor'].filter(Boolean)
       setLendo(achou.length
         ? `Li do contrato: ${achou.join(', ')}.${ehImg ? ' A leitura por foto pode errar.' : ''} Confira tudo antes de criar.`
         : 'Contrato anexado, mas não consegui ler os dados. Preencha abaixo.')
@@ -98,8 +103,10 @@ export default function ContratoAssinado({ contratos, comFicha, tipoVenda, onCri
     {lendo && <div className="sub" role="status" style={{ marginTop: 8 }}>{lendo}</div>}
     {arquivo && <>
       <div className="grid cols-2" style={{ gap: 10, marginTop: 12 }}>
-        <div className="field"><label>Cliente *</label><input className="input" value={f.cliente_nome} onChange={(e) => set('cliente_nome', e.target.value)} /></div>
+        <div className="field"><label>Cliente * (confira o nome)</label><input className="input" value={f.cliente_nome} onChange={(e) => set('cliente_nome', e.target.value)} /></div>
         <div className="field"><label>CPF / CNPJ</label><input className="input" value={f.cliente_cpf} onChange={(e) => set('cliente_cpf', e.target.value)} /></div>
+        <div className="field"><label>Telefone</label><input className="input" value={f.cliente_telefone} onChange={(e) => set('cliente_telefone', e.target.value)} /></div>
+        <div className="field"><label>Endereço</label><input className="input" value={f.cliente_endereco} onChange={(e) => set('cliente_endereco', e.target.value)} /></div>
         <div className="field"><label>Data do contrato *</label><input className="input" type="date" max={hojeSP()} value={f.data_contrato} onChange={(e) => set('data_contrato', e.target.value)} /></div>
         <div className="field"><label>Valor total do contrato</label><input className="input" type="number" step="0.01" min="0" value={f.valor} onChange={(e) => set('valor', e.target.value)} /></div>
         <div className="field"><label>Vendedor</label><input className="input" list="contrato-assinado-vendedores" value={f.vendedor} onChange={(e) => set('vendedor', e.target.value)} /><datalist id="contrato-assinado-vendedores">{vendedores.map((n) => <option key={n} value={n} />)}</datalist></div>
