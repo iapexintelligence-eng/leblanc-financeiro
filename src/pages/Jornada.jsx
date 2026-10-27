@@ -26,7 +26,7 @@ const TIPOS={pedido:'Jornada do cliente',assistencia:'Assistências',agenda:'Age
 const CAMPOS={
  pedido:[
  ['Prazo especial · o cliente aparece em roxo em todas as telas'],['prazo_especial','Cliente com prazo especial','check'],['prazo_especial_em','Prazo especial combinado com o cliente','date'],['prazo_especial_motivo','O que foi combinado','textarea'],
- ['Em espera · venda futura ou aguardando liberação (pausa os prazos da etapa)'],['espera_motivo','Situação de espera',['Venda futura','Aguardando liberação do imóvel para a medida técnica','Aguardando liberação do cliente']],['espera_contato_em','Data do último contato com o cliente','date'],['espera_proximo_contato','Próximo contato combinado','date'],['espera_obs','O que o cliente informou','textarea'],
+ ['Em espera · venda futura, aguardando as chaves ou liberação (pausa os prazos e tira dos alertas)'],['espera_motivo','Situação de espera',['Venda futura','Aguardando as chaves do imóvel','Aguardando liberação do imóvel para a medida técnica','Aguardando liberação do cliente']],['espera_contato_em','Data do último contato com o cliente','date'],['espera_proximo_contato','Próximo contato combinado','date'],['espera_obs','O que o cliente informou','textarea'],
  ['Fechamento e checklist'],['venda_data','Fechamento do contrato','date'],['tipo_venda','Tipo de venda',['Normal','Futura']],['imovel_pronto_em','Cliente avisou que o imóvel está pronto','date'],
  ['grupo_criado','Grupo criado: cliente, gestores e setores','check'],['grupo_arquivo','Comprovação do grupo','file'],['imagens_enviadas','Imagens enviadas ao cliente','check'],['imagens_arquivo','Imagens e evidência do envio','file'],
  ['planta_enviada_em','Planta enviada por e-mail ao corretor','date'],['planta_arquivo','Planta baixa do Promob','file'],['informacoes_correcao','Informações para correção','textarea'],
@@ -84,7 +84,7 @@ function situacao(r) {
  const d=r.dados
  if(r.tipo==='agenda') return d.confirmada?'Escala liberada':'Reserva interna'
  if(r.tipo!=='pedido') return d.status
- if(d.espera_motivo) return `Em espera: ${d.espera_motivo}${d.espera_contato_em?` · último contato ${fmtDate(d.espera_contato_em)}`:''}`
+ if(d.espera_motivo) return `${/chave/i.test(d.espera_motivo)?'🔑 ':''}Em espera: ${d.espera_motivo}${d.espera_contato_em?` · último contato ${fmtDate(d.espera_contato_em)}`:''}`
  if(d.fotos_em) return 'Fotos agendadas'
  if(d.montagem_concluida_em) return 'Montagem concluída'
  if(d.entrega_em) return 'Entregue'
