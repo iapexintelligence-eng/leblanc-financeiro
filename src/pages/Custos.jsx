@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { brl, fmtDate, today } from '../lib/format.js'
+import { FORMAS_PAGAMENTO, formaPagamento } from '../lib/formasPagamento.js'
 import { registrarLog } from '../lib/log.js'
 import Modal from '../components/Modal.jsx'
 import { IcoPlus, IcoEdit, IcoSearch } from '../components/Icons.jsx'
 
 const CATEGORIAS = ['Indústria', 'Montagem', 'Frete', 'Material', 'Marketing', 'Aluguel', 'Água/Luz', 'Impostos', 'Manutenção', 'Serviços', 'Outros']
-const FORMAS = ['PIX', 'Boleto', 'Transferência', 'Cartão', 'Dinheiro']
 const STATUS = ['Pendente', 'Pago']
 
 const novo = () => ({ data: today(), categoria: 'Material', fornecedor: '', descricao: '', valor: '', forma_pagamento: 'PIX', status: 'Pendente', projeto_uid: '', projeto_relacionado: '', montador: '', observacao: '' })
@@ -38,7 +38,7 @@ export default function Custos() {
   }, [])
 
   const abrirNovo = () => { setRateio([]); setModal({ form: novo(), editId: null }) }
-  const abrirEdit = (r) => { setRateio([]); setModal({ form: { data: r.data || today(), categoria: r.categoria || 'Material', fornecedor: r.fornecedor || '', descricao: r.descricao || '', valor: r.valor ?? '', forma_pagamento: r.forma_pagamento || 'PIX', status: r.status || 'Pendente', projeto_uid: r.projeto_uid || '', projeto_relacionado: r.projeto_relacionado || '', montador: r.montador || '', observacao: r.observacao || '' }, editId: r.id }) }
+  const abrirEdit = (r) => { setRateio([]); setModal({ form: { data: r.data || today(), categoria: r.categoria || 'Material', fornecedor: r.fornecedor || '', descricao: r.descricao || '', valor: r.valor ?? '', forma_pagamento: formaPagamento(r.forma_pagamento) || 'PIX', status: r.status || 'Pendente', projeto_uid: r.projeto_uid || '', projeto_relacionado: r.projeto_relacionado || '', montador: r.montador || '', observacao: r.observacao || '' }, editId: r.id }) }
   const setF = (k, v) => setModal((m) => ({ ...m, form: { ...m.form, [k]: v } }))
 
   const salvar = async () => {
@@ -46,7 +46,7 @@ export default function Custos() {
     if (!f.descricao.trim() && !f.fornecedor.trim()) { setErro('Informe ao menos fornecedor ou descrição.'); return }
     setSaving(true)
     const projLabel = f.projeto_uid ? (projetos.find((p) => p.projeto_uid === f.projeto_uid)?.cliente_nome || f.projeto_relacionado || null) : (f.projeto_relacionado || null)
-    const payload = { data: f.data || today(), categoria: f.categoria, fornecedor: f.fornecedor || null, descricao: f.descricao || null, valor: f.valor === '' ? null : Number(f.valor), forma_pagamento: f.forma_pagamento || null, status: f.status, projeto_uid: f.projeto_uid || null, projeto_relacionado: projLabel, montador: f.montador || null, observacao: f.observacao || null }
+    const payload = { data: f.data || today(), categoria: f.categoria, fornecedor: f.fornecedor || null, descricao: f.descricao || null, valor: f.valor === '' ? null : Number(f.valor), forma_pagamento: formaPagamento(f.forma_pagamento), status: f.status, projeto_uid: f.projeto_uid || null, projeto_relacionado: projLabel, montador: f.montador || null, observacao: f.observacao || null }
     const linhasRateio = rateio.filter((x) => x.projeto_uid && Number(x.valor) > 0)
     let error
     if (modal.editId) { ({ error } = await supabase.from('custos_operacionais').update(payload).eq('id', modal.editId)); if (!error) await registrarLog({ tabela: 'custos_operacionais', registroId: modal.editId, acao: 'edicao', descricao: `Custo: ${payload.fornecedor || payload.descricao}` }) }
@@ -110,7 +110,7 @@ export default function Custos() {
           </div>
           <div className="field"><label>Descrição</label><input className="input" value={modal.form.descricao} onChange={(e) => setF('descricao', e.target.value)} /></div>
           <div className="row-3">
-            <div className="field"><label>Forma</label><select className="input" value={modal.form.forma_pagamento} onChange={(e) => setF('forma_pagamento', e.target.value)}>{FORMAS.map((c) => <option key={c}>{c}</option>)}</select></div>
+            <div className="field"><label>Forma</label><select className="input" value={modal.form.forma_pagamento} onChange={(e) => setF('forma_pagamento', e.target.value)}>{FORMAS_PAGAMENTO.map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select></div>
             <div className="field"><label>Status</label><select className="input" value={modal.form.status} onChange={(e) => setF('status', e.target.value)}>{STATUS.map((c) => <option key={c}>{c}</option>)}</select></div>
             <div className="field"><label>Montador</label><input className="input" value={modal.form.montador} onChange={(e) => setF('montador', e.target.value)} placeholder="opcional" /></div>
           </div>
