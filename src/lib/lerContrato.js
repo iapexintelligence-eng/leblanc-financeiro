@@ -7,7 +7,21 @@ const ENDERECO = /^(?:apartamento|apto|ap|casa|rua|r|avenida|av|alameda|travessa
 export function pareceNome(s) {
   const t = String(s || '').trim()
   if (!t || /\d/.test(t) || ENDERECO.test(t)) return false
+  // "Alto da Glória - Curitiba" é bairro - cidade, não nome.
+  if (/\s[-–]\s/.test(t)) return false
   return t.split(/\s+/).filter((w) => w.replace(/[^A-Za-zÀ-ÿ]/g, '').length > 1).length >= 2
+}
+
+const tokens = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 2)
+
+// Nome do cliente: o arquivo do contrato da loja já vem como "CONTRATO_LE_BLANC_<cliente>.pdf",
+// então ele vale mais que o texto; o texto só ganha quando confirma o mesmo nome (e traz acentos).
+export function escolherNome(lido, arquivo) {
+  const doArquivo = nomeDoArquivo(arquivo)
+  if (!doArquivo) return lido || ''
+  if (!lido) return doArquivo
+  const a = new Set(tokens(doArquivo))
+  return tokens(lido).filter((w) => a.has(w)).length >= 2 ? lido : doArquivo
 }
 
 // "CONTRATO_LE_BLANC_Fulano_de_Tal.pdf" → "Fulano de Tal".

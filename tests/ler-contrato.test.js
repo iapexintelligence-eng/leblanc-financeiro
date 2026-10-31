@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { parseContrato, nomeDoArquivo, pareceNome } from '../src/lib/lerContrato.js'
+import { parseContrato, nomeDoArquivo, pareceNome, escolherNome } from '../src/lib/lerContrato.js'
 
 // Texto sintético no formato do contrato emitido pelo sistema (dados fictícios).
 const MODELO = 'LE BLANC MÓVEIS PLANEJADOS Contrato de compra e venda DE PRODUTO E DE PRESTAÇÃO DE SERVIÇO Data do contrato 24/10/2026 Responsável pela venda MURILO TESTE Loja Curitiba 01 · Cliente e entrega Cliente FULANO DE TAL EXEMPLO CPF / CNPJ 000.000.000-00 Telefone (41) 90000-0000 Endereço do cliente Rua Exemplo, 1234 - Apartamento 12, Curitiba Endereço de instalação Rua Exemplo, 1234 - Apartamento 12 VALOR DOS MÓVEIS R$ 20.000,00 02 · Condições de pagamento Total a ser pago conforme parcelas: R$ 21.700,00.'
@@ -29,4 +29,14 @@ test('nome pelo arquivo quando o texto não traz', () => {
   assert.ok(!pareceNome('Apartamento'))
   assert.ok(!pareceNome('Apartamento 12 Bloco B'))
   assert.ok(pareceNome('Fulano Tal'))
+})
+
+test('nome do cliente: o do arquivo vence o endereço lido no texto', () => {
+  const p = parseContrato('Rua Exemplo, 1234 - Alto da Glória - Curitiba CPF 000.000.000-00')
+  assert.ok(!pareceNome('Alto da Glória - Curitiba'))
+  assert.notEqual(p.cliente, 'Alto da Glória - Curitiba')
+  assert.equal(escolherNome('Alto da Glória', 'CONTRATO_LE_BLANC_Fulano_Carlos_Teste.pdf'), 'Fulano Carlos Teste')
+  assert.equal(escolherNome('FULANO CARLOS TESTE', 'CONTRATO_LE_BLANC_Fulano_Carlos_Teste.pdf'), 'FULANO CARLOS TESTE', 'texto que confirma o nome é mantido')
+  assert.equal(escolherNome('Fulano Carlos Teste', 'scan_001.pdf'), 'Fulano Carlos Teste')
+  assert.equal(escolherNome('', 'CONTRATO_LE_BLANC_Beltrano_Exemplo.pdf'), 'Beltrano Exemplo')
 })

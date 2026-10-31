@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { anexarJornada } from '../lib/jornada.js'
 import { extrairTexto } from '../lib/pdfLer.js'
-import { parseContrato, nomeDoArquivo } from '../lib/lerContrato.js'
+import { parseContrato, escolherNome } from '../lib/lerContrato.js'
 import { ocrImagemAuto } from '../lib/ocr.js'
 import { acharVendedor, sugerirVinculo } from '../lib/contratoAssinado.js'
 import { registrarLog } from '../lib/log.js'
@@ -53,7 +53,7 @@ export default function ContratoAssinado({ contratos, comFicha, tipoVenda, onCri
       setArquivo({ path, nome: file.name })
       const p = parseContrato(texto)
       // Nome lido no texto; se não houver, o do arquivo ("CONTRATO_LE_BLANC_Fulano_de_Tal.pdf").
-      const cliente = p.cliente || nomeDoArquivo(file.name)
+      const cliente = escolherNome(p.cliente, file.name)
       const vend = (p.vendedor && acharVendedor('Vendedor: ' + p.vendedor, vendedores)) || acharVendedor(texto, vendedores)
       setF((s) => ({
         ...s,
