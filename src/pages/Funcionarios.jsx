@@ -18,7 +18,11 @@ const SETORES = ['Vendas', 'Administrativo', 'Financeiro', 'Montagem', 'Assistê
 const vazio = {
   nome_completo: '', cpf: '', cargo: '', tipo: 'vendedor', setor: 'Vendas',
   salario_fixo: '', dia_pagamento: 5, data_admissao: '', ativo: true, observacoes: '',
+  vinculo: 'CLT', vt_total: '', va_total: '', ajuda_custo: '', adiantamento: '',
 }
+const num = (v) => (v === '' || v == null ? 0 : Number(v))
+// O que sai por mês para a pessoa: CLT = salário + VT + VA; MEI = ajuda de custo fixa (comissão é à parte).
+export const totalMensal = (r) => r.vinculo === 'MEI' ? num(r.ajuda_custo) : num(r.salario_fixo) + num(r.vt_total) + num(r.va_total)
 
 export default function Funcionarios() {
   const [rows, setRows] = useState(null)
@@ -42,6 +46,7 @@ export default function Funcionarios() {
       tipo: r.tipo || 'vendedor', setor: r.setor || 'Vendas',
       salario_fixo: r.salario_fixo ?? '', dia_pagamento: r.dia_pagamento ?? 5,
       data_admissao: r.data_admissao || '', ativo: r.ativo ?? true, observacoes: r.observacoes || '',
+      vinculo: r.vinculo || 'CLT', vt_total: r.vt_total ?? '', va_total: r.va_total ?? '', ajuda_custo: r.ajuda_custo ?? '', adiantamento: r.adiantamento ?? '',
     },
     editId: r.id,
   })
@@ -60,6 +65,8 @@ export default function Funcionarios() {
       dia_pagamento: f.dia_pagamento ? Number(f.dia_pagamento) : null,
       data_admissao: f.data_admissao || null, ativo: !!f.ativo,
       observacoes: f.observacoes || null,
+      vinculo: f.vinculo, vt_total: num(f.vt_total), va_total: num(f.va_total),
+      ajuda_custo: num(f.ajuda_custo), adiantamento: num(f.adiantamento),
     }
     let error
     if (modal.editId) {
@@ -95,19 +102,22 @@ export default function Funcionarios() {
           <thead>
             <tr>
               <th>Nome</th><th>Tipo</th><th>Setor</th><th>Cargo</th>
-              <th className="num">Salário fixo</th><th>Admissão</th><th>Status</th><th></th>
+              <th>Vínculo</th><th className="num">Salário</th><th className="num">VT + VA</th><th className="num">Total/mês</th><th>Admissão</th><th>Status</th><th></th>
             </tr>
           </thead>
           <tbody>
-            {rows === null && <tr><td colSpan="8" className="empty">Carregando…</td></tr>}
-            {rows && lista.length === 0 && <tr><td colSpan="8" className="empty">Nenhum funcionário cadastrado.</td></tr>}
+            {rows === null && <tr><td colSpan="11" className="empty">Carregando…</td></tr>}
+            {rows && lista.length === 0 && <tr><td colSpan="11" className="empty">Nenhum funcionário cadastrado.</td></tr>}
             {lista.map((r) => (
               <tr key={r.id}>
                 <td>{r.nome_completo}</td>
                 <td><span className="badge neutral">{TIPO_LABEL[r.tipo] || r.tipo || '—'}</span></td>
                 <td className="muted">{r.setor || '—'}</td>
                 <td className="muted">{r.cargo || '—'}</td>
-                <td className="num">{r.salario_fixo ? brl(r.salario_fixo) : '—'}</td>
+                <td><span className="badge neutral">{r.vinculo === 'MEI' ? 'MEI/PJ' : 'CLT'}</span></td>
+                <td className="num">{r.vinculo === 'MEI' ? (r.ajuda_custo ? <span title="Ajuda de custo">{brl(r.ajuda_custo)}</span> : '—') : (r.salario_fixo ? brl(r.salario_fixo) : '—')}</td>
+                <td className="num">{r.vinculo === 'MEI' ? '—' : (num(r.vt_total) + num(r.va_total) ? brl(num(r.vt_total) + num(r.va_total)) : <span className="faint">preencher</span>)}</td>
+                <td className="num"><b>{totalMensal(r) ? brl(totalMensal(r)) : '—'}</b></td>
                 <td className="muted">{fmtDate(r.data_admissao)}</td>
                 <td>{r.ativo ? <span className="badge ok">Ativo</span> : <span className="badge danger">Inativo</span>}</td>
                 <td className="right"><button className="icon-btn" onClick={() => abrirEdit(r)}><IcoEdit /></button></td>
@@ -151,9 +161,30 @@ export default function Funcionarios() {
             <div className="field"><label>CPF</label>
               <input className="input" value={modal.form.cpf} onChange={(e) => setF('cpf', e.target.value)} /></div>
           </div>
+          <div className="field">
+            <label>Vínculo</label>
+            <select className="input" value={modal.form.vinculo} onChange={(e) => setF('vinculo', e.target.value)}>
+              <option value="CLT">CLT: salário + VT + VA no 5º dia útil</option>
+              <option value="MEI">MEI / PJ: só ajuda de custo fixa (comissão lançada à parte)</option>
+            </select>
+          </div>
+          {modal.form.vinculo === 'MEI' ? (
+            <div className="field"><label>Ajuda de custo fixa por mês</label>
+              <input className="input" type="number" step="0.01" value={modal.form.ajuda_custo} onChange={(e) => setF('ajuda_custo', e.target.value)} /></div>
+          ) : (<>
+            <div className="row-3">
+              <div className="field"><label>VT por mês</label>
+                <input className="input" type="number" step="0.01" value={modal.form.vt_total} onChange={(e) => setF('vt_total', e.target.value)} /></div>
+              <div className="field"><label>VA por mês</label>
+                <input className="input" type="number" step="0.01" value={modal.form.va_total} onChange={(e) => setF('va_total', e.target.value)} /></div>
+              <div className="field"><label>Adiantamento (dia 20)</label>
+                <input className="input" type="number" step="0.01" value={modal.form.adiantamento} onChange={(e) => setF('adiantamento', e.target.value)} /></div>
+            </div>
+          </>)}
+          <div className="sub" style={{ margin: '-4px 0 10px' }}>Total por mês: <b>{brl(totalMensal(modal.form))}</b>{modal.form.vinculo === 'CLT' && num(modal.form.adiantamento) > 0 ? ` (${brl(num(modal.form.adiantamento))} no dia 20 e ${brl(totalMensal(modal.form) - num(modal.form.adiantamento))} no 5º dia útil)` : ''}. Lançado sozinho todo dia 1º como pagamento pendente.</div>
           <div className="row-3">
-            <div className="field"><label>Salário fixo</label>
-              <input className="input" type="number" step="0.01" value={modal.form.salario_fixo} onChange={(e) => setF('salario_fixo', e.target.value)} /></div>
+            <div className="field"><label>{modal.form.vinculo === 'MEI' ? 'Salário (não se aplica)' : 'Salário fixo'}</label>
+              <input className="input" type="number" step="0.01" disabled={modal.form.vinculo === 'MEI'} value={modal.form.salario_fixo} onChange={(e) => setF('salario_fixo', e.target.value)} /></div>
             <div className="field"><label>Dia pagamento</label>
               <input className="input" type="number" min="1" max="31" value={modal.form.dia_pagamento} onChange={(e) => setF('dia_pagamento', e.target.value)} /></div>
             <div className="field"><label>Admissão</label>

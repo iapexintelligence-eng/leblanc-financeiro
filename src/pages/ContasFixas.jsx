@@ -6,15 +6,6 @@ import { IcoSearch } from '../components/Icons.jsx'
 const n = (v) => Number(v) || 0
 const MESES_LONGO = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const nomeMes = (ym) => { const [a, m] = ym.split('-'); return `${MESES_LONGO[Number(m) - 1]}/${a}` }
-// 5º dia útil (seg–sex) do mês. mes = 1..12
-const quintoDiaUtil = (ano, mes) => {
-  let count = 0
-  for (let d = 1; d <= 28; d++) {
-    const wd = new Date(ano, mes - 1, d).getDay()
-    if (wd >= 1 && wd <= 5) { count++; if (count === 5) return d }
-  }
-  return 7
-}
 const CAT_LABEL = { fixos: 'Fixos', impostos: 'Impostos', salarios: 'Salários', pro_labore: 'Pró-labore', operacional: 'Operacional', marketing: 'Marketing', industria: 'Indústria', montagem: 'Montagem', frete: 'Frete', rafex: 'RAFEX', perfar: 'Perfar', vidracaria: 'Vidraçaria', metalon: 'Metalon', rudegon: 'Rudegon', assistencia: 'Assistência', outros: 'Outros' }
 const labelCat = (c) => CAT_LABEL[c] || c || '—'
 
@@ -30,7 +21,7 @@ export default function ContasFixas() {
     setErro('')
     const { data, error } = await supabase.from('pagamentos')
       .select('id, data, descricao, categoria, fornecedor, valor, dia_vencimento')
-      .eq('recorrente', true).limit(5000)
+      .eq('recorrente', true).neq('categoria', 'salarios').limit(5000)
     if (error) setErro(error.message)
     // uma linha por descrição (a ocorrência mais recente)
     const porDesc = {}
@@ -54,24 +45,13 @@ export default function ContasFixas() {
   const lancarMes = async () => {
     setErro(''); setInfo('')
     const ym = today().slice(0, 7)
-    const modelos = rows || []
-    if (!modelos.length) { setErro('Nenhuma conta fixa para lançar.'); return }
-    if (!window.confirm(`Lançar as contas fixas de ${nomeMes(ym)}? Serão criados os pagamentos do mês (não duplica os que já existirem).`)) return
+    if (!window.confirm(`Lançar agora as contas fixas e a folha de ${nomeMes(ym)}? O sistema já faz isso sozinho todo dia 1º; não duplica o que já estiver lançado.`)) return
     setLancando(true)
-    // já lançados neste mês
-    const { data: exist } = await supabase.from('pagamentos').select('descricao').gte('data_vencimento', `${ym}-01`).lte('data_vencimento', `${ym}-31`)
-    const jaTem = new Set((exist || []).map((e) => e.descricao))
-    const [ano, mes] = ym.split('-').map(Number)
-    const novos = modelos.filter((m) => !jaTem.has(m.descricao)).map((m) => {
-      const diaNum = m.categoria === 'salarios' ? quintoDiaUtil(ano, mes) : Math.min(28, Math.max(1, Number(m.dia_vencimento) || 1))
-      const dia = String(diaNum).padStart(2, '0')
-      return { descricao: m.descricao, categoria: m.categoria || 'fixos', fornecedor: m.fornecedor || null, valor: n(m.valor), forma_pagamento: null, data: `${ym}-01`, data_vencimento: `${ym}-${dia}`, dia_vencimento: diaNum, status: 'Pendente', recorrente: true }
-    })
-    if (!novos.length) { setLancando(false); setInfo(`Tudo certo — as fixas de ${nomeMes(ym)} já estavam lançadas.`); return }
-    const { error } = await supabase.from('pagamentos').insert(novos)
+    const { data, error } = await supabase.rpc('gerar_fixos_mes', { p_mes: `${ym}-01` })
     setLancando(false)
     if (error) { setErro('Erro ao lançar: ' + error.message); return }
-    setInfo(`${novos.length} conta(s) fixa(s) de ${nomeMes(ym)} lançadas. Já aparecem no Dashboard (a pagar).`)
+    const tot = (data?.contas || 0) + (data?.folha || 0)
+    setInfo(tot ? `${data.contas} conta(s) fixa(s) e ${data.folha} pagamento(s) da folha de ${nomeMes(ym)} lançados como pendentes.` : `Tudo certo: as fixas e a folha de ${nomeMes(ym)} já estavam lançadas.`)
     carregar()
   }
 
@@ -96,9 +76,9 @@ export default function ContasFixas() {
       <div className="between">
         <div>
           <h3>Contas fixas mensais</h3>
-          <div className="sub">O que a loja paga todo mês, por dia de vencimento. Use o × para tirar uma conta duplicada da lista (não apaga o histórico, só deixa de ser fixa).</div>
+          <div className="sub">O que a loja paga todo mês, por dia de vencimento. <b>Todo dia 1º o sistema lança sozinho</b> estas contas e a folha (salário + VT + VA dos CLT e ajuda de custo dos MEI, pelo cadastro de Funcionários) como pendentes. Use o × para tirar uma conta duplicada da lista (não apaga o histórico, só deixa de ser fixa).</div>
         </div>
-        <button className="btn" onClick={lancarMes} disabled={lancando}>{lancando ? 'Lançando…' : 'Lançar fixas do mês'}</button>
+        <button className="btn" onClick={lancarMes} disabled={lancando}>{lancando ? 'Lançando…' : 'Lançar agora (mês atual)'}</button>
       </div>
       {info && <div className="badge ok" style={{ display: 'inline-block', margin: '10px 0' }}>{info}</div>}
 
