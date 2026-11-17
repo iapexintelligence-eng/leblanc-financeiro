@@ -1,9 +1,9 @@
 import AlertasJornada from './AlertasJornada.jsx'
 import BuscaCliente from './BuscaCliente.jsx'
 import { useEffect, useMemo, useState } from 'react'
-import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import Protegido from './Protegido.jsx'
-import Sidebar, { AREA_INICIAL, INICIO, areaDaRota, areasVisiveis, itemDaArea, podeVerRota } from './Sidebar.jsx'
+import Sidebar, { AREA_INICIAL, INICIO, abaAtual, areaDaRota, areasVisiveis, itemDaArea, podeVerRota } from './Sidebar.jsx'
 import { authOn } from '../lib/supabase.js'
 import { signOut } from '../lib/useAuth.js'
 import { useRole } from '../lib/useRole.js'
@@ -75,7 +75,9 @@ export default function Layout() {
   const doMenu = itemDaArea(area, pathname)
   const [crumb0, title0] = TITLES[pathname] || ['', '']
   const crumb = doMenu ? `${area.label} · ${area.quem}` : crumb0
-  const title = doMenu && !doMenu.to.includes('?') ? doMenu.txt : title0
+  // Item com abas (ex.: Saídas = Pagamentos, Cartões, Contas fixas…): o título é o do item e as telas viram abas.
+  const aba = abaAtual(doMenu, pathname)
+  const title = doMenu?.abas ? doMenu.txt : doMenu && !doMenu.to.includes('?') ? doMenu.txt : title0
   const iniciais = (role.nome || 'LB').slice(0, 2).toUpperCase()
   // Cada setor abre na sua aba e não entra nas telas financeiras pela barra de endereço.
   if (authOn && !role.loading && role.papel && !podeVerRota(pathname, role.papel)) {
@@ -110,6 +112,13 @@ export default function Layout() {
               )}
             </div>
           </header>
+          {doMenu?.abas?.length > 1 && (
+            <nav className="subabas" aria-label={`Telas de ${doMenu.txt}`}>
+              {doMenu.abas.map((a) => (
+                <Link key={a.to} to={a.to} className={'subaba' + (a === aba ? ' active' : '')} aria-current={a === aba ? 'page' : undefined}>{a.txt}</Link>
+              ))}
+            </nav>
+          )}
         </div>
         <main className="content"><AlertasJornada /><Protegido nome={title || 'Tela'} chave={pathname}><Outlet /></Protegido></main>
       </div>

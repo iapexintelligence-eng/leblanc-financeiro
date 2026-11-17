@@ -87,6 +87,12 @@ h1, h2, h3 { margin: 0; font-weight: 500; }
 .area-tab:hover { color: var(--ink); }
 .area-tab.active { color: var(--ink); font-weight: 600; border-bottom-color: var(--ink); }
 .area-tab:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+.subabas { display: flex; gap: 6px; padding: 0 26px 12px; overflow-x: auto; scrollbar-width: none; }
+.subabas::-webkit-scrollbar { display: none; }
+.subaba { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--paper); color: var(--ink-soft); font-size: 13px; text-decoration: none; white-space: nowrap; }
+.subaba:hover { color: var(--ink); border-color: var(--line-strong); }
+.subaba.active { background: var(--ink); border-color: var(--ink); color: #fff; font-weight: 600; }
+.subaba:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .sidebar .area-nome { font-family: var(--serif); font-size: 19px; color: #fff; padding: 0 10px; display: flex; flex-direction: column; }
 .sidebar .area-nome small { font-family: inherit; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: #8f877e; margin-top: 2px; }
 
@@ -205,6 +211,7 @@ textarea.input { resize: vertical; min-height: 72px; }
   .topbar { padding:16px; flex-wrap:wrap; gap:10px; }
   .areas { padding:0 8px; }
   .area-tab { padding:10px 10px 8px; }
+  .subabas { padding:0 8px 10px; }
   .section-head { flex-wrap:wrap; gap:10px; }
   .modal-overlay { padding:8px; }
   .modal .body { padding:16px; }

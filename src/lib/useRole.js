@@ -4,7 +4,7 @@ import { supabase, authOn } from './supabase.js'
 // Papéis: administrativo, diretoria (veem tudo) · correcao, montagem, qualidade, vendedor (só o seu)
 export const PAPEIS = ['medidor', 'logistica', 'financeiro', 'gestor', 'montador', 'administrativo', 'diretoria', 'correcao', 'montagem', 'qualidade', 'vendedor']
 export const SETORES = ['Administrativo', 'Diretoria', 'Correção', 'Montagem', 'Qualidade', 'Vendas']
-export const podeTudo = (papel) => papel === 'administrativo' || papel === 'diretoria' || papel === 'gestor' || papel === 'financeiro'
+export { podeTudo } from './menu.js'
 
 export function useRole() {
   const [role, setRole] = useState({ papel: null, setor: null, nome: '', email: '', loading: authOn })
