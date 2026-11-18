@@ -452,6 +452,25 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  const r2=await reg({...base,cliente_nome:'Venda Já Lançada'},gestor+'/b/contrato2.pdf',v2)
  assert.equal(r2.venda_id,v2)
  assert.equal((await db.query("select count(*)::int n from le_admin.vendas where cliente_nome='Venda Já Lançada'")).rows[0].n,1,'reaproveita a venda')
+
+ // Contrato antigo subido à mão na tela de Contratos: guarda venda e contrato com o PDF, sem abrir ficha;
+ // num contrato que já tem ficha, só anexa o PDF.
+ await db.exec(await readFile(new URL('../supabase/migrations/20261118120000_contrato_antigo_manual.sql',import.meta.url),'utf8'))
+ await db.query("insert into storage.objects(bucket_id,name) values('jornada-documentos',$1),('jornada-documentos',$2)",[gestor+'/d/antigo.pdf',gestor+'/e/assinado-r1.pdf'])
+ const antigo=async(d,arq,venda=null,contrato=null)=>(await db.query('select le_admin.contrato_assinado_registrar($1,$2,$3,$4,false) as r',[JSON.stringify(d),arq,venda,contrato])).rows[0].r
+ const r3=await antigo({...base,cliente_nome:'Cliente Antigo Entregue',data_contrato:'2025-03-10'},gestor+'/d/antigo.pdf')
+ assert.equal(r3.registro,null,'contrato antigo não abre ficha')
+ assert.equal((await db.query('select count(*)::int n from le_admin.jornada_registros where contrato_id=$1',[r3.contrato_id])).rows[0].n,0)
+ const ctr3=(await db.query('select * from leblanc.contratos where id=$1',[r3.contrato_id])).rows[0]
+ assert.equal(ctr3.dados_json.importacao.origem,'contrato_antigo')
+ assert.equal((await db.query('select data_venda::text d from le_admin.vendas where id=$1',[r3.venda_id])).rows[0].d,'2025-03-10')
+ const r4=await antigo(base,gestor+'/e/assinado-r1.pdf',null,r1.contrato_id)
+ assert.equal(r4.contrato_id,r1.contrato_id)
+ assert.equal(r4.registro.id,r1.registro.id,'devolve a ficha que já existia')
+ assert.equal((await db.query('select count(*)::int n from leblanc.contrato_anexos where contrato_id=$1',[r1.contrato_id])).rows[0].n,2)
+ // A jornada continua barrando contrato com ficha (chamada antiga, sem o 5º parâmetro).
+ await db.query("insert into storage.objects(bucket_id,name) values('jornada-documentos',$1)",[gestor+'/f/outro.pdf'])
+ await assert.rejects(reg(base,gestor+'/f/outro.pdf',null,r1.contrato_id),/já tem ficha/)
  await db.exec(`select set_config('test.uid','${logi}',false)`)
  await assert.rejects(reg(base,gestor+'/b/contrato2.pdf'),/Somente comercial/)
  } finally {await db.close()}

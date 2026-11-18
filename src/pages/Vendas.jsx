@@ -21,6 +21,7 @@ const RT_TIPOS = ['Indicação', 'Arquiteto parceiro', 'Catelli']
 
 export default function Vendas() {
   const [rows, setRows] = useState(null)
+  const [anexoContrato, setAnexoContrato] = useState({})
   const [vendedores, setVendedores] = useState([])
   const [busca, setBusca] = useState('')
   const [modal, setModal] = useState(null) // {form, editId, original}
@@ -62,10 +63,20 @@ export default function Vendas() {
   }
 
   const carregar = async () => {
-    const [v, f] = await Promise.all([
+    const [v, f, cs, an] = await Promise.all([
       supabase.from('vendas').select('*').order('data_venda', { ascending: false }).limit(500),
       supabase.from('funcionarios').select('id, nome_completo, tipo, ativo').eq('ativo', true).order('nome_completo'),
+      supabase.schema('leblanc').from('contratos').select('id, numero, venda_id:dados_json->>venda_id').limit(5000),
+      supabase.schema('leblanc').from('contrato_anexos').select('contrato_id, bucket, path, tipo, nome_arquivo, id').order('id').limit(5000),
     ])
+    // Contrato subido pela jornada ou pela tela de Contratos fica em contrato_anexos, não em vendas.contrato_path.
+    const vendaDe = new Map((cs.data || []).map((c) => [c.id, Number(c.venda_id ?? String(c.numero || '').match(/^(?:HIST|CTR)-V(\d+)$/i)?.[1])]))
+    const mapa = {}
+    for (const a of an.data || []) {
+      const vid = vendaDe.get(a.contrato_id)
+      if (vid && (!mapa[vid] || /assinado/.test(a.tipo))) mapa[vid] = a
+    }
+    setAnexoContrato(mapa)
     if (v.error) setErro(v.error.message)
     setRows(v.data || [])
     // Vendedores primeiro, depois demais funcionários ativos (todos podem ser selecionados).
@@ -91,8 +102,11 @@ export default function Vendas() {
   }) }
 
   const baixarContrato = async (r) => {
-    if (!r.contrato_path) return
-    const { data, error } = await supabase.storage.from('pasta-cliente').createSignedUrl(r.contrato_path, 60)
+    const a = !r.contrato_path && anexoContrato[r.id]
+    if (!r.contrato_path && !a) return
+    const { data, error } = a
+      ? await supabase.storage.from(a.bucket).createSignedUrl(a.path, 60)
+      : await supabase.storage.from('pasta-cliente').createSignedUrl(r.contrato_path, 60)
     if (!error && data?.signedUrl) window.open(data.signedUrl, '_blank')
     else setErro('Não foi possível abrir o contrato.')
   }
@@ -238,7 +252,7 @@ export default function Vendas() {
                 <td className="num">{r.comissao_valor ? <span title={r.comissao_pct ? r.comissao_pct + '%' : ''}>{brl(r.comissao_valor)}</span> : <span className="faint">—</span>}</td>
                 <td className="muted">{fmtDate(r.data_venda)}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>
-                  {r.contrato_path && <button className="btn ghost sm" onClick={() => baixarContrato(r)}>Ver</button>}
+                  {(r.contrato_path || anexoContrato[r.id]) && <button className="btn ghost sm" onClick={() => baixarContrato(r)}>Ver</button>}
                   <label className="btn ghost sm" style={{ marginLeft: r.contrato_path ? 4 : 0, cursor: 'pointer' }}>
                     {r.contrato_path ? 'Trocar' : 'Anexar'}
                     <input type="file" accept=".pdf,image/*" style={{ display: 'none' }} onChange={(e) => { trocarContrato(r, e.target.files?.[0]); e.target.value = '' }} />

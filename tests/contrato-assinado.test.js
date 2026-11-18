@@ -40,3 +40,12 @@ test('não duplica: usa contrato sem ficha, depois venda sem contrato; senão cr
   assert.deepEqual(s.padrao, { tipo: 'nova' })
   assert.deepEqual(sugerirVinculo({ cliente: 'Ana', contratos, vendas }).padrao, { tipo: 'nova' })
 })
+
+test('na tela de Contratos, contrato que já tem ficha também é sugerido (só anexa o PDF)', () => {
+  const contratos = [{ id: 'c1', numero: 'HIST-V7', cliente_nome: 'Maria Antiga Souza' }]
+  const base = { cliente: 'Maria Antiga Souza', data: '2025-03-10', contratos, comFicha: new Set(['c1']), vendas: [{ id: 7, cliente_nome: 'Maria Antiga Souza', data_venda: '2025-03-10' }] }
+  assert.deepEqual(sugerirVinculo(base).padrao, { tipo: 'nova' })
+  assert.deepEqual(sugerirVinculo({ ...base, permitirComFicha: true }).padrao, { tipo: 'contrato', id: 'c1' })
+  // A venda 7 já é usada pelo HIST-V7: não aparece como venda livre.
+  assert.equal(sugerirVinculo({ ...base, permitirComFicha: true }).vendas.length, 0)
+})

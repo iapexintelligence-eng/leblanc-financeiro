@@ -23,7 +23,8 @@ const dias = (a, b) => Math.abs((new Date(a + 'T12:00:00Z') - new Date(b + 'T12:
 
 // O que já existe para este cliente. Contrato sem ficha é o vínculo mais seguro; depois, venda
 // lançada sem contrato. Só sugere sozinho quando há exatamente uma opção.
-export function sugerirVinculo({ cliente, data, contratos = [], comFicha = new Set(), vendas = [] }) {
+// permitirComFicha: na tela de Contratos (contrato antigo), ligar a um contrato que já tem ficha só anexa o PDF.
+export function sugerirVinculo({ cliente, data, contratos = [], comFicha = new Set(), vendas = [], permitirComFicha = false }) {
   const nome = String(cliente || '').trim()
   if (tokensNome(nome).length < 2) return { contratos: [], vendas: [], padrao: { tipo: 'nova' } }
   const usadas = new Set(contratos.map(vendaDoContrato).filter((x) => x != null))
@@ -31,7 +32,7 @@ export function sugerirVinculo({ cliente, data, contratos = [], comFicha = new S
     .map((c) => ({ ...c, temFicha: comFicha.has(String(c.id)) }))
   const vs = vendas.filter((v) => mesmoCliente(v.cliente_nome, nome) && !usadas.has(Number(v.id)))
     .sort((a, b) => (data && a.data_venda && b.data_venda ? dias(a.data_venda, data) - dias(b.data_venda, data) : 0))
-  const livres = cs.filter((c) => !c.temFicha)
+  const livres = permitirComFicha ? cs : cs.filter((c) => !c.temFicha)
   let padrao = { tipo: 'nova' }
   if (livres.length === 1) padrao = { tipo: 'contrato', id: String(livres[0].id) }
   else if (!livres.length && vs.length === 1) padrao = { tipo: 'venda', id: Number(vs[0].id) }

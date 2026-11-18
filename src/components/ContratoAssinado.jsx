@@ -11,9 +11,14 @@ import { hojeSP } from '../lib/prazos.js'
 
 // "Novo registro" a partir do contrato assinado: sobe o PDF (ou foto), lê cliente, CPF, data, valor e
 // vendedor, e cria de uma vez a venda, o contrato no sistema e a ficha do cliente.
+// modo="contratos" (tela de Contratos da Léia): serve também para contrato antigo, que guarda venda e
+// contrato sem abrir ficha, ou só anexa o PDF a um contrato que já está no sistema.
 const VAZIO = { cliente_nome: '', cliente_cpf: '', cliente_telefone: '', cliente_endereco: '', data_contrato: '', valor: '', vendedor: '', forma_pagamento: '' }
 
-export default function ContratoAssinado({ contratos, comFicha, tipoVenda, onCriado }) {
+export default function ContratoAssinado({ contratos, comFicha, tipoVenda, onCriado, modo = 'jornada' }) {
+  const telaContratos = modo === 'contratos'
+  // Na jornada sempre abre a ficha; na tela de Contratos a Léia escolhe (padrão: contrato antigo, sem ficha).
+  const [abrirFicha, setAbrirFicha] = useState(!telaContratos)
   const [arquivo, setArquivo] = useState(null) // { path, nome }
   const [f, setF] = useState(VAZIO)
   const [lendo, setLendo] = useState(''), [erro, setErro] = useState(''), [salvando, setSalvando] = useState(false)
@@ -31,7 +36,10 @@ export default function ContratoAssinado({ contratos, comFicha, tipoVenda, onCri
     })()
   }, [])
 
-  const sug = useMemo(() => sugerirVinculo({ cliente: f.cliente_nome, data: f.data_contrato, contratos, comFicha, vendas }), [f.cliente_nome, f.data_contrato, contratos, comFicha, vendas])
+  const sug = useMemo(() => sugerirVinculo({ cliente: f.cliente_nome, data: f.data_contrato, contratos, comFicha, vendas, permitirComFicha: telaContratos }), [f.cliente_nome, f.data_contrato, contratos, comFicha, vendas, telaContratos])
+  const contratoEscolhido = vinculo.startsWith('contrato:') ? sug.contratos.find((c) => `contrato:${c.id}` === vinculo) : null
+  // Contrato que já tem ficha: só anexa o PDF (não abre outra ficha).
+  const abre = abrirFicha && !contratoEscolhido?.temFicha
   const padrao = sug.padrao.tipo === 'nova' ? 'nova' : `${sug.padrao.tipo}:${sug.padrao.id}`
   useEffect(() => { if (!escolheu) setVinculo(padrao) }, [padrao, escolheu])
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }))
@@ -84,17 +92,20 @@ export default function ContratoAssinado({ contratos, comFicha, tipoVenda, onCri
       p_arquivo: arquivo.path,
       p_venda_id: tipo === 'venda' ? Number(id) : null,
       p_contrato: tipo === 'contrato' ? id : null,
+      p_abrir_ficha: abre,
     })
     setSalvando(false)
     if (error) { setErro(error.message); return }
-    if (tipo === 'nova') await registrarLog({ tabela: 'vendas', registroId: data.venda_id, acao: 'criacao', descricao: `Nova venda de ${f.cliente_nome} pelo contrato assinado (${data.numero})` })
+    if (tipo === 'nova') await registrarLog({ tabela: 'vendas', registroId: data.venda_id, acao: 'criacao', descricao: `Nova venda de ${f.cliente_nome} pelo ${abre ? 'contrato assinado' : 'upload de contrato antigo'} (${data.numero})` })
     onCriado?.(data.registro, data)
   }
 
   const bloco = { border: '1px dashed var(--line)', borderRadius: 10, padding: 14, margin: '0 0 16px', background: 'var(--paper)' }
   return <div style={bloco}>
-    <b>Subir o contrato assinado</b>
-    <div className="sub" style={{ margin: '2px 0 10px' }}>O sistema lê os dados do contrato e cria de uma vez a venda, o contrato e a ficha do cliente. Se a venda já foi lançada, ele usa a mesma.</div>
+    <b>{telaContratos ? 'Subir contrato' : 'Subir o contrato assinado'}</b>
+    <div className="sub" style={{ margin: '2px 0 10px' }}>{telaContratos
+      ? 'Serve também para contratos antigos. O sistema lê os dados do PDF e guarda a venda e o contrato. Se a venda ou o contrato já estão no sistema, ele usa os mesmos e só anexa o PDF.'
+      : 'O sistema lê os dados do contrato e cria de uma vez a venda, o contrato e a ficha do cliente. Se a venda já foi lançada, ele usa a mesma.'}</div>
     <label className={'btn ghost' + (lendo && !arquivo ? ' disabled' : '')} style={{ cursor: 'pointer' }}>
       {arquivo ? 'Trocar arquivo' : 'Escolher contrato (PDF ou foto)'}
       <input type="file" accept="application/pdf,image/*" style={{ display: 'none' }} onChange={(e) => { escolher(e.target.files?.[0]); e.target.value = '' }} />
@@ -115,13 +126,20 @@ export default function ContratoAssinado({ contratos, comFicha, tipoVenda, onCri
       <div className="field"><label>Esta venda</label>
         <select className="input" value={vinculo} onChange={(e) => { setVinculo(e.target.value); setEscolheu(true) }}>
           <option value="nova">É uma venda nova: lançar agora</option>
-          {sug.contratos.map((c) => <option key={c.id} value={`contrato:${c.id}`} disabled={c.temFicha}>Contrato já no sistema: {c.numero} · {c.cliente_nome}{c.temFicha ? ' (já tem ficha)' : ''}</option>)}
+          {sug.contratos.map((c) => <option key={c.id} value={`contrato:${c.id}`} disabled={c.temFicha && !telaContratos}>Contrato já no sistema: {c.numero} · {c.cliente_nome}{c.temFicha ? (telaContratos ? ' (já tem ficha: só anexa o PDF)' : ' (já tem ficha)') : ''}</option>)}
           {sug.vendas.map((v) => <option key={v.id} value={`venda:${v.id}`}>Venda já lançada: {v.cliente_nome} · {fmtDate(v.data_venda)}{v.valor_vendido ? ' · ' + brl(v.valor_vendido) : ''}</option>)}
         </select>
         {vinculo !== 'nova' && <div className="sub" style={{ marginTop: 4 }}>Não cria outra venda: liga o contrato assinado à que já existe.</div>}
         {vinculo === 'nova' && (sug.contratos.length > 0 || sug.vendas.length > 0) && <div className="sub" style={{ marginTop: 4, color: 'var(--danger)' }}>Já existe venda ou contrato com esse nome. Confira para não lançar duas vezes.</div>}
       </div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}><button className="btn" type="button" onClick={criar} disabled={salvando || !!(lendo && !arquivo)}>{salvando ? 'Criando…' : 'Criar venda e ficha do cliente'}</button></div>
+      {telaContratos && <div className="field"><label>Este cliente</label>
+        <select className="input" value={abrirFicha ? 'andamento' : 'antigo'} onChange={(e) => setAbrirFicha(e.target.value === 'andamento')} disabled={!!contratoEscolhido?.temFicha}>
+          <option value="antigo">Contrato antigo, já entregue: só guardar venda e contrato</option>
+          <option value="andamento">Ainda em andamento: abrir também a ficha na jornada</option>
+        </select>
+        <div className="sub" style={{ marginTop: 4 }}>{contratoEscolhido?.temFicha ? 'Esse contrato já tem ficha na jornada: o PDF entra nela.' : vinculo === 'nova' ? 'A venda entra no mês da data do contrato.' : ''}</div>
+      </div>}
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}><button className="btn" type="button" onClick={criar} disabled={salvando || !!(lendo && !arquivo)}>{salvando ? 'Salvando…' : telaContratos ? (vinculo === 'nova' ? 'Salvar venda e contrato' : 'Salvar contrato') : 'Criar venda e ficha do cliente'}</button></div>
     </>}
     {erro && <div className="login-err" role="alert" style={{ marginTop: 8 }}>{erro}</div>}
   </div>
