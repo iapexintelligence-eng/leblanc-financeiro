@@ -12,6 +12,7 @@ export const ROTAS = {
  '/jornada':{icon:'project',txt:'Jornada do cliente',roles:['medidor','vendedor','correcao','logistica','financeiro','gestor','qualidade']},
  '/orcamentos':{icon:'sales',txt:'Orçamentos e contratos',roles:['vendedor','financeiro','gestor']},
  '/contratos-todos':{icon:'report',txt:'Contratos (comercial e importados)',roles:['financeiro','gestor']},
+ '/aditivos':{icon:'report',txt:'Aditivos de contrato',roles:['vendedor','financeiro','gestor']},
  '/vendas':{icon:'sales',txt:'Vendas',roles:['vendedor']},
  '/medicao':{icon:'tool',txt:'Medida técnica',roles:['medidor','correcao']},
  '/correcao':{icon:'tool',txt:'Correção',roles:['correcao']},
@@ -59,7 +60,7 @@ export const AREAS = [
  {id:'financeiro',label:'Financeiro',quem:'Léia',papeis:['financeiro'],grupos:[
   {label:'Dia a dia',itens:[
    grupo('Hoje','home',[['/pendencias?equipe=financeiro','O que fazer']]),
-   grupo('Clientes','project',[['/jornada','Jornada do cliente'],['/contratos-todos','Contratos'],['/vincular','Gastos por contrato']]),
+   grupo('Clientes','project',[['/jornada','Jornada do cliente'],['/contratos-todos','Contratos'],['/aditivos','Aditivos'],['/vincular','Gastos por contrato']]),
    grupo('Entradas','receive',[['/recebiveis','Recebimentos'],['/previsibilidade-montagens','Saldos antes da montagem']]),
    grupo('Saídas','pay',[['/pagamentos','Pagamentos'],['/saidas','Saídas do mês'],['/faturas-cartao','Cartões'],['/parcelamentos','Parcelamentos'],['/contas-fixas','Contas fixas'],['/pro-labore','Pró-labore']]),
    grupo('Caixa e bancos','bank',[['/bancos','Bancos'],['/previsibilidade','Previsão de caixa']]),
@@ -80,7 +81,7 @@ export const AREAS = [
   {label:'Qualidade',itens:[['/pendencias?equipe=logistica','Pendências'],'/qualidade','/assistencias-operacionais','/montagem','/agenda','/jornada']},
  ]},
  {id:'comercial',label:'Comercial',quem:'Vendas',papeis:['vendedor','medidor'],grupos:[
-  {label:'Comercial',itens:[['/pendencias?equipe=vendedor','Pendências'],'/orcamentos','/vendas','/medicao','/jornada']},
+  {label:'Comercial',itens:[['/pendencias?equipe=vendedor','Pendências'],'/orcamentos','/vendas','/aditivos','/medicao','/jornada']},
  ]},
  {id:'gestao',label:'Gestão',quem:'Diretoria',papeis:['gestor'],grupos:[
   {label:'Visão geral',itens:['/',['/pendencias','Pendências da equipe'],'/jornada','/relatorios']},

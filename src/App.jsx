@@ -1,6 +1,7 @@
 import PlanilhasHistoricas from './pages/PlanilhasHistoricas.jsx'
 import ContratosImportados from './pages/ContratosImportados.jsx'
 import ContratosTodos from './pages/ContratosTodos.jsx'
+import Aditivos from './pages/Aditivos.jsx'
 import Pendencias from './pages/Pendencias.jsx'
 import RevisaoMensal from './pages/RevisaoMensal.jsx'
 import CapacidadeMontagem from './pages/CapacidadeMontagem.jsx'
@@ -61,6 +62,7 @@ export default function App() {
         <Route path="/planilhas-historicas" element={<PlanilhasHistoricas />} />
         <Route path="/contratos-importados" element={<ContratosImportados />} />
         <Route path="/contratos-todos" element={<ContratosTodos />} />
+        <Route path="/aditivos" element={<Aditivos />} />
         <Route path="/pendencias" element={<Pendencias />} />
         <Route path="/revisao-mensal" element={<RevisaoMensal />} />
         <Route path="/capacidade-montagem" element={<CapacidadeMontagem />} />
