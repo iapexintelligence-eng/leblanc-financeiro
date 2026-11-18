@@ -3,7 +3,7 @@ export const VERSAO_REGRAS = '2026-09-28'
 export const MARKETING = 0.15
 export const LIMITES_DESCONTO = { Bartzen: 40, Menezes: 50 }
 export const APROVADORAS = ['Priscila', 'Andressa', 'Catelli']
-export const PRAZOS = { planta: 2, medicao: 5, correcao: 12, entrega: 35, assistencia: 30 }
+export const PRAZOS = { medicao: 5, correcao: 12, entrega: 35, assistencia: 30 }
 export const centavos = (v) => Math.round((Number(v) + Number.EPSILON) * 100)
 export const dinheiro = (v) => centavos(v) / 100
 

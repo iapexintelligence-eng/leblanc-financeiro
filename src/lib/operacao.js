@@ -60,7 +60,6 @@ export function pendenciasAutomaticas(registros,feriados=[]) {
   // Etapas lançadas como já realizadas dispensam o checklist inicial do fluxo novo.
   const hist=d.historico||{}
   if(!hist.liberacao_em){
-   if(!d.planta_enviada_em)add(r,'Enviar planta baixa e informações','vendedor',d.planta_prazo)
    if(!d.entrada_confirmada)add(r,'Conferir entrada e comprovante','financeiro',null)
   }
   if(d.tipo_venda==='Futura'&&!d.imovel_pronto_em&&!hist.liberacao_em){add(r,'Acompanhar aviso de imóvel pronto','vendedor',null);continue}
@@ -79,7 +78,7 @@ export function pendenciasAutomaticas(registros,feriados=[]) {
 }
 export function checklistPassagem(d) {
  return [
- ['Medição',!!(d.grupo_criado&&d.grupo_arquivo&&d.imagens_enviadas&&d.imagens_arquivo&&d.planta_enviada_em&&d.planta_arquivo&&d.entrada_confirmada&&(d.tipo_venda!=='Futura'||d.imovel_pronto_em)),'Checklist, planta e entrada conferida; imóvel pronto nas vendas futuras.'],
+ ['Medição',!!(d.grupo_criado&&d.grupo_arquivo&&d.imagens_enviadas&&d.imagens_arquivo&&d.entrada_confirmada&&(d.tipo_venda!=='Futura'||d.imovel_pronto_em)),'Checklist e entrada conferida; imóvel pronto nas vendas futuras.'],
  ['Implantação',!!(d.aprovacao_em&&d.guias_arquivo),'Aprovação do cliente, guias técnicas assinadas, XML final corrigido e OK da Leia para a versão (conferido pelo servidor).'],
  ['Escala do montador',!!(d.saldo_confirmado&&d.saldo_confirmado_arquivo),'Comprovante e quitação conferida pelo financeiro.'],
  ]

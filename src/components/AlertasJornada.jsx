@@ -24,7 +24,7 @@ export default function AlertasJornada() {
      if(r.tipo==='pedido'){
       const hoje=hojeSP()
       if(d.cliente_recebe_em&&!d.saldo_confirmado)a.push({id:r.id+'saldo',cliente:d.cliente_nome,texto:'Cliente confirmou recebimento: Leia deve conferir o saldo',nivel:'warn',rota:'/jornada'})
-      for(const [key,feito,nome] of [['planta_prazo','planta_enviada_em','Enviar planta'],['medicao_prazo','medicao_em','Medição'],['correcao_prazo','correcao_em','Conferência'],['entrega_prazo','entrega_em','Entrega']]){
+      for(const [key,feito,nome] of [['medicao_prazo','medicao_em','Medição'],['correcao_prazo','correcao_em','Conferência'],['entrega_prazo','entrega_em','Entrega']]){
        if(d[key]&&!d[feito]){const p=alertaPrazo(d[key],{feriados:c.data.feriados});if(p&&(d[key]<=hoje||p.dias<=3))a.push({id:r.id+key,cliente:d.cliente_nome,texto:`${nome}: ${p.texto}`,nivel:p.nivel,rota:'/jornada'})}
       }
      }
