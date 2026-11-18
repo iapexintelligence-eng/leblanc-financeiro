@@ -42,6 +42,7 @@ import AOT from './pages/AOT.jsx'
 import Saidas from './pages/Saidas.jsx'
 import ProLabore from './pages/ProLabore.jsx'
 import FaturasCartao from './pages/FaturasCartao.jsx'
+import Parcelamentos from './pages/Parcelamentos.jsx'
 import ContasFixas from './pages/ContasFixas.jsx'
 import Vincular from './pages/Vincular.jsx'
 import EmBreve from './pages/EmBreve.jsx'
@@ -94,6 +95,7 @@ export default function App() {
         <Route path="/vincular" element={<Vincular />} />
         <Route path="/pro-labore" element={<ProLabore />} />
         <Route path="/faturas-cartao" element={<FaturasCartao />} />
+        <Route path="/parcelamentos" element={<Parcelamentos />} />
         <Route path="/dre" element={<DRE />} />
         <Route path="/previsibilidade" element={<Previsibilidade />} />
         <Route path="/previsibilidade-montagens" element={<PrevisibilidadeMontagens />} />

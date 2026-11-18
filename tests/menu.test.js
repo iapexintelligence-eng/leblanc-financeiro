@@ -10,12 +10,12 @@ test('Financeiro da Léia tem 7 itens, agrupando as 20 telas em abas', () => {
   assert.deepEqual(itens.map((i) => i.txt), ['Hoje', 'Clientes', 'Entradas', 'Saídas', 'Caixa e bancos', 'Fechamento do mês', 'Relatórios'])
   const saidas = itens.find((i) => i.txt === 'Saídas')
   assert.equal(saidas.to, '/pagamentos')
-  assert.deepEqual(saidas.abas.map((a) => a.txt), ['Pagamentos', 'Saídas do mês', 'Cartões', 'Contas fixas', 'Pró-labore'])
+  assert.deepEqual(saidas.abas.map((a) => a.txt), ['Pagamentos', 'Saídas do mês', 'Cartões', 'Parcelamentos', 'Contas fixas', 'Pró-labore'])
 })
 
 test('cada tela do grupo marca o mesmo item do menu e a aba certa', () => {
   const area = financeiro('administrativo')
-  for (const path of ['/pagamentos', '/saidas', '/faturas-cartao', '/contas-fixas', '/pro-labore']) {
+  for (const path of ['/pagamentos', '/saidas', '/faturas-cartao', '/parcelamentos', '/contas-fixas', '/pro-labore']) {
     const it = itemDaArea(area, path)
     assert.equal(it?.txt, 'Saídas', path)
     assert.equal(abaAtual(it, path)?.to, path)

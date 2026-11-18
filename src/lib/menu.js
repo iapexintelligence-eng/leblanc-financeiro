@@ -38,6 +38,7 @@ export const ROTAS = {
  '/bancos':{icon:'bank',txt:'Bancos'},
  '/pro-labore':{icon:'pay',txt:'Pró-labore'},
  '/faturas-cartao':{icon:'bank',txt:'Faturas de cartão'},
+ '/parcelamentos':{icon:'bank',txt:'Parcelamentos dos cartões'},
  '/gratificacao':{icon:'gift',txt:'Gratificação'},
  '/planejamento-integrado':{icon:'report',txt:'Prévia da integração'},
  '/historico-operacional':{icon:'report',txt:'Histórico operacional'},
@@ -60,7 +61,7 @@ export const AREAS = [
    grupo('Hoje','home',[['/pendencias?equipe=financeiro','O que fazer']]),
    grupo('Clientes','project',[['/jornada','Jornada do cliente'],['/contratos-todos','Contratos'],['/vincular','Gastos por contrato']]),
    grupo('Entradas','receive',[['/recebiveis','Recebimentos'],['/previsibilidade-montagens','Saldos antes da montagem']]),
-   grupo('Saídas','pay',[['/pagamentos','Pagamentos'],['/saidas','Saídas do mês'],['/faturas-cartao','Cartões'],['/contas-fixas','Contas fixas'],['/pro-labore','Pró-labore']]),
+   grupo('Saídas','pay',[['/pagamentos','Pagamentos'],['/saidas','Saídas do mês'],['/faturas-cartao','Cartões'],['/parcelamentos','Parcelamentos'],['/contas-fixas','Contas fixas'],['/pro-labore','Pró-labore']]),
    grupo('Caixa e bancos','bank',[['/bancos','Bancos'],['/previsibilidade','Previsão de caixa']]),
   ]},
   {label:'Fechamento',itens:[

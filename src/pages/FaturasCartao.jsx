@@ -8,6 +8,7 @@ import { ocrImagem } from '../lib/ocr.js'
 import { parseFaturaCartao, sugerirBucket, sugerirCategoria, ehFaturaSicoob, parseSicoob } from '../lib/faturaCartao.js'
 import { CARTOES, situacaoCartoes } from '../lib/cartoes.js'
 import { hojeSP } from '../lib/prazos.js'
+import { trazerParcelamentos } from '../lib/parcelamentosSync.js'
 
 const n = (v) => Number(v) || 0
 const MESES_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
@@ -184,6 +185,8 @@ export default function FaturasCartao() {
     const { error } = await supabase.from('fatura_rateio').insert(linhas)
     setSalvando(false)
     if (error) { setErro(error.message); return }
+    // Compras parceladas desta fatura entram sozinhas em Parcelamentos (sem duplicar as que já estão lá).
+    try { await trazerParcelamentos(linhas, hojeSP().slice(0, 7)) } catch (_) { /* a fatura já foi salva; dá para trazer depois pela aba Parcelamentos */ }
     setImp(null); carregar()
   }
 
