@@ -468,6 +468,12 @@ test('migrações e travas operacionais no PostgreSQL isolado',async()=>{
  assert.equal(r4.contrato_id,r1.contrato_id)
  assert.equal(r4.registro.id,r1.registro.id,'devolve a ficha que já existia')
  assert.equal((await db.query('select count(*)::int n from leblanc.contrato_anexos where contrato_id=$1',[r1.contrato_id])).rows[0].n,2)
+ // Contrato antigo sem valor (foto que não mostra o total): grava com valor 0 em vez de falhar.
+ await db.exec(await readFile(new URL('../supabase/migrations/20261119150000_contrato_sem_valor.sql',import.meta.url),'utf8'))
+ await db.query("insert into storage.objects(bucket_id,name) values('jornada-documentos',$1)",[gestor+'/g/sem-valor.jpg'])
+ const r5=await antigo({...base,cliente_nome:'Cliente Sem Valor',data_contrato:'2024-08-01',valor:null},gestor+'/g/sem-valor.jpg')
+ assert.equal(Number((await db.query('select valor_final from leblanc.contratos where id=$1',[r5.contrato_id])).rows[0].valor_final),0)
+ assert.equal((await db.query('select valor_vendido from le_admin.vendas where id=$1',[r5.venda_id])).rows[0].valor_vendido,null)
  // A jornada continua barrando contrato com ficha (chamada antiga, sem o 5º parâmetro).
  await db.query("insert into storage.objects(bucket_id,name) values('jornada-documentos',$1)",[gestor+'/f/outro.pdf'])
  await assert.rejects(reg(base,gestor+'/f/outro.pdf',null,r1.contrato_id),/já tem ficha/)

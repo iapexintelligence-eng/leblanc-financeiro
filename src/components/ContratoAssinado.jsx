@@ -130,7 +130,7 @@ export default function ContratoAssinado({ contratos, comFicha, tipoVenda, onCri
         <div className="field"><label>Telefone</label><input className="input" value={f.cliente_telefone} onChange={(e) => set('cliente_telefone', e.target.value)} /></div>
         <div className="field"><label>Endereço</label><input className="input" value={f.cliente_endereco} onChange={(e) => set('cliente_endereco', e.target.value)} /></div>
         <div className="field"><label>Data do contrato *</label><input className="input" type="date" max={hojeSP()} value={f.data_contrato} onChange={(e) => set('data_contrato', e.target.value)} /></div>
-        <div className="field"><label>Valor total do contrato</label><input className="input" type="number" step="0.01" min="0" value={f.valor} onChange={(e) => set('valor', e.target.value)} /></div>
+        <div className="field"><label>Valor total do contrato</label><input className="input" type="number" step="0.01" min="0" value={f.valor} onChange={(e) => set('valor', e.target.value)} />{f.valor === '' && <div className="sub" style={{ marginTop: 4 }}>Sem o valor, o contrato é salvo com valor zero e dá para completar depois.</div>}</div>
         <div className="field"><label>Vendedor</label><input className="input" list="contrato-assinado-vendedores" value={f.vendedor} onChange={(e) => set('vendedor', e.target.value)} /><datalist id="contrato-assinado-vendedores">{vendedores.map((n) => <option key={n} value={n} />)}</datalist></div>
         <div className="field"><label>Forma de pagamento (como está no contrato)</label><input className="input" placeholder="Ex.: entrada Pix + saldo antes da entrega" value={f.forma_pagamento} onChange={(e) => set('forma_pagamento', e.target.value)} /></div>
       </div>
