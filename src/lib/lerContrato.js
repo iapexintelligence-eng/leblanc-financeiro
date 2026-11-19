@@ -25,8 +25,11 @@ export function escolherNome(lido, arquivo) {
 }
 
 // "CONTRATO_LE_BLANC_Fulano_de_Tal.pdf" → "Fulano de Tal".
+// Nome genérico de câmera, celular ou WhatsApp ("WhatsApp Image 2026-11-19 at 11.13.02", "IMG_1234", "Captura de tela") não é cliente.
+const GENERICO = /^\s*(?:whats\s*app|wa\d|img|image|imagem|pxl|dsc|dcim|photo|foto|pic|screenshot|screen\s*shot|captura|print|doc|scan|scanner|cam|camera|c[aâ]mera|arquivo|file|documento|download|sem\s*t[ií]tulo|untitled)\b/i
 export function nomeDoArquivo(arquivo) {
   const base = String(arquivo || '').replace(/\.[a-z0-9]{2,5}$/i, '').replace(/[_\-.()\[\]]+/g, ' ')
+  if (GENERICO.test(base)) return ''
   const nome = base.replace(/\b(?:contrato|contratos|assinado|assinada|le\s+blanc|leblanc|m[óo]veis|planejados|final|vers[aã]o|v\d+|digitalizado|scan|pdf|copia|c[óo]pia)\b/gi, ' ')
     .replace(/\d+/g, ' ').replace(/\s+/g, ' ').trim()
   return pareceNome(nome) ? nome : ''

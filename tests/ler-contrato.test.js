@@ -40,3 +40,10 @@ test('nome do cliente: o do arquivo vence o endereço lido no texto', () => {
   assert.equal(escolherNome('Fulano Carlos Teste', 'scan_001.pdf'), 'Fulano Carlos Teste')
   assert.equal(escolherNome('', 'CONTRATO_LE_BLANC_Beltrano_Exemplo.pdf'), 'Beltrano Exemplo')
 })
+
+test('nome genérico de foto do celular ou WhatsApp não vira cliente', () => {
+  for (const n of ['WhatsApp Image 2026-11-19 at 11.13.02.jpeg', 'IMG_20261119_111302.jpg', 'PXL_20261119_141302.jpg', 'Captura de Tela 2026-11-19 às 11.13.02.png', 'Screenshot 2026-11-19.png', 'DOC-20261119-WA0003.pdf', 'Foto contrato.jpg', 'image (3).png'])
+    assert.equal(nomeDoArquivo(n), '', n)
+  assert.equal(escolherNome('', 'WhatsApp Image 2026-11-19 at 11.13.02.jpeg'), '')
+  assert.equal(nomeDoArquivo('CONTRATO_LE_BLANC_Fulano_de_Tal_Exemplo.pdf'), 'Fulano de Tal Exemplo')
+})

@@ -4,6 +4,7 @@ import { anexarJornada } from '../lib/jornada.js'
 import { extrairTexto } from '../lib/pdfLer.js'
 import { parseContrato, escolherNome } from '../lib/lerContrato.js'
 import { ocrImagemAuto } from '../lib/ocr.js'
+import { lerContratoIA, juntarLeituras } from '../lib/lerContratoIA.js'
 import { acharVendedor, sugerirVinculo } from '../lib/contratoAssinado.js'
 import { registrarLog } from '../lib/log.js'
 import { brl, fmtDate } from '../lib/format.js'
@@ -52,17 +53,25 @@ export default function ContratoAssinado({ contratos, comFicha, tipoVenda, onCri
     if (!ehPdf && !ehImg) { setLendo(''); setErro('Envie o contrato em PDF ou foto.'); return }
     try {
       const envio = anexarJornada(file)
-      let texto = ''
+      let texto = '', ia = null
+      // Foto: leitura por IA (bem melhor que o OCR para foto de celular); o OCR fica de reserva.
+      // PDF: lê o texto; se for escaneado (sem texto) ou não achar o cliente, chama a IA também.
       try {
-        if (ehPdf) { setLendo('Lendo o contrato…'); texto = await extrairTexto(file) }
-        else texto = (await ocrImagemAuto(file, { onProgress: (p) => setLendo(`Lendo a foto do contrato… ${p}%`) })).join(' ')
-      } catch (_) { texto = '' }
+        if (ehPdf) {
+          setLendo('Lendo o contrato…'); texto = await extrairTexto(file)
+          if (texto.replace(/\s/g, '').length < 200 || !parseContrato(texto).cliente) { setLendo('Lendo o contrato com IA…'); ia = await lerContratoIA(file).catch(() => null) }
+        } else {
+          setLendo('Lendo a foto do contrato com IA… (alguns segundos)')
+          ia = await lerContratoIA(file).catch(() => null)
+          if (!ia?.cliente) texto = (await ocrImagemAuto(file, { onProgress: (p) => setLendo(`Lendo a foto do contrato… ${p}%`) })).join(' ')
+        }
+      } catch (_) { /* segue com o que tiver */ }
       const path = await envio
       setArquivo({ path, nome: file.name })
-      const p = parseContrato(texto)
+      const p = juntarLeituras(ia, parseContrato(texto))
       // Nome lido no texto; se não houver, o do arquivo ("CONTRATO_LE_BLANC_Fulano_de_Tal.pdf").
-      const cliente = escolherNome(p.cliente, file.name)
-      const vend = (p.vendedor && acharVendedor('Vendedor: ' + p.vendedor, vendedores)) || acharVendedor(texto, vendedores)
+      const cliente = ia?.cliente || escolherNome(p.cliente, file.name)
+      const vend = (p.vendedor && acharVendedor('Vendedor: ' + p.vendedor, vendedores)) || acharVendedor(texto, vendedores) || ia?.vendedor || ''
       setF((s) => ({
         ...s,
         cliente_nome: s.cliente_nome || cliente || '',
@@ -72,10 +81,12 @@ export default function ContratoAssinado({ contratos, comFicha, tipoVenda, onCri
         data_contrato: s.data_contrato || (p.data && p.data <= hojeSP() ? p.data : ''),
         valor: s.valor || (p.valor ?? ''),
         vendedor: s.vendedor || vend || '',
+        forma_pagamento: s.forma_pagamento || p.forma_pagamento || '',
       }))
-      const achou = [cliente && 'cliente', p.cpf && 'CPF', p.data && 'data', p.valor && 'valor', vend && 'vendedor'].filter(Boolean)
+      const achou = [cliente && 'cliente', p.cpf && 'CPF', p.telefone && 'telefone', p.endereco && 'endereço', p.data && 'data', p.valor && 'valor', vend && 'vendedor', p.forma_pagamento && 'forma de pagamento'].filter(Boolean)
+      const aviso = ia ? (ia.legivel ? ' Lido por IA: confira.' : ' A foto está difícil de ler: confira com atenção.') : ehImg ? ' A leitura por foto pode errar.' : ''
       setLendo(achou.length
-        ? `Li do contrato: ${achou.join(', ')}.${ehImg ? ' A leitura por foto pode errar.' : ''} Confira tudo antes de criar.`
+        ? `Li do contrato: ${achou.join(', ')}.${aviso} Confira tudo antes de criar.`
         : 'Contrato anexado, mas não consegui ler os dados. Preencha abaixo.')
     } catch (e) { setLendo(''); setErro(e.message) }
   }
