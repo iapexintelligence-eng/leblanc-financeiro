@@ -25,10 +25,10 @@ export default function ContratosTodos() {
   // Contratos subidos à mão que ainda não têm o que o cliente vai pagar em Entradas.
   async function carregarSemParcelas() {
     const [cs, ar] = await Promise.all([
-      todas(() => supabase.schema('leblanc').from('contratos').select('id,numero,cliente_nome,valor_final,origem:dados_json->importacao->>origem').in('dados_json->importacao->>origem', ['contrato_antigo', 'contrato_assinado']).order('id')),
+      todas(() => supabase.schema('leblanc').from('contratos').select('id,numero,cliente_nome,valor_final,origem:dados_json->importacao->>origem').order('id')),
       todas(() => supabase.from('a_receber').select('id,cliente_nome,projeto_uid').order('id')),
     ])
-    setSemParcelas(cs.filter((c) => !parcelasDoCliente(ar, { nome: c.cliente_nome, projeto: projetoDoContrato(c.numero) }).length))
+    setSemParcelas(cs.filter((c) => ['contrato_antigo', 'contrato_assinado'].includes(c.origem) && !parcelasDoCliente(ar, { nome: c.cliente_nome, projeto: projetoDoContrato(c.numero) }).length))
   }
   useEffect(() => { if (authOn) carregarSemParcelas().catch(() => {}) }, [versao])
 
