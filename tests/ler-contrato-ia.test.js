@@ -6,6 +6,8 @@ test('valores e datas que a IA devolve em formatos diferentes', () => {
   assert.equal(valorDaIA('R$ 21.700,00'), 21700)
   assert.equal(valorDaIA('21700.5'), 21700.5)
   assert.equal(valorDaIA(18000), 18000)
+  assert.equal(valorDaIA('267.000'), 267000)
+  assert.equal(valorDaIA('1.234.567'), 1234567)
   assert.equal(valorDaIA(''), null)
   assert.equal(valorDaIA(null), null)
   assert.equal(dataDaIA('2026-11-19'), '2026-11-19')

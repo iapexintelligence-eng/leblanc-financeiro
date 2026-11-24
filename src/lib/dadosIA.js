@@ -6,7 +6,9 @@ export function valorDaIA(v) {
   if (typeof v === 'number') return v > 0 ? v : null
   const s = txt(v).replace(/[R$\s]/g, '')
   if (!s) return null
-  const n = Number(/,\d{1,2}$/.test(s) ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, ''))
+  // Padrão brasileiro: "267.000" e "267.000,00" são duzentos e sessenta e sete mil.
+  const br = /,\d{1,2}$/.test(s) || /^\d{1,3}(\.\d{3})+$/.test(s)
+  const n = Number(br ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, ''))
   return n > 0 ? n : null
 }
 
