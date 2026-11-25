@@ -6,6 +6,8 @@ import { registrarLog } from '../lib/log.js'
 import Modal from '../components/Modal.jsx'
 import { anexarJornada, abrirDocumento } from '../lib/jornada.js'
 import { IcoPlus, IcoEdit, IcoSearch } from '../components/Icons.jsx'
+import ArquivosInput from '../components/ArquivosInput.jsx'
+import { juntarArquivos } from '../lib/juntarArquivos.js'
 
 const FORMAS = ['Boleto', 'PIX', 'Transferência', 'Cartão', 'Dinheiro', 'Cheque']
 
@@ -29,8 +31,8 @@ const novo = () => ({
 export default function Recebiveis() {
   const [rows, setRows] = useState(null)
   const [contas, setContas] = useState([])
-  const [filtro, setFiltro] = useState('avencer') // avencer | vencidos | recebidos | todos
-  const [busca, setBusca] = useState('')
+  const [filtro, setFiltro] = useState(() => (new URLSearchParams(window.location.search).get('busca') ? 'todos' : 'avencer')) // avencer | vencidos | recebidos | todos
+  const [busca, setBusca] = useState(() => new URLSearchParams(window.location.search).get('busca') || '')
   const [modal, setModal] = useState(null)
   const [saving, setSaving] = useState(false)
   const [erro, setErro] = useState('')
@@ -57,6 +59,7 @@ export default function Recebiveis() {
     const p = id && linhas.find((x) => x.id === id)
     if (p) { abrirReceber(p, linhas); setParams({}, { replace: true }) }
   }) }, [])
+  useEffect(() => { const b = params.get('busca'); if (b) { setBusca(b); setFiltro('todos') } }, [params])
   const comLancamento = new Set(lanc.filter((l) => !l.estornado_em).flatMap((l) => (l.recebimento_parcelas || []).map((p) => p.a_receber_id)))
 
   function abrirReceber(parcela, linhas = rows) {
@@ -66,7 +69,7 @@ export default function Recebiveis() {
     const sel = forma === 'Cartão de crédito' ? abertas.filter((x) => ehCartao(x.forma_recebimento)).map((x) => x.id) : [parcela.id]
     const marcadas = sel.length ? sel : [parcela.id]
     setErro('')
-    setReceber({ cliente: parcela.cliente_nome, sel: marcadas, data: today(), forma, conta_bancaria_id: parcela.conta_bancaria_id ?? '', valor: String(abertas.filter((x) => marcadas.includes(x.id)).reduce((s, x) => s + aberto(x), 0).toFixed(2)), arquivo: null, observacoes: '', salvando: false })
+    setReceber({ cliente: parcela.cliente_nome, sel: marcadas, data: today(), forma, conta_bancaria_id: parcela.conta_bancaria_id ?? '', valor: String(abertas.filter((x) => marcadas.includes(x.id)).reduce((s, x) => s + aberto(x), 0).toFixed(2)), arquivos: [], observacoes: '', salvando: false })
   }
   const abertasDoCliente = receber ? (rows || []).filter((x) => x.cliente_nome === receber.cliente && aberto(x) > 0).sort((a, b) => (a.data_prevista || '9999').localeCompare(b.data_prevista || '9999')) : []
   const somaSel = abertasDoCliente.filter((x) => receber?.sel.includes(x.id)).reduce((s, x) => s + aberto(x), 0)
@@ -86,11 +89,11 @@ export default function Recebiveis() {
   async function lancarRecebimento() {
     setErro('')
     if (!receber.sel.length) { setErro('Marque ao menos uma parcela.'); return }
-    if (!receber.arquivo) { setErro('Anexe o comprovante do pagamento do cliente.'); return }
+    if (!receber.arquivos.length) { setErro('Anexe o comprovante do pagamento do cliente.'); return }
     if (!(Number(receber.valor) > 0)) { setErro('Informe o valor recebido.'); return }
     setR('salvando', true)
     try {
-      const path = await anexarJornada(receber.arquivo)
+      const path = await anexarJornada(await juntarArquivos(receber.arquivos))
       const ordem = abertasDoCliente.filter((x) => receber.sel.includes(x.id)).map((x) => x.id)
       const { data, error } = await supabase.rpc('recebimento_lancar', {
         p_parcelas: ordem, p_data: receber.data, p_valor: Number(receber.valor), p_forma: receber.forma,
@@ -117,7 +120,7 @@ export default function Recebiveis() {
       forma_recebimento: r.forma_recebimento || 'Boleto', conta_bancaria_id: r.conta_bancaria_id ?? '',
       observacoes: r.observacoes || '', parcelas: 1, intervalo: 1, status: r.status,
     },
-    editId: r.id,
+    editId: r.id, nomeAntigo: r.cliente_nome || '', todasDoCliente: true,
   })
   const setF = (k, v) => setModal((m) => ({ ...m, form: { ...m.form, [k]: v } }))
 
@@ -142,7 +145,11 @@ export default function Recebiveis() {
         ...base, data_prevista: f.data_prevista, status: f.status || 'Pendente',
         ...(f.status === 'Parcial' ? { status: 'Parcial' } : {}),
       }).eq('id', modal.editId))
-      if (!error) await registrarLog({ tabela: 'a_receber', registroId: modal.editId, acao: 'edicao', descricao: `Edição de recebível de ${base.cliente_nome}` })
+      // Nome corrigido: corrige também nas outras parcelas do mesmo cliente (mesmo nome antigo).
+      const outras = (rows || []).filter((x) => x.id !== modal.editId && x.cliente_nome === modal.nomeAntigo)
+      if (!error && modal.todasDoCliente && base.cliente_nome !== modal.nomeAntigo && outras.length)
+        ({ error } = await supabase.from('a_receber').update({ cliente_nome: base.cliente_nome }).in('id', outras.map((x) => x.id)))
+      if (!error) await registrarLog({ tabela: 'a_receber', registroId: modal.editId, acao: 'edicao', descricao: base.cliente_nome !== modal.nomeAntigo ? `Nome do cliente corrigido: "${modal.nomeAntigo}" → "${base.cliente_nome}"${modal.todasDoCliente && outras.length ? ` (e em mais ${outras.length} parcela(s))` : ''}` : `Edição de recebível de ${base.cliente_nome}` })
     } else {
       const n = Math.max(1, Number(f.parcelas) || 1)
       const passo = Math.max(1, Number(f.intervalo) || 1)
@@ -218,7 +225,7 @@ export default function Recebiveis() {
             {rows && lista.length === 0 && <tr><td colSpan="8" className="empty">Nenhuma parcela neste filtro.</td></tr>}
             {lista.map((r) => (
               <tr key={r.id}>
-                <td>{r.cliente_nome}</td>
+                <td><button type="button" className="link-btn" title="Corrigir nome ou valor" onClick={() => abrirEdit(r)} style={{ background: 'none', border: 0, padding: 0, color: 'inherit', font: 'inherit', textAlign: 'left', cursor: 'pointer' }}>{r.cliente_nome}</button></td>
                 <td className="muted">{r.descricao || '—'}</td>
                 <td className="num">{brl(r.valor_parcela)}</td>
                 <td className="num">{aberto(r) ? brl(aberto(r)) : '—'}</td>
@@ -228,7 +235,7 @@ export default function Recebiveis() {
                 <td className="right">
                   <div className="flex" style={{ justifyContent: 'flex-end' }}>
                     {aberto(r) > 0 && <button className="btn sm" onClick={() => abrirReceber(r)}>Lançar recebimento</button>}
-                    <button className="icon-btn" onClick={() => abrirEdit(r)} title="Editar"><IcoEdit /></button>
+                    <button className="btn ghost sm" onClick={() => abrirEdit(r)} title="Corrigir nome, valor, data ou forma"><IcoEdit /> Corrigir</button>
                   </div>
                 </td>
               </tr>
@@ -239,7 +246,7 @@ export default function Recebiveis() {
 
       {modal && (
         <Modal
-          title={modal.editId ? 'Editar parcela a receber' : 'Nova parcela a receber'}
+          title={modal.editId ? 'Corrigir parcela a receber' : 'Nova parcela a receber'}
           onClose={() => setModal(null)}
           footer={<>
             <button className="btn ghost" onClick={() => setModal(null)}>Cancelar</button>
@@ -248,7 +255,14 @@ export default function Recebiveis() {
         >
           {erro && <div className="login-err" style={{ marginBottom: 14 }}>{erro}</div>}
           <div className="field"><label>Cliente *</label>
-            <input className="input" value={modal.form.cliente_nome} onChange={(e) => setF('cliente_nome', e.target.value)} /></div>
+            <input className="input" value={modal.form.cliente_nome} onChange={(e) => setF('cliente_nome', e.target.value)} />
+            {modal.editId && modal.form.cliente_nome.trim() !== modal.nomeAntigo && (() => {
+              const n = (rows || []).filter((x) => x.id !== modal.editId && x.cliente_nome === modal.nomeAntigo).length
+              return n > 0 && <label style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6, fontSize: 13 }}>
+                <input type="checkbox" checked={modal.todasDoCliente} onChange={(e) => setModal((m) => ({ ...m, todasDoCliente: e.target.checked }))} />
+                Corrigir o nome também nas outras {n} parcela(s) de "{modal.nomeAntigo}"
+              </label>
+            })()}</div>
           <div className="field"><label>Descrição</label>
             <input className="input" value={modal.form.descricao} onChange={(e) => setF('descricao', e.target.value)} placeholder="Ex.: Entrada, Parcela do contrato…" /></div>
           <div className="row-2">
@@ -319,7 +333,7 @@ export default function Recebiveis() {
         <Modal wide title={`Lançar recebimento · ${receber.cliente}`} onClose={() => !receber.salvando && setReceber(null)}
           footer={<>
             <button className="btn ghost" onClick={() => setReceber(null)} disabled={receber.salvando}>Cancelar</button>
-            <button className="btn" onClick={lancarRecebimento} disabled={receber.salvando || !receber.sel.length || !receber.arquivo}>{receber.salvando ? 'Lançando…' : `Lançar ${brl(Number(receber.valor) || 0)}`}</button>
+            <button className="btn" onClick={lancarRecebimento} disabled={receber.salvando || !receber.sel.length || !receber.arquivos.length}>{receber.salvando ? 'Lançando…' : `Lançar ${brl(Number(receber.valor) || 0)}`}</button>
           </>}>
           {erro && <div className="login-err" style={{ marginBottom: 14 }}>{erro}</div>}
           <div className="field"><label>Parcelas que este pagamento quita</label>
@@ -349,8 +363,8 @@ export default function Recebiveis() {
                 {contas.map((c) => <option key={c.id} value={c.id}>{c.nome}{c.banco ? ` · ${c.banco}` : ''}</option>)}
               </select></div>
           </div>
-          <div className="field"><label>Comprovante do cliente (PDF ou foto) *</label>
-            <input className="input" type="file" accept="application/pdf,image/*" onChange={(e) => setR('arquivo', e.target.files?.[0] || null)} /></div>
+          <div className="field"><label>Comprovantes do cliente (PDF ou foto) *</label>
+            <ArquivosInput arquivos={receber.arquivos} onChange={(l) => setR('arquivos', l)} disabled={receber.salvando} rotulo="Escolher comprovante" /></div>
           <div className="field"><label>Observações</label>
             <textarea className="input" value={receber.observacoes} onChange={(e) => setR('observacoes', e.target.value)} placeholder="Ex.: Pix do cônjuge, nº da autorização do cartão…" /></div>
         </Modal>

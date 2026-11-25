@@ -15,8 +15,9 @@ export const TITULOS_PAGAMENTO = ['Financeiro de entrada', 'Saldo final · 2 dia
 function Arquivo({ k, label, d, travado, upload, anexo, onErro }) {
   return <div className="field"><label>{label}</label>
     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-      <input aria-label={label} type="file" disabled={travado(k) || upload} onChange={(e) => anexo(k, e.target.files?.[0])} />
+      <input aria-label={label} type="file" multiple disabled={travado(k) || upload} onChange={(e) => { anexo(k, e.target.files); e.target.value = '' }} />
       {d[k] ? <button className="btn ghost sm" type="button" onClick={() => abrirDocumento(d[k]).catch((e) => onErro(e.message))}>Abrir anexo</button> : <span className="faint" style={{ fontSize: 12 }}>Nenhum arquivo</span>}
+      {d[k] && <span className="faint" style={{ fontSize: 12, width: '100%' }}>Pode escolher vários; os novos são juntados ao anexo atual.</span>}
     </div>
   </div>
 }

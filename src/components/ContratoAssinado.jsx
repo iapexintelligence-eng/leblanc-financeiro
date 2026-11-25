@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
+import { juntarArquivos } from '../lib/juntarArquivos.js'
 import { anexarJornada } from '../lib/jornada.js'
 import { extrairTexto } from '../lib/pdfLer.js'
 import { parseContrato, escolherNome } from '../lib/lerContrato.js'
@@ -118,10 +119,11 @@ export default function ContratoAssinado({ contratos, comFicha, tipoVenda, onCri
       ? 'Serve também para contratos antigos. O sistema lê os dados do PDF e guarda a venda e o contrato. Se a venda ou o contrato já estão no sistema, ele usa os mesmos e só anexa o PDF.'
       : 'O sistema lê os dados do contrato e cria de uma vez a venda, o contrato e a ficha do cliente. Se a venda já foi lançada, ele usa a mesma.'}</div>
     <label className={'btn ghost' + (lendo && !arquivo ? ' disabled' : '')} style={{ cursor: 'pointer' }}>
-      {arquivo ? 'Trocar arquivo' : 'Escolher contrato (PDF ou foto)'}
-      <input type="file" accept="application/pdf,image/*" style={{ display: 'none' }} onChange={(e) => { escolher(e.target.files?.[0]); e.target.value = '' }} />
+      {arquivo ? 'Trocar arquivo' : 'Escolher contrato (PDF ou fotos)'}
+      <input type="file" multiple accept="application/pdf,image/*" style={{ display: 'none' }} onChange={async (e) => { const fl = [...e.target.files]; e.target.value = ''; if (fl.length > 1) setLendo(`Juntando ${fl.length} arquivos num PDF…`); try { escolher(await juntarArquivos(fl)) } catch (err) { setLendo(''); setErro(err.message) } }} />
     </label>
     {arquivo && <span className="faint" style={{ marginLeft: 8, fontSize: 12 }}>{arquivo.nome}</span>}
+    {!arquivo && <div className="faint" style={{ fontSize: 12, marginTop: 4 }}>Contrato em várias páginas? Escolha todas as fotos de uma vez: o sistema junta num PDF só e lê os dados.</div>}
     {lendo && <div className="sub" role="status" style={{ marginTop: 8 }}>{lendo}</div>}
     {arquivo && <>
       <div className="grid cols-2" style={{ gap: 10, marginTop: 12 }}>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
+import { juntarArquivos } from '../lib/juntarArquivos.js'
 import { brl, fmtDate, today } from '../lib/format.js'
 import { registrarLog, montarDiff } from '../lib/log.js'
 import Modal from '../components/Modal.jsx'
@@ -255,7 +256,7 @@ export default function Vendas() {
                   {(r.contrato_path || anexoContrato[r.id]) && <button className="btn ghost sm" onClick={() => baixarContrato(r)}>Ver</button>}
                   <label className="btn ghost sm" style={{ marginLeft: r.contrato_path ? 4 : 0, cursor: 'pointer' }}>
                     {r.contrato_path ? 'Trocar' : 'Anexar'}
-                    <input type="file" accept=".pdf,image/*" style={{ display: 'none' }} onChange={(e) => { trocarContrato(r, e.target.files?.[0]); e.target.value = '' }} />
+                    <input type="file" multiple accept=".pdf,image/*" style={{ display: 'none' }} onChange={async (e) => { const fl = [...e.target.files]; e.target.value = ''; try { trocarContrato(r, await juntarArquivos(fl)) } catch (err) { setErro(err.message) } }} />
                   </label>
                 </td>
                 <td className="right"><button className="icon-btn" onClick={() => abrirEdit(r)} title="Editar / corrigir"><IcoEdit /></button></td>
@@ -328,7 +329,8 @@ export default function Vendas() {
           </div>
           <div className="field">
             <label>Contrato vendido (anexar PDF/imagem)</label>
-            <input className="input" type="file" accept=".pdf,image/*" onChange={(e) => aoAnexar(e.target.files?.[0] || null)} />
+            <input className="input" type="file" multiple accept=".pdf,image/*" onChange={async (e) => { const fl = [...e.target.files]; try { aoAnexar(await juntarArquivos(fl)) } catch (err) { setErro(err.message) } }} />
+            <div className="faint" style={{ fontSize: 12, marginTop: 4 }}>Contrato em várias fotos? Escolha todas de uma vez: viram um PDF só.</div>
             {modal.form.contrato_nome && !arquivo && <div className="sub" style={{ marginTop: 4 }}>Anexado: {modal.form.contrato_nome} — escolha um novo arquivo para substituir.</div>}
             {lido && <div className="badge ok" style={{ display: 'inline-block', marginTop: 6 }}>{lido}</div>}
             <div className="sub" style={{ marginTop: 4 }}>Se for um PDF de contrato Le Blanc, tento preencher cliente, valor e data automaticamente. A venda é lançada com a <b>data do contrato</b>.</div>

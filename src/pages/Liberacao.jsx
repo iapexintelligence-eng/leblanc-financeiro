@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { brl, fmtDate, today, addBusinessDays } from '../lib/format.js'
 import Modal from '../components/Modal.jsx'
+import ArquivosInput from '../components/ArquivosInput.jsx'
 import { IcoSearch } from '../components/Icons.jsx'
 
 const crm = supabase.schema('leblanc')
@@ -44,11 +45,13 @@ export default function Liberacao() {
     const prazo = addBusinessDays(dataPg, 35)
     const q = await quem()
     // comprovante (opcional)
-    if (pag.file) {
-      const safe = pag.file.name.replace(/[^\w.\-]/g, '_')
+    // comprovantes (opcionais, um ou vários): cada arquivo vira um anexo do contrato
+    for (const file of pag.files || []) {
+      const safe = file.name.replace(/[^\w.\-]/g, '_')
       const path = `${cid}/comprovante_industria/${Date.now()}_${safe}`
-      const up = await supabase.storage.from('pasta-cliente').upload(path, pag.file, { upsert: false })
-      if (!up.error) await crm.from('contrato_anexos').insert({ contrato_id: cid, tipo: 'comprovante_industria', nome_arquivo: pag.file.name, path, tamanho: pag.file.size, enviado_por: q })
+      const up = await supabase.storage.from('pasta-cliente').upload(path, file, { upsert: false })
+      if (!up.error) await crm.from('contrato_anexos').insert({ contrato_id: cid, tipo: 'comprovante_industria', nome_arquivo: file.name, path, tamanho: file.size, enviado_por: q })
+      else setErro('Comprovante não subiu: ' + up.error.message)
     }
     await crm.from('projeto_fluxo').update({
       pago_industria: true, pago_em: dataPg, valor_pago_industria: valor,
@@ -85,7 +88,7 @@ export default function Liberacao() {
                 <td className="right">
                   <div className="flex" style={{ justifyContent: 'flex-end' }}>
                     {!r.fluxo.liberado && <button className="btn ghost sm" onClick={() => liberar(r)}>Liberar p/ indústria</button>}
-                    <button className="btn sm" onClick={() => setPag({ r, valor: '', data: today(), file: null })}>Registrar pagamento</button>
+                    <button className="btn sm" onClick={() => setPag({ r, valor: '', data: today(), files: [] })}>Registrar pagamento</button>
                   </div>
                 </td>
               </tr>
@@ -106,7 +109,7 @@ export default function Liberacao() {
             <div className="field"><label>Valor pago *</label><input className="input" type="number" step="0.01" value={pag.valor} onChange={(e) => setPag({ ...pag, valor: e.target.value })} /></div>
             <div className="field"><label>Data do pagamento</label><input className="input" type="date" value={pag.data} onChange={(e) => setPag({ ...pag, data: e.target.value })} /></div>
           </div>
-          <div className="field"><label>Comprovante (opcional)</label><input className="input" type="file" onChange={(e) => setPag({ ...pag, file: e.target.files?.[0] || null })} /></div>
+          <div className="field"><label>Comprovantes (opcional)</label><ArquivosInput arquivos={pag.files} onChange={(l) => setPag({ ...pag, files: l })} accept="" rotulo="Escolher comprovante" /></div>
           <div className="sub">Prazo de entrega previsto: <b>{fmtDate(addBusinessDays(pag.data || today(), 35))}</b></div>
         </Modal>
       )}

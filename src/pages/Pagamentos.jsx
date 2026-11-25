@@ -6,6 +6,8 @@ import { brl, fmtDate, today } from '../lib/format.js'
 import { FORMAS_PAGAMENTO, formaPagamento } from '../lib/formasPagamento.js'
 import { registrarLog } from '../lib/log.js'
 import Modal from '../components/Modal.jsx'
+import ArquivosInput from '../components/ArquivosInput.jsx'
+import { juntarArquivos } from '../lib/juntarArquivos.js'
 import { IcoPlus, IcoEdit, IcoSearch } from '../components/Icons.jsx'
 
 // Valores aceitos pelo banco (check constraint pagamentos_categoria_check)
@@ -46,8 +48,8 @@ export default function Pagamentos() {
   const [modal, setModal] = useState(null)
   const [saving, setSaving] = useState(false)
   const [erro, setErro] = useState('')
-  const [compFile, setCompFile] = useState(null)
-  const [boletoFile, setBoletoFile] = useState(null)
+  const [compFile, setCompFile] = useState([])
+  const [boletoFile, setBoletoFile] = useState([])
   const [rateio, setRateio] = useState([])
   const CUSTO_CATS = ['industria', 'montagem', 'frete', 'assistencia', 'compra_extra', 'gratificacao']
   const mapCustoCat = (c) => CUSTO_CATS.includes(c) ? c : 'compra_extra'
@@ -73,9 +75,9 @@ export default function Pagamentos() {
     setProjetos(data || [])
   })() }, [])
 
-  const abrirNovo = () => { setCompFile(null); setBoletoFile(null); setRateio([]); setModal({ form: novo(), editId: null }) }
+  const abrirNovo = () => { setCompFile([]); setBoletoFile([]); setRateio([]); setModal({ form: novo(), editId: null }) }
   const abrirEdit = async (r) => {
-    setCompFile(null); setBoletoFile(null)
+    setCompFile([]); setBoletoFile([])
     const { data: cst } = await supabase.from('custos_operacionais').select('id, projeto_uid, valor, categoria').eq('rateio_pagamento_id', r.id)
     setRateio((cst || []).map((c) => ({ projeto_uid: c.projeto_uid || '', valor: c.valor ?? '' })))
     setModal({ form: { data: r.data || today(), descricao: r.descricao || '', categoria: r.categoria || 'operacional', tipo: r.tipo || 'Eventual', valor: r.valor ?? '', forma_pagamento: formaPagamento(r.forma_pagamento) || 'PIX', data_vencimento: r.data_vencimento || '', data_pagamento: r.data_pagamento || '', status: r.status || 'Pendente', fornecedor: r.fornecedor || '', conta_bancaria_id: r.conta_bancaria_id ?? '', observacao: r.observacao || '', recorrente: r.recorrente ?? false, dia_vencimento: r.dia_vencimento ?? '', projeto_uid: r.projeto_uid || '', comprovante_path: r.comprovante_path || '', comprovante_nome: r.comprovante_nome || '', boleto_path: r.boleto_path || '', boleto_nome: r.boleto_nome || '', juros: r.juros ?? '' }, editId: r.id }) }
@@ -94,13 +96,23 @@ export default function Pagamentos() {
     setSaving(true)
     const payload = { data: f.data || today(), descricao: f.descricao.trim(), categoria: f.categoria || null, tipo: f.tipo, valor: Number(f.valor), forma_pagamento: formaPagamento(f.forma_pagamento), data_vencimento: f.data_vencimento || null, status: f.status, fornecedor: f.fornecedor || null, conta_bancaria_id: f.conta_bancaria_id ? Number(f.conta_bancaria_id) : null, observacao: f.observacao || null, recorrente: !!f.recorrente, dia_vencimento: f.dia_vencimento === '' ? null : Number(f.dia_vencimento), projeto_uid: f.projeto_uid || null, juros: f.juros === '' ? 0 : Number(f.juros) }
     if (f.status === 'Pago') payload.data_pagamento = f.data_pagamento
+    // Anexo tirado na tela ("tirar"): limpa o campo; os novos entram logo abaixo.
+    if (modal.editId) for (const k of ['comprovante', 'boleto']) if (f[`${k}_tirado`]) { payload[`${k}_path`] = null; payload[`${k}_nome`] = null }
     let error, id = modal.editId
     if (modal.editId) { ({ error } = await supabase.from('pagamentos').update(payload).eq('id', modal.editId)); if (!error) await registrarLog({ tabela: 'pagamentos', registroId: modal.editId, acao: 'edicao', descricao: `Pagamento: ${payload.descricao}` }) }
     else { const ins = await supabase.from('pagamentos').insert(payload).select('id').single(); error = ins.error; id = ins.data?.id }
     // anexos: comprovante e boleto
     if (!error && id) {
-      const up = async (file, campoPath, campoNome) => {
-        if (!file) return
+      // Vários arquivos viram um PDF só; se já havia um anexo, ele entra junto (não se perde).
+      const up = async (lista, campoPath, campoNome) => {
+        if (!lista.length) return
+        let anterior = null
+        if (modal.form[campoPath]) {
+          const d = await supabase.storage.from('pasta-cliente').download(modal.form[campoPath])
+          if (!d.error && d.data) anterior = new File([d.data], modal.form[campoNome] || 'anexo-anterior.pdf', { type: d.data.type || 'application/pdf' })
+        }
+        let file
+        try { file = await juntarArquivos(anterior ? [anterior, ...lista] : lista) } catch (e) { setErro(e.message); return }
         const safe = file.name.replace(/[^\w.\-]/g, '_')
         const path = `pagamentos/${id}/${campoPath}_${Date.now()}_${safe}`
         const r = await supabase.storage.from('pasta-cliente').upload(path, file, { upsert: false })
@@ -257,12 +269,12 @@ export default function Pagamentos() {
           </div>
           <div className="row-2">
             <div className="field"><label>Comprovante de pagamento</label>
-              <input className="input" type="file" accept=".pdf,image/*" onChange={(e) => setCompFile(e.target.files?.[0] || null)} />
-              {modal.form.comprovante_path && !compFile && <div className="sub" style={{ marginTop: 4 }}>Anexado: {modal.form.comprovante_nome || 'arquivo'} · <a onClick={() => baixar(modal.form.comprovante_path)} style={{ cursor: 'pointer', textDecoration: 'underline' }}>ver</a></div>}
+              <ArquivosInput arquivos={compFile} onChange={setCompFile} rotulo="Escolher comprovante" />
+              {modal.form.comprovante_path && <div className="sub" style={{ marginTop: 4 }}>Anexado: {modal.form.comprovante_nome || 'arquivo'} · <a onClick={() => baixar(modal.form.comprovante_path)} style={{ cursor: 'pointer', textDecoration: 'underline' }}>ver</a> · <a onClick={() => setModal((m) => ({ ...m, form: { ...m.form, comprovante_path: null, comprovante_nome: null, comprovante_tirado: true } }))} style={{ cursor: 'pointer', textDecoration: 'underline' }}>tirar</a>{compFile.length ? ' · os novos serão juntados a ele' : ''}</div>}
             </div>
             <div className="field"><label>Boleto</label>
-              <input className="input" type="file" accept=".pdf,image/*" onChange={(e) => setBoletoFile(e.target.files?.[0] || null)} />
-              {modal.form.boleto_path && !boletoFile && <div className="sub" style={{ marginTop: 4 }}>Anexado: {modal.form.boleto_nome || 'arquivo'} · <a onClick={() => baixar(modal.form.boleto_path)} style={{ cursor: 'pointer', textDecoration: 'underline' }}>ver</a></div>}
+              <ArquivosInput arquivos={boletoFile} onChange={setBoletoFile} rotulo="Escolher boleto" />
+              {modal.form.boleto_path && <div className="sub" style={{ marginTop: 4 }}>Anexado: {modal.form.boleto_nome || 'arquivo'} · <a onClick={() => baixar(modal.form.boleto_path)} style={{ cursor: 'pointer', textDecoration: 'underline' }}>ver</a> · <a onClick={() => setModal((m) => ({ ...m, form: { ...m.form, boleto_path: null, boleto_nome: null, boleto_tirado: true } }))} style={{ cursor: 'pointer', textDecoration: 'underline' }}>tirar</a></div>}
             </div>
           </div>
           <div className="field"><label>Observação</label><textarea className="input" value={modal.form.observacao} onChange={(e) => setF('observacao', e.target.value)} /></div>

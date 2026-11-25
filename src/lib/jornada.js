@@ -34,6 +34,13 @@ export async function anexarJornada(file) {
   if(up.error) throw up.error
   return path
 }
+// Baixa um anexo da jornada como arquivo (para juntar com novos comprovantes no mesmo campo).
+export async function baixarDocumento(path) {
+  const {data,error}=await supabase.storage.from('jornada-documentos').download(path)
+  if(error||!data) return null
+  const nome=String(path).split('/').pop()||'anexo'
+  return new File([data],nome,{type:data.type||(/\.pdf$/i.test(nome)?'application/pdf':'')})
+}
 export async function abrirDocumento(path) {
   const {data,error}=await supabase.storage.from('jornada-documentos').createSignedUrl(path,60)
   if(error) throw error

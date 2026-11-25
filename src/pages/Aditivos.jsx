@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { supabase, authOn } from '../lib/supabase.js'
 import { todas } from '../lib/jornada.js'
 import { brl, fmtDate } from '../lib/format.js'
@@ -13,7 +14,9 @@ const ehContrato = (a) => !ehAditivo(a)
 
 export default function Aditivos() {
   const [contratos, setContratos] = useState(null), [anexos, setAnexos] = useState([]), [aditivos, setAditivos] = useState([])
-  const [busca, setBusca] = useState(''), [sel, setSel] = useState(null), [erro, setErro] = useState(''), [versao, setVersao] = useState(0)
+  const [params] = useSearchParams()
+  const [busca, setBusca] = useState(''), [sel, setSel] = useState(params.get('contrato') || null), [erro, setErro] = useState(''), [versao, setVersao] = useState(0)
+  useEffect(() => { if (params.get('contrato')) setSel(params.get('contrato')) }, [params])
 
   async function carregar() {
     if (!authOn) { setContratos([]); return }
