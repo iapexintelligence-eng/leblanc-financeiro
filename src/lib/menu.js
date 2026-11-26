@@ -66,7 +66,7 @@ export const AREAS = [
    grupo('Caixa e bancos','bank',[['/bancos','Bancos'],['/previsibilidade','Previsão de caixa']]),
   ]},
   {label:'Fechamento',itens:[
-   grupo('Fechamento do mês','dre',[['/revisao-mensal','Revisão do mês'],['/conferencia-financeira','Conferência e margens'],['/gratificacao','Gratificação']]),
+   grupo('Fechamento do mês','dre',[['/revisao-mensal','Revisão do mês'],['/conferencia-financeira','Conferência e margens'],['/gratificacao','Gratificação'],['/funcionarios','Funcionários']]),
    grupo('Relatórios','report',[['/dre','DRE mensal'],['/relatorios','Relatórios']]),
   ]},
  ]},

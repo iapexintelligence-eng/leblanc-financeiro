@@ -120,7 +120,7 @@ export default function Funcionarios() {
                 <td className="num"><b>{totalMensal(r) ? brl(totalMensal(r)) : '—'}</b></td>
                 <td className="muted">{fmtDate(r.data_admissao)}</td>
                 <td>{r.ativo ? <span className="badge ok">Ativo</span> : <span className="badge danger">Inativo</span>}</td>
-                <td className="right"><button className="icon-btn" onClick={() => abrirEdit(r)}><IcoEdit /></button></td>
+                <td className="right"><button className="btn ghost sm" onClick={() => abrirEdit(r)} title="Editar funcionário"><IcoEdit /> Editar</button></td>
               </tr>
             ))}
           </tbody>

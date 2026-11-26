@@ -23,6 +23,8 @@ test('cada tela do grupo marca o mesmo item do menu e a aba certa', () => {
   // Previsão de caixa não pode ser confundida com a previsibilidade de montagens.
   assert.equal(itemDaArea(area, '/previsibilidade')?.txt, 'Caixa e bancos')
   assert.equal(itemDaArea(area, '/previsibilidade-montagens')?.txt, 'Entradas')
+  // Léia cadastra e edita funcionários pelo Fechamento do mês.
+  assert.equal(itemDaArea(area, '/funcionarios')?.txt, 'Fechamento do mês')
 })
 
 test('telas que saíram do menu do financeiro continuam abrindo', () => {

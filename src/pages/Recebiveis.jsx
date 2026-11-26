@@ -61,6 +61,7 @@ export default function Recebiveis() {
   }) }, [])
   useEffect(() => { const b = params.get('busca'); if (b) { setBusca(b); setFiltro('todos') } }, [params])
   const comLancamento = new Set(lanc.filter((l) => !l.estornado_em).flatMap((l) => (l.recebimento_parcelas || []).map((p) => p.a_receber_id)))
+  const baixaSemComprovante = new Set(lanc.filter((l) => !l.estornado_em && !l.comprovante).flatMap((l) => (l.recebimento_parcelas || []).map((p) => p.a_receber_id)))
 
   function abrirReceber(parcela, linhas = rows) {
     const abertas = (linhas || []).filter((x) => x.cliente_nome === parcela.cliente_nome && aberto(x) > 0)
@@ -69,7 +70,7 @@ export default function Recebiveis() {
     const sel = forma === 'Cartão de crédito' ? abertas.filter((x) => ehCartao(x.forma_recebimento)).map((x) => x.id) : [parcela.id]
     const marcadas = sel.length ? sel : [parcela.id]
     setErro('')
-    setReceber({ cliente: parcela.cliente_nome, sel: marcadas, data: today(), forma, conta_bancaria_id: parcela.conta_bancaria_id ?? '', valor: String(abertas.filter((x) => marcadas.includes(x.id)).reduce((s, x) => s + aberto(x), 0).toFixed(2)), arquivos: [], observacoes: '', salvando: false })
+    setReceber({ cliente: parcela.cliente_nome, sel: marcadas, data: today(), forma, conta_bancaria_id: parcela.conta_bancaria_id ?? '', valor: String(abertas.filter((x) => marcadas.includes(x.id)).reduce((s, x) => s + aberto(x), 0).toFixed(2)), arquivos: [], semComprovante: false, observacoes: '', salvando: false })
   }
   const abertasDoCliente = receber ? (rows || []).filter((x) => x.cliente_nome === receber.cliente && aberto(x) > 0).sort((a, b) => (a.data_prevista || '9999').localeCompare(b.data_prevista || '9999')) : []
   const somaSel = abertasDoCliente.filter((x) => receber?.sel.includes(x.id)).reduce((s, x) => s + aberto(x), 0)
@@ -89,18 +90,19 @@ export default function Recebiveis() {
   async function lancarRecebimento() {
     setErro('')
     if (!receber.sel.length) { setErro('Marque ao menos uma parcela.'); return }
-    if (!receber.arquivos.length) { setErro('Anexe o comprovante do pagamento do cliente.'); return }
+    if (!receber.semComprovante && !receber.arquivos.length) { setErro('Anexe o comprovante do pagamento do cliente.'); return }
+    if (receber.semComprovante && (receber.observacoes || '').trim().length < 10) { setErro('Sem comprovante: escreva na observação de onde veio a informação (ex.: pago em set/2026, conferido no extrato).'); return }
     if (!(Number(receber.valor) > 0)) { setErro('Informe o valor recebido.'); return }
     setR('salvando', true)
     try {
-      const path = await anexarJornada(await juntarArquivos(receber.arquivos))
+      const path = receber.semComprovante ? null : await anexarJornada(await juntarArquivos(receber.arquivos))
       const ordem = abertasDoCliente.filter((x) => receber.sel.includes(x.id)).map((x) => x.id)
       const { data, error } = await supabase.rpc('recebimento_lancar', {
         p_parcelas: ordem, p_data: receber.data, p_valor: Number(receber.valor), p_forma: receber.forma,
-        p_conta: receber.conta_bancaria_id ? Number(receber.conta_bancaria_id) : null, p_comprovante: path, p_observacoes: receber.observacoes || null,
+        p_conta: receber.conta_bancaria_id ? Number(receber.conta_bancaria_id) : null, p_comprovante: path, p_observacoes: receber.semComprovante ? `[Sem comprovante] ${receber.observacoes.trim()}` : receber.observacoes || null,
       })
       if (error) throw error
-      await registrarLog({ tabela: 'recebimentos', registroId: data?.id, acao: 'criacao', descricao: `Recebimento de ${receber.cliente}: ${brl(receber.valor)} (${receber.forma})` })
+      await registrarLog({ tabela: 'recebimentos', registroId: data?.id, acao: 'criacao', descricao: `Recebimento de ${receber.cliente}: ${brl(receber.valor)} (${receber.forma})${receber.semComprovante ? ' — sem comprovante: ' + receber.observacoes.trim() : ''}` })
       setReceber(null); carregar()
     } catch (e) { setErro(e.message); setR('salvando', false) }
   }
@@ -175,7 +177,7 @@ export default function Recebiveis() {
     if (filtro === 'vencidos') return r.status !== 'Recebido' && venc
     if (filtro === 'recebidos') return r.status === 'Recebido'
     if (filtro === 'parciais') return r.status === 'Parcial'
-    if (filtro === 'semcomprovante') return r.status === 'Recebido' && !comLancamento.has(r.id)
+    if (filtro === 'semcomprovante') return (r.status === 'Recebido' || r.status === 'Parcial') && (!comLancamento.has(r.id) || baixaSemComprovante.has(r.id))
     return true
   })
 
@@ -208,7 +210,7 @@ export default function Recebiveis() {
 
       <div className="grid cols-3" style={{ marginBottom: 18 }}>
         <div className="card kpi"><div className="label">Total em aberto</div><div className="value">{brl(totalAberto)}</div></div>
-        <div className="card kpi"><div className="label">Recebido no mês (com comprovante)</div><div className="value">{brl(recebidoMes)}</div></div>
+        <div className="card kpi"><div className="label">Recebido no mês</div><div className="value">{brl(recebidoMes)}</div></div>
         <div className="card kpi"><div className="label">Exibindo</div><div className="value">{lista.length}</div></div>
       </div>
 
@@ -321,7 +323,7 @@ export default function Recebiveis() {
               <td className="num">{brl(l.valor)}</td>
               <td className="muted">{(l.recebimento_parcelas || []).map((p) => (rows || []).find((r) => r.id === p.a_receber_id)?.descricao || `#${p.a_receber_id}`).join(' · ')}{l.estornado_em && <div><span className="badge danger">Estornado · {l.estorno_motivo}</span></div>}</td>
               <td className="right"><div className="flex" style={{ justifyContent: 'flex-end' }}>
-                <button className="btn ghost sm" onClick={() => abrirDocumento(l.comprovante).catch((e) => setErro(e.message))}>Comprovante</button>
+                {l.comprovante ? <button className="btn ghost sm" onClick={() => abrirDocumento(l.comprovante).catch((e) => setErro(e.message))}>Comprovante</button> : <span className="badge warn" title={l.observacoes || ''}>Sem comprovante</span>}
                 {!l.estornado_em && <button className="btn ghost sm" onClick={() => { setErro(''); setEstorno({ ...l, motivo: '' }) }}>Estornar</button>}
               </div></td>
             </tr>)}
@@ -333,7 +335,7 @@ export default function Recebiveis() {
         <Modal wide title={`Lançar recebimento · ${receber.cliente}`} onClose={() => !receber.salvando && setReceber(null)}
           footer={<>
             <button className="btn ghost" onClick={() => setReceber(null)} disabled={receber.salvando}>Cancelar</button>
-            <button className="btn" onClick={lancarRecebimento} disabled={receber.salvando || !receber.sel.length || !receber.arquivos.length}>{receber.salvando ? 'Lançando…' : `Lançar ${brl(Number(receber.valor) || 0)}`}</button>
+            <button className="btn" onClick={lancarRecebimento} disabled={receber.salvando || !receber.sel.length || (!receber.semComprovante && !receber.arquivos.length)}>{receber.salvando ? 'Lançando…' : `Lançar ${brl(Number(receber.valor) || 0)}`}</button>
           </>}>
           {erro && <div className="login-err" style={{ marginBottom: 14 }}>{erro}</div>}
           <div className="field"><label>Parcelas que este pagamento quita</label>
@@ -363,10 +365,14 @@ export default function Recebiveis() {
                 {contas.map((c) => <option key={c.id} value={c.id}>{c.nome}{c.banco ? ` · ${c.banco}` : ''}</option>)}
               </select></div>
           </div>
-          <div className="field"><label>Comprovantes do cliente (PDF ou foto) *</label>
-            <ArquivosInput arquivos={receber.arquivos} onChange={(l) => setR('arquivos', l)} disabled={receber.salvando} rotulo="Escolher comprovante" /></div>
-          <div className="field"><label>Observações</label>
-            <textarea className="input" value={receber.observacoes} onChange={(e) => setR('observacoes', e.target.value)} placeholder="Ex.: Pix do cônjuge, nº da autorização do cartão…" /></div>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', margin: '4px 0 10px', fontSize: 14 }}>
+            <input type="checkbox" checked={receber.semComprovante} onChange={(e) => setR('semComprovante', e.target.checked)} style={{ marginTop: 3 }} />
+            <span><b>Pagamento antigo, sem comprovante</b><br /><span className="sub" style={{ margin: 0 }}>Para contratos antigos, com pagamento recebido antes do sistema. Basta explicar na observação.</span></span>
+          </label>
+          {!receber.semComprovante && <div className="field"><label>Comprovantes do cliente (PDF ou foto) *</label>
+            <ArquivosInput arquivos={receber.arquivos} onChange={(l) => setR('arquivos', l)} disabled={receber.salvando} rotulo="Escolher comprovante" /></div>}
+          <div className="field"><label>Observações{receber.semComprovante ? ' *' : ''}</label>
+            <textarea className="input" value={receber.observacoes} onChange={(e) => setR('observacoes', e.target.value)} placeholder={receber.semComprovante ? 'Ex.: pago em set/2026 por Pix, conferido no extrato do Sicredi (contrato antigo).' : 'Ex.: Pix do cônjuge, nº da autorização do cartão…'} /></div>
         </Modal>
       )}
 
