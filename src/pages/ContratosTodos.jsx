@@ -4,8 +4,8 @@ import Vendas from './Vendas.jsx'
 import ContratosImportados from './ContratosImportados.jsx'
 import ContratoAssinado from '../components/ContratoAssinado.jsx'
 import ParcelasContrato from '../components/ParcelasContrato.jsx'
-import { parcelasDoCliente, projetoDoContrato } from '../lib/recebimentos.js'
-import { brl } from '../lib/format.js'
+import { parcelasDoCliente, projetoDeContrato } from '../lib/recebimentos.js'
+import { brl, fmtDate } from '../lib/format.js'
 import { supabase, authOn } from '../lib/supabase.js'
 import { todas } from '../lib/jornada.js'
 
@@ -25,10 +25,11 @@ export default function ContratosTodos() {
   // Contratos subidos à mão que ainda não têm o que o cliente vai pagar em Entradas.
   async function carregarSemParcelas() {
     const [cs, ar] = await Promise.all([
-      todas(() => supabase.schema('leblanc').from('contratos').select('id,numero,cliente_nome,valor_final,origem:dados_json->importacao->>origem').order('id')),
+      todas(() => supabase.schema('leblanc').from('contratos').select('id,numero,cliente_nome,valor_final,venda_id:dados_json->>venda_id,data_contrato:dados_json->>data_contrato,origem:dados_json->importacao->>origem').order('id')),
       todas(() => supabase.from('a_receber').select('id,cliente_nome,projeto_uid').order('id')),
     ])
-    setSemParcelas(cs.filter((c) => ['contrato_antigo', 'contrato_assinado'].includes(c.origem) && !parcelasDoCliente(ar, { nome: c.cliente_nome, projeto: projetoDoContrato(c.numero) }).length))
+    setSemParcelas(cs.filter((c) => !parcelasDoCliente(ar, { nome: c.cliente_nome, projeto: projetoDeContrato(c) }).length)
+      .sort((a, b) => String(b.data_contrato || '').localeCompare(String(a.data_contrato || ''))))
   }
   useEffect(() => { if (authOn) carregarSemParcelas().catch(() => {}) }, [versao])
 
@@ -58,14 +59,17 @@ export default function ContratosTodos() {
         <ContratoAssinado key={versao} modo="contratos" contratos={contratos} comFicha={comFicha} tipoVenda="Normal"
           onCriado={async (_reg, data) => { setFeito(data); setVersao((v) => v + 1); setParcelasDe(data.contrato_id); await carregarContratos() }} />
       </>}
-      {semParcelas.length > 0 && <div style={{ border: '1px solid var(--line)', borderRadius: 10, padding: 12, margin: '0 0 12px' }}>
-        <b>Contratos subidos que ainda não estão em Entradas</b>
-        <div className="sub" style={{ margin: '2px 0 8px' }}>Lance o que cada cliente vai pagar para ele aparecer em Entradas → Recebimentos e dar para dar baixa.</div>
-        {semParcelas.map((c) => <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', flexWrap: 'wrap' }}>
-          <span><b>{c.cliente_nome}</b> <span className="faint">· {c.numero}{Number(c.valor_final) > 0 ? ' · ' + brl(c.valor_final) : ''}</span></span>
-          <button className="btn sm" type="button" style={{ marginLeft: 'auto' }} onClick={() => setParcelasDe(c.id)}>Lançar parcelas</button>
+      {semParcelas.length > 0 && <details style={{ border: '1px solid var(--line)', borderRadius: 10, padding: 12, margin: '0 0 12px' }}>
+        <summary style={{ cursor: 'pointer' }}><b>{semParcelas.length} contrato(s) sem parcelas em Entradas</b> <span className="faint">· sem isso o saldo a receber não aparece ({brl(semParcelas.reduce((t, c) => t + Number(c.valor_final || 0), 0))} em contratos)</span></summary>
+        <div className="sub" style={{ margin: '6px 0 8px' }}>Lance o que cada cliente vai pagar (e depois dê baixa no que ele já pagou) para o saldo aparecer no contrato e em Entradas → Recebimentos. Contrato já quitado: lance as parcelas e marque como recebidas.</div>
+        {semParcelas.map((c) => <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', flexWrap: 'wrap', borderTop: '1px solid var(--line)' }}>
+          <span><b>{c.cliente_nome}</b> <span className="faint">· {c.numero}{c.data_contrato ? ' · ' + fmtDate(c.data_contrato) : ''}{Number(c.valor_final) > 0 ? ' · ' + brl(c.valor_final) : ''}</span></span>
+          <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+            <Link className="btn ghost sm" to={'/aditivos?contrato=' + encodeURIComponent(c.id)}>Ver contrato</Link>
+            <button className="btn sm" type="button" onClick={() => setParcelasDe(c.id)}>Lançar parcelas</button>
+          </span>
         </div>)}
-      </div>}
+      </details>}
       {aviso && <div className="sub" role="status" style={{ margin: '0 0 12px', color: 'var(--ok)' }}>{aviso}</div>}
       {parcelasDe && <ParcelasContrato contratoId={parcelasDe} onClose={() => setParcelasDe(null)}
         onFeito={(n) => { setParcelasDe(null); setAviso(`${n} parcela(s) lançadas em Entradas. Para dar baixa no que o cliente já pagou, abra Entradas → Recebimentos e clique em Receber.`); carregarSemParcelas().catch(() => {}) }} />}

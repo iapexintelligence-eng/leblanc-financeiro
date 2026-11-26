@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase.js'
 import { brl, fmtDate } from '../lib/format.js'
 import { registrarLog } from '../lib/log.js'
 import { sugerirParcelas } from '../lib/parcelasContrato.js'
-import { parcelasDoCliente, projetoDoContrato, FORMAS_RECEBIMENTO } from '../lib/recebimentos.js'
+import { parcelasDoCliente, projetoDeContrato, FORMAS_RECEBIMENTO } from '../lib/recebimentos.js'
 import Modal from './Modal.jsx'
 
 // Lança em Entradas (a_receber) o que o cliente vai pagar, a partir da forma de pagamento do contrato.
@@ -15,13 +15,20 @@ export default function ParcelasContrato({ contratoId, onClose, onFeito }) {
 
   useEffect(() => { (async () => {
     const { data, error } = await supabase.schema('leblanc').from('contratos')
-      .select('id,numero,cliente_nome,valor_final,data_contrato:dados_json->>data_contrato,forma:dados_json->>forma_pagamento_contrato,created_at').eq('id', contratoId).single()
+      .select('id,numero,cliente_nome,valor_final,venda_id:dados_json->>venda_id,data_contrato:dados_json->>data_contrato,forma:dados_json->>forma_pagamento_contrato,condicao:dados_json->>condicao_pagamento,forma_pagamento,created_at').eq('id', contratoId).single()
     if (error) { setErro(error.message); return }
-    const projeto = projetoDoContrato(data.numero)
+    data.forma = data.forma || data.condicao || data.forma_pagamento || ''
+    const projeto = projetoDeContrato(data)
     const { data: ar } = await supabase.from('a_receber').select('*').limit(5000)
     setJa(parcelasDoCliente(ar || [], { nome: data.cliente_nome, projeto }))
     setC(data)
-    setLinhas(sugerirParcelas(data.forma, data.valor_final, data.data_contrato || String(data.created_at || '').slice(0, 10)).linhas)
+    const existentes = parcelasDoCliente(ar || [], { nome: data.cliente_nome, projeto })
+    const lancado = existentes.reduce((t, r) => t + Number(r.valor_parcela || 0), 0)
+    const falta = Math.round((Number(data.valor_final || 0) - lancado) * 100) / 100
+    // Já tem parcelas: sugere só o que falta lançar do contrato.
+    setLinhas(existentes.length
+      ? (falta > 0 ? [{ descricao: 'Saldo do contrato ainda não lançado', valor: falta, data_prevista: '', forma: 'Pix' }] : [])
+      : sugerirParcelas(data.forma, data.valor_final, data.data_contrato || String(data.created_at || '').slice(0, 10)).linhas)
   })() }, [contratoId])
 
   const soma = useMemo(() => Math.round(linhas.reduce((s, l) => s + (Number(l.valor) || 0), 0) * 100) / 100, [linhas])
@@ -33,7 +40,7 @@ export default function ParcelasContrato({ contratoId, onClose, onFeito }) {
     const ok = linhas.filter((l) => Number(l.valor) > 0)
     if (!ok.length) { setErro('Informe ao menos uma parcela com valor.'); return }
     setSalvando(true)
-    const projeto = projetoDoContrato(c.numero)
+    const projeto = projetoDeContrato(c)
     const regs = ok.map((l) => ({
       cliente_nome: c.cliente_nome, projeto_uid: projeto, descricao: `Contrato ${c.numero} — ${l.descricao || 'Parcela'}`,
       valor_parcela: Number(l.valor), data_prevista: l.data_prevista || null, forma_recebimento: l.forma || null,

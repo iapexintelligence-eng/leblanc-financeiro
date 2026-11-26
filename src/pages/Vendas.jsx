@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
+import { Link } from 'react-router-dom'
+import { parcelasDoCliente, resumoReceber } from '../lib/recebimentos.js'
 import { juntarArquivos } from '../lib/juntarArquivos.js'
 import { brl, fmtDate, today } from '../lib/format.js'
 import { registrarLog, montarDiff } from '../lib/log.js'
@@ -28,6 +30,7 @@ export default function Vendas() {
   const [modal, setModal] = useState(null) // {form, editId, original}
   const [saving, setSaving] = useState(false)
   const [erro, setErro] = useState('')
+  const [receber, setReceber] = useState(null), [contratoDaVenda, setContratoDaVenda] = useState({})
   const [arquivo, setArquivo] = useState(null)
   const [enviando, setEnviando] = useState(false)
   const [lido, setLido] = useState('')
@@ -64,12 +67,16 @@ export default function Vendas() {
   }
 
   const carregar = async () => {
-    const [v, f, cs, an] = await Promise.all([
+    const [v, f, cs, an, ar] = await Promise.all([
       supabase.from('vendas').select('*').order('data_venda', { ascending: false }).limit(500),
       supabase.from('funcionarios').select('id, nome_completo, tipo, ativo').eq('ativo', true).order('nome_completo'),
       supabase.schema('leblanc').from('contratos').select('id, numero, venda_id:dados_json->>venda_id').limit(5000),
       supabase.schema('leblanc').from('contrato_anexos').select('contrato_id, bucket, path, tipo, nome_arquivo, id').order('id').limit(5000),
+      supabase.from('a_receber').select('id, cliente_nome, projeto_uid, valor_parcela, valor_recebido, status').limit(5000),
     ])
+    // Saldo a receber por venda (só para quem vê Entradas).
+    setReceber(ar.error || !(ar.data || []).length ? null : ar.data)
+    setContratoDaVenda(Object.fromEntries((cs.data || []).map((c) => [Number(c.venda_id ?? String(c.numero || '').match(/^(?:HIST|CTR)-V(\d+)$/i)?.[1]), c.id]).filter(([k]) => k)))
     // Contrato subido pela jornada ou pela tela de Contratos fica em contrato_anexos, não em vendas.contrato_path.
     const vendaDe = new Map((cs.data || []).map((c) => [c.id, Number(c.venda_id ?? String(c.numero || '').match(/^(?:HIST|CTR)-V(\d+)$/i)?.[1])]))
     const mapa = {}
@@ -237,18 +244,25 @@ export default function Vendas() {
         <table>
           <thead>
             <tr>
-              <th>Cliente</th><th>Vendedor</th><th className="num">Valor vendido</th>
+              <th>Cliente</th><th>Vendedor</th><th className="num">Valor vendido</th>{receber && <th className="num">A receber</th>}
               <th className="num">Desc.</th><th className="num">Comissão</th><th>Data</th><th>Contrato</th><th></th>
             </tr>
           </thead>
           <tbody>
-            {rows === null && <tr><td colSpan="8" className="empty">Carregando…</td></tr>}
-            {rows && lista.length === 0 && <tr><td colSpan="8" className="empty">Nenhuma venda encontrada.</td></tr>}
+            {rows === null && <tr><td colSpan={receber ? 9 : 8} className="empty">Carregando…</td></tr>}
+            {rows && lista.length === 0 && <tr><td colSpan={receber ? 9 : 8} className="empty">Nenhuma venda encontrada.</td></tr>}
             {lista.map((r) => (
               <tr key={r.id}>
                 <td>{r.cliente_nome}</td>
                 <td>{r.vendedor ? <span className="badge neutral">{r.vendedor}</span> : <span className="faint">— sem vendedor —</span>}</td>
                 <td className="num">{r.valor_vendido ? brl(r.valor_vendido) : '—'}</td>
+                {receber && (() => {
+                  const ps = parcelasDoCliente(receber, { nome: r.cliente_nome, projeto: r.projeto_uid })
+                  const res = resumoReceber(ps, r.valor_vendido)
+                  const cid = contratoDaVenda[r.id]
+                  const cel = !ps.length ? <span className="badge warn" title="Nenhuma parcela em Entradas">sem parcelas</span> : res.aReceber > 0 ? <b style={{ color: 'var(--danger)' }}>{brl(res.aReceber)}</b> : <span className="badge ok">Quitado</span>
+                  return <td className="num">{cid ? <Link to={'/aditivos?contrato=' + encodeURIComponent(cid)} title="Ver o financeiro do contrato">{cel}</Link> : cel}</td>
+                })()}
                 <td className="num muted">{r.desconto_percentual ? r.desconto_percentual + '%' : '—'}</td>
                 <td className="num">{r.comissao_valor ? <span title={r.comissao_pct ? r.comissao_pct + '%' : ''}>{brl(r.comissao_valor)}</span> : <span className="faint">—</span>}</td>
                 <td className="muted">{fmtDate(r.data_venda)}</td>

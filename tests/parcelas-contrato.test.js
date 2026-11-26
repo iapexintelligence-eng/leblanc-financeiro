@@ -35,3 +35,12 @@ test('sem forma de pagamento: parcela única com o total', () => {
   const r = sugerirParcelas('', 21700, '2026-10-24')
   assert.deepEqual(r.linhas, [{ descricao: 'Valor do contrato', valor: 21700, data_prevista: '2026-10-24', forma: 'Pix' }])
 })
+
+test('resumo do contrato: recebido, em aberto e o que ainda não foi lançado', async () => {
+  const { resumoReceber, projetoDeContrato } = await import('../src/lib/recebimentos.js')
+  const r = resumoReceber([{ valor_parcela: 100000, valor_recebido: 100000, status: 'Recebido' }, { valor_parcela: 30000, valor_recebido: 10000, status: 'Parcial' }], 150000)
+  assert.deepEqual(r, { lancado: 130000, recebido: 110000, aberto: 20000, naoLancado: 20000, aReceber: 40000 })
+  assert.equal(resumoReceber([], 150000).aReceber, 150000)
+  assert.equal(projetoDeContrato({ venda_id: '111', numero: '213460' }), 'PROJ-V111')
+  assert.equal(projetoDeContrato({ numero: 'CTR-V123' }), 'PROJ-V123')
+})

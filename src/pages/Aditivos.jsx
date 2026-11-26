@@ -4,6 +4,7 @@ import { supabase, authOn } from '../lib/supabase.js'
 import { todas } from '../lib/jornada.js'
 import { brl, fmtDate } from '../lib/format.js'
 import AditivosContrato from '../components/AditivosContrato.jsx'
+import FinanceiroContrato from '../components/FinanceiroContrato.jsx'
 import { IcoSearch } from '../components/Icons.jsx'
 
 // Aditivos (adendos) de qualquer contrato: a Léia procura o contrato pelo cliente ou pelo número,
@@ -22,7 +23,7 @@ export default function Aditivos() {
     if (!authOn) { setContratos([]); return }
     try {
       const [cs, an, ad] = await Promise.all([
-        todas(() => supabase.schema('leblanc').from('contratos').select('id,numero,cliente_nome,vendor,valor_final,created_at,data_contrato:dados_json->>data_contrato').order('id')),
+        todas(() => supabase.schema('leblanc').from('contratos').select('id,numero,cliente_nome,vendor,valor_final,created_at,venda_id:dados_json->>venda_id,data_contrato:dados_json->>data_contrato').order('id')),
         todas(() => supabase.schema('leblanc').from('contrato_anexos').select('id,contrato_id,bucket,path,tipo,nome_arquivo').order('id')),
         todas(() => supabase.from('contrato_aditivos').select('id,contrato_id,numero,data_assinatura,descricao,criado_em').order('criado_em', { ascending: false })),
       ])
@@ -104,6 +105,7 @@ export default function Aditivos() {
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>{docs.filter(ehAditivo).map((a) => <button key={a.id} className="btn ghost sm" type="button" onClick={() => abrir(a)}>{a.nome_arquivo || 'Aditivo'}</button>)}</div>
         </div>}
       </div>
+      <FinanceiroContrato key={'f' + sel} contrato={contrato} />
       <AditivosContrato key={sel} contratoId={sel} />
     </>}
   </>
