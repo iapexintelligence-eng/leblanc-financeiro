@@ -31,9 +31,13 @@ test('quadro de cartões mostra qual fatura já foi lançada no mês e qual falt
   assert.deepEqual(por['santander-2969'], [2, 150])
   assert.deepEqual(por.sicredi, [1, 10])
   assert.deepEqual(por['santander-3671'], [0, 0])
-  assert.equal(s.faltam, 4)
+  assert.equal(s.faltam, 5)
   assert.deepEqual(s.outros, ['Cartão estranho'])
   assert.equal(cartaoDe('Mastercard final 3553').banco, 'Viacredi')
+  // Dois cartões Viacredi: cada fatura cai no cartão certo pelo final.
+  assert.equal(cartaoDe('Viacredi final 3239').id, 'viacredi-3239')
+  assert.equal(cartaoDe('Mastercard final 3239').id, 'viacredi-3239')
+  assert.equal(cartaoDe('Mastercard final 3553').id, 'viacredi')
 })
 
 test('fatura Nubank em PDF: data na linha de cima, parcela, IOF e pagamentos como crédito', () => {

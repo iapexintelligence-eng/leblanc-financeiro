@@ -6,7 +6,8 @@ export const CARTOES = [
   { id: 'santander-2969', banco: 'Santander', detalhe: 'final 2969', sugestao: 'Mastercard final 2969', re: /\b2969\b/ },
   { id: 'sicredi', banco: 'Sicredi', detalhe: 'Visa final 9514', sugestao: 'Visa final 9514', re: /\b9514\b|sicredi/i },
   { id: 'nubank', banco: 'Nubank', detalhe: '', sugestao: 'Nubank', re: /nubank/i },
-  { id: 'viacredi', banco: 'Viacredi', detalhe: 'Mastercard final 3553', sugestao: 'Mastercard final 3553', re: /\b3553\b|viacredi|ailos/i },
+  { id: 'viacredi', banco: 'Viacredi', detalhe: 'Mastercard final 3553', sugestao: 'Mastercard final 3553', re: /\b3553\b/ },
+  { id: 'viacredi-3239', banco: 'Viacredi', detalhe: 'final 3239', sugestao: 'Viacredi final 3239', re: /\b3239\b/ },
   { id: 'sicoob', banco: 'Sicoob', detalhe: 'Mastercard final 7822', sugestao: 'Sicoob Mastercard final 7822', re: /sicoob|\b7822\b/i },
 ]
 
