@@ -12,6 +12,8 @@ import { trazerParcelamentos } from '../lib/parcelamentosSync.js'
 
 const n = (v) => Number(v) || 0
 const MESES_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+// Mês (AAAA-MM) de k meses atrás, no fuso de São Paulo.
+const mesAtras = (k) => { const [y, m] = hojeSP().slice(0, 7).split('-').map(Number); const d = new Date(Date.UTC(y, m - 1 - k, 1)); return d.toISOString().slice(0, 7) }
 const rotuloMes = (ym) => { if (!ym) return '—'; const p = String(ym).slice(0, 7).split('-'); return `${MESES_PT[Number(p[1]) - 1]}/${p[0].slice(2)}` }
 const BUCKETS = ['loja', 'catelli', 'marketing', 'priscila', 'andressa', 'outros']
 const bktLabel = (b) => ({ loja: 'Loja', catelli: 'Catelli', marketing: 'Marketing', priscila: 'Priscila', andressa: 'Andressa', outros: 'Outros' }[b] || b || '—')
@@ -33,6 +35,7 @@ export default function FaturasCartao() {
   const [senha, setSenha] = useState('')
   const [ocrProg, setOcrProg] = useState(null) // progresso do OCR (0..100) ou null
   const [confirmaExcluir, setConfirmaExcluir] = useState(false)
+  const [ok, setOk] = useState('')
   const fileRef = useRef(null)
 
   const carregar = async () => {
@@ -170,14 +173,27 @@ export default function FaturasCartao() {
   const impInclusos = useMemo(() => (imp?.itens || []).filter((i) => i.incluir), [imp])
   const impTotal = impInclusos.reduce((s, i) => s + n(i.valor), 0)
 
-  const salvarImport = async () => {
+  const salvarImport = async (substituir = false) => {
     if (!imp) return
     if (!imp.cartao.trim()) { setErro('Informe o nome do cartão.'); return }
     if (!/^\d{4}-\d{2}$/.test(imp.mesRef)) { setErro('Informe o mês de referência (AAAA-MM).'); return }
     if (!impInclusos.length) { setErro('Marque ao menos um item para importar.'); return }
-    setSalvando(true); setErro('')
+    setSalvando(true); setErro(''); setOk('')
+    const cartao = imp.cartao.trim()
+    // Mesma fatura já lançada (mesmo cartão e mês): pergunta antes de gravar de novo, para não duplicar.
+    const { data: ja, error: e0 } = await supabase.from('fatura_rateio').select('id, valor, cobrado').eq('cartao', cartao).eq('mes_ref', imp.mesRef).limit(5000)
+    if (e0) { setSalvando(false); setErro(e0.message); return }
+    if ((ja || []).length && !substituir) {
+      setSalvando(false)
+      setImp((x) => ({ ...x, duplicada: { n: ja.length, total: ja.reduce((t, r) => t + n(r.valor), 0), cobrados: ja.filter((r) => r.cobrado).length } }))
+      return
+    }
+    if ((ja || []).length && substituir) {
+      const { error: e1 } = await supabase.from('fatura_rateio').delete().eq('cartao', cartao).eq('mes_ref', imp.mesRef).eq('cobrado', false)
+      if (e1) { setSalvando(false); setErro(e1.message); return }
+    }
     const linhas = impInclusos.map((i) => ({
-      cartao: imp.cartao.trim(), mes_ref: imp.mesRef, bucket: i.bucket || 'outros',
+      cartao, mes_ref: imp.mesRef, bucket: i.bucket || 'outros',
       categoria: i.categoria || 'outros',
       descricao: i.descricao, data_compra: i.data_compra || null, parcela: i.parcela || null,
       valor: n(i.valor), cobrado: false,
@@ -187,6 +203,9 @@ export default function FaturasCartao() {
     if (error) { setErro(error.message); return }
     // Compras parceladas desta fatura entram sozinhas em Parcelamentos (sem duplicar as que já estão lá).
     try { await trazerParcelamentos(linhas, hojeSP().slice(0, 7)) } catch (_) { /* a fatura já foi salva; dá para trazer depois pela aba Parcelamentos */ }
+    // Mostra a fatura que acabou de entrar (antes o filtro ficava no mês atual e parecia que não tinha gravado).
+    setCartaoF(cartao); setMesF(imp.mesRef); setCatF('todos'); setBusca('')
+    setOk(`Fatura ${cartao} de ${rotuloMes(imp.mesRef)} gravada: ${linhas.length} itens, ${brl(linhas.reduce((t, l) => t + l.valor, 0))}.${imp.mesRef < mesAtras(1) ? ` Atenção: é uma fatura de ${rotuloMes(imp.mesRef)}, não do mês atual.` : ''}`)
     setImp(null); carregar()
   }
 
@@ -232,6 +251,7 @@ export default function FaturasCartao() {
         </div>
       })()}
       {erro && !imp && <div className="login-err" style={{ marginBottom: 12 }}>{erro}</div>}
+      {ok && !imp && <div role="status" style={{ marginBottom: 12, padding: '10px 12px', borderRadius: 10, background: 'var(--paper)', color: 'var(--ok)' }}>{ok}</div>}
       {rows && <div style={{ marginBottom: 14 }}>
         <div className="sub" style={{ marginBottom: 6 }}>Faturas de {rotuloMes(mesQuadro)} · {quadro.faltam ? <b style={{ color: 'var(--warn)' }}>falta subir {quadro.faltam} de {quadro.lista.length}</b> : <b style={{ color: 'var(--ok)' }}>todas lançadas</b>}</div>
         <div className="grid cols-3" style={{ gap: 8 }}>
@@ -328,12 +348,19 @@ export default function FaturasCartao() {
 
       {imp && (
         <Modal title="Importar fatura" onClose={() => setImp(null)} wide
-          footer={<><button className="btn ghost" onClick={() => setImp(null)}>Cancelar</button><button className="btn" onClick={salvarImport} disabled={salvando}>{salvando ? 'Importando…' : `Importar ${impInclusos.length} item(ns) · ${brl(impTotal)}`}</button></>}>
+          footer={<><button className="btn ghost" onClick={() => setImp(null)}>Cancelar</button>{imp.duplicada
+            ? <button className="btn" onClick={() => salvarImport(true)} disabled={salvando}>{salvando ? 'Substituindo…' : 'Substituir a fatura que já está'}</button>
+            : <button className="btn" onClick={() => salvarImport()} disabled={salvando}>{salvando ? 'Importando…' : `Importar ${impInclusos.length} item(ns) · ${brl(impTotal)}`}</button>}</>}>
+          {imp.duplicada && <div className="login-err" role="alert" style={{ marginBottom: 12 }}>
+            Esta fatura já foi lançada: <b>{imp.cartao} · {rotuloMes(imp.mesRef)}</b> tem {imp.duplicada.n} itens ({brl(imp.duplicada.total)}). Importar de novo duplicaria tudo.
+            {' '}Se for outra fatura, corrija o mês abaixo. Se quiser trocar pela nova, clique em <b>Substituir</b>{imp.duplicada.cobrados ? ` (os ${imp.duplicada.cobrados} itens já cobrados ficam)` : ''}.
+          </div>}
           {erro && <div className="login-err" style={{ marginBottom: 12 }}>{erro}</div>}
           {imp.foto && <div className="sub" style={{ marginBottom: 12, background: 'var(--warn-bg, #fff7e6)', border: '1px solid var(--line)', borderRadius: 8, padding: '8px 10px' }}>📷 Lido de uma foto. A leitura por imagem pode errar um número ou uma data — <b>confira os valores</b> antes de importar. Você pode editar data, descrição e valor aqui mesmo.</div>}
           <div className="grid cols-2" style={{ gap: 12, marginBottom: 12 }}>
             <div className="field"><label>Cartão</label><input className="input" list="cartoes-loja" value={imp.cartao} onChange={(e) => setImp((s) => ({ ...s, cartao: e.target.value }))} placeholder="Escolha o cartão" /><datalist id="cartoes-loja">{CARTOES.map((c) => <option key={c.id} value={c.sugestao}>{c.banco}</option>)}</datalist></div>
-            <div className="field"><label>Mês de referência (AAAA-MM)</label><input className="input" value={imp.mesRef} onChange={(e) => setImp((s) => ({ ...s, mesRef: e.target.value }))} placeholder="2026-08" /></div>
+            <div className="field"><label>Mês de referência (AAAA-MM)</label><input className="input" value={imp.mesRef} onChange={(e) => setImp((s) => ({ ...s, mesRef: e.target.value, duplicada: null, substituir: false }))} placeholder="2026-08" />
+              {/^\d{4}-\d{2}$/.test(imp.mesRef) && <div className="sub" style={{ margin: '4px 0 0', color: imp.mesRef < mesAtras(1) ? 'var(--danger)' : undefined }}>Fatura de <b>{rotuloMes(imp.mesRef)}</b>{imp.mesRef < mesAtras(1) ? ' — é de um mês antigo. Confira se é o arquivo certo.' : ''}</div>}</div>
           </div>
           <div className="between" style={{ marginBottom: 8 }}>
             <div className="sub">{imp.itens.length} transações lidas. Marque quem é de cada uma e desmarque o que não quer importar.</div>
