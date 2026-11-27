@@ -75,6 +75,23 @@ export default function FaturasCartao() {
     return Object.entries(m).sort((a, b) => b[1] - a[1])
   }, [lista])
 
+  // Marca (ou desmarca) de uma vez todos os itens que estão na lista filtrada; opcionalmente só de um bucket.
+  const [marcando, setMarcando] = useState(null) // { valor, bucket } aguardando confirmação
+  const marcarVarios = async ({ valor, bucket }) => {
+    setErro('')
+    const alvo = lista.filter((r) => r.cobrado !== valor && (!bucket || r.bucket === bucket))
+    if (!alvo.length) { setMarcando(null); return }
+    const quando = valor ? today() : null
+    const ids = alvo.map((r) => r.id)
+    for (let i = 0; i < ids.length; i += 200) {
+      const { error } = await supabase.from('fatura_rateio').update({ cobrado: valor, cobrado_em: quando }).in('id', ids.slice(i, i + 200))
+      if (error) { setErro(error.message); setMarcando(null); return }
+    }
+    const set = new Set(ids)
+    setRows((s) => s.map((x) => set.has(x.id) ? { ...x, cobrado: valor, cobrado_em: quando } : x))
+    setMarcando(null)
+  }
+
   const toggleCobrado = async (r) => {
     setErro('')
     const novo = !r.cobrado
@@ -278,7 +295,7 @@ export default function FaturasCartao() {
       {Object.keys(porBucket).length > 0 && (
         <div className="tools" style={{ gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
           {Object.entries(porBucket).sort().map(([b, v]) => (
-            <div key={b} className="badge" style={{ padding: '6px 10px' }}>{bktLabel(b)}: <b>{brl(v.total)}</b>{v.aCobrar > 0 ? <span style={{ color: 'var(--warn)' }}> · falta {brl(v.aCobrar)}</span> : <span style={{ color: 'var(--ok)' }}> · ok</span>}</div>
+            <div key={b} className="badge" style={{ padding: '6px 10px' }}>{bktLabel(b)}: <b>{brl(v.total)}</b>{v.aCobrar > 0 ? <><span style={{ color: 'var(--warn)' }}> · falta {brl(v.aCobrar)}</span> <button type="button" className="btn ghost sm" style={{ marginLeft: 6, padding: '2px 8px' }} onClick={() => setMarcando({ valor: true, bucket: b })}>marcar {bktLabel(b)} cobrado</button></> : <span style={{ color: 'var(--ok)' }}> · ok</span>}</div>
           ))}
         </div>
       )}
@@ -296,6 +313,23 @@ export default function FaturasCartao() {
           </div>
         </div>
       )}
+
+      {lista.length > 0 && (() => {
+        const faltam = lista.filter((r) => !r.cobrado), cobrados = lista.filter((r) => r.cobrado)
+        const alvo = marcando ? lista.filter((r) => r.cobrado !== marcando.valor && (!marcando.bucket || r.bucket === marcando.bucket)) : []
+        return <div className="tools" style={{ gap: 8, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          {!marcando && <>
+            <button className="btn sm" type="button" disabled={!faltam.length} onClick={() => setMarcando({ valor: true })}>Marcar todos como cobrados ({faltam.length})</button>
+            {cobrados.length > 0 && <button className="btn ghost sm" type="button" onClick={() => setMarcando({ valor: false })}>Desmarcar todos ({cobrados.length})</button>}
+            <span className="faint" style={{ fontSize: 12 }}>Vale para os itens da lista abaixo (cartão, mês, categoria e busca escolhidos).</span>
+          </>}
+          {marcando && <>
+            <span className="sub" style={{ margin: 0 }}>{marcando.valor ? 'Marcar como cobrados' : 'Desmarcar'} <b>{alvo.length} itens</b>{marcando.bucket ? ` de ${bktLabel(marcando.bucket)}` : ''} ({brl(alvo.reduce((t, r) => t + n(r.valor), 0))}){mesF && mesF !== 'todos' ? ` · ${rotuloMes(mesF)}` : ''}{cartaoF !== 'todos' ? ` · ${cartaoF}` : ''}?</span>
+            <button className="btn sm" type="button" onClick={() => marcarVarios(marcando)}>Confirmar</button>
+            <button className="btn ghost sm" type="button" onClick={() => setMarcando(null)}>Cancelar</button>
+          </>}
+        </div>
+      })()}
 
       <div className="table-wrap">
         <table>
